@@ -1,0 +1,35 @@
+{
+  "app": {
+    "name": "गोल्डन लीफ फाइनेंस",
+    "tagline": "विश्वास के साथ विकास",
+    "dashboard": "डैशबोर्ड",
+    "branches": "शाखाएं",
+    "employees": "कर्मचारी",
+    "customers": "ग्राहक",
+    "loans": "ऋण",
+    "approvals": "स्वीकृति",
+    "collections": "संग्रह",
+    "planner": "दैनिक योजनाकार",
+    "attendance": "उपस्थिति",
+    "reports": "रिपोर्ट",
+    "printing": "मुद्रण",
+    "audit_logs": "ऑडिट लॉग",
+    "settings": "सेटिंग्स"
+  },
+  "auth": {
+    "welcome_back": "वापसी पर स्वागत है",
+    "sign_in": "साइन इन करें",
+    "email": "ईमेल पता",
+    "password": "पासवर्ड",
+    "phone": "फ़ोन नंबर",
+    "send_otp": "OTP भेजें"
+  },
+  "common": {
+    "search": "खोजें...",
+    "save": "सहेजें",
+    "cancel": "रद्द करें",
+    "approve": "स्वीकार करें",
+    "reject": "अस्वीकार करें",
+    "submit": "जमा करें"
+  }
+}

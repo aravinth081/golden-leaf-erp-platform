@@ -1,0 +1,35 @@
+{
+  "app": {
+    "name": "Golden Leaf Finance",
+    "tagline": "Grow with Trust",
+    "dashboard": "Dashboard",
+    "branches": "Branches",
+    "employees": "Employees",
+    "customers": "Customers",
+    "loans": "Loans",
+    "approvals": "Approvals",
+    "collections": "Collections",
+    "planner": "Daily Planner",
+    "attendance": "Attendance",
+    "reports": "Reports",
+    "printing": "Printing",
+    "audit_logs": "Audit Logs",
+    "settings": "Settings"
+  },
+  "auth": {
+    "welcome_back": "Welcome Back",
+    "sign_in": "Sign In",
+    "email": "Email Address",
+    "password": "Password",
+    "phone": "Phone Number",
+    "send_otp": "Send OTP"
+  },
+  "common": {
+    "search": "Search...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "approve": "Approve",
+    "reject": "Reject",
+    "submit": "Submit"
+  }
+}

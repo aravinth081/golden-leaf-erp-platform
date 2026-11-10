@@ -1,0 +1,53 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.role == 'admin';
+    }
+
+    function isValidImage() {
+      return request.resource.contentType.matches('image/.*')
+             && request.resource.size < 5 * 1024 * 1024; // Max 5MB
+    }
+
+    // Customer photos and KYC documents
+    match /customers/{customerId}/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isValidImage();
+    }
+
+    // Employee photos and ID proofs
+    match /employees/{uid}/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && (request.auth.uid == uid || isAdmin()) && isValidImage();
+    }
+
+    // Attendance selfies
+    match /attendance/{employeeId}/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == employeeId && isValidImage();
+    }
+
+    // Collection photo proofs (NC evidence)
+    match /collections/{collectionId}/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isValidImage();
+    }
+
+    // Company assets (logo, etc.)
+    match /company/{allPaths=**} {
+      allow read: if true; // Public
+      allow write: if isAdmin();
+    }
+
+    // Backups (only Cloud Functions can access)
+    match /backups/{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
