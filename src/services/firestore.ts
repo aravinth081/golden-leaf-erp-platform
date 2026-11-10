@@ -454,8 +454,9 @@ export function listenToCollection<T>(
   if (isSupabaseConfigured() && supabase) {
     try {
       const client = supabase;
+      const channelId = `realtime:${collectionName}:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`;
       supabaseChannel = client
-        .channel(`realtime:${collectionName}`)
+        .channel(channelId)
         .on(
           'postgres_changes',
           {
