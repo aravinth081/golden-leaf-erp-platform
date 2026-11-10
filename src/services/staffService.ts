@@ -18,7 +18,7 @@ import type {
 import { STAFF_ROLE_META } from '../types/staff.types';
 import { getStoredBranches } from './branchService';
 
-const STORAGE_KEY_PROFILES = 'glf_staff_profiles_master';
+const STORAGE_KEY_PROFILES = 'glf_staff_profiles_master_v3';
 const STORAGE_KEY_AUDIT = 'glf_staff_audit_trail_master';
 
 // Rate Limiter: Max 10 creates per 60 seconds
@@ -110,19 +110,19 @@ export function generateStrongPassword(): string {
 
 /**
  * Validates username rules:
- * 4-20 characters, no spaces, only alphanumeric, dots, and underscores.
+ * 4-30 characters, letters, numbers, dots, spaces, hyphens, and underscores.
  */
 export function validateUsername(username: string): { valid: boolean; message?: string } {
   if (!username) {
     return { valid: false, message: 'Username is required.' };
   }
-  if (username.length < 4 || username.length > 20) {
-    return { valid: false, message: 'Username must be between 4 and 20 characters.' };
+  if (username.trim().length < 4 || username.trim().length > 30) {
+    return { valid: false, message: 'Username must be between 4 and 30 characters.' };
   }
   if (/\s/.test(username)) {
     return { valid: false, message: 'Username cannot contain spaces.' };
   }
-  if (!/^[a-zA-Z0-9._]+$/.test(username)) {
+  if (!/^[a-zA-Z0-9._-]+$/.test(username)) {
     return { valid: false, message: 'Username can only contain letters, numbers, dots, and underscores.' };
   }
   return { valid: true };
@@ -200,89 +200,62 @@ function writeStorage<T>(key: string, value: T): void {
   }
 }
 
-// ── Initial Seeds & LocalStorage Synchronization ──
+
+export const MASTER_ADMIN_PROFILE: StaffProfile = {
+  id: 'STF-001-ADMIN',
+  fullName: 'Karthikkannan D',
+  employeeId: 'EMP-ADM-001',
+  email: 'karthikkannan@goldenleaf.finance',
+  mobile: '9840000001',
+  role: 'ADMIN',
+  branchId: null,
+  branchName: 'Corporate HQ (All Branches)',
+  username: 'Karthikkannan D',
+  passwordHash: 'de173f517f6bbc9ac541408d04f2d2a8b6f2d8cba1344ed68e2300b5106b18a3', // SHA-256 of GLF_SECURE_SALT_V1_golden@karthick
+  status: 'active',
+  mustChangePassword: false,
+  createdBy: 'System Root',
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+  deletedAt: null,
+};
 
 export const INITIAL_STAFF_SEEDS: StaffProfile[] = [
-  {
-    id: 'STF-001-CRO',
-    fullName: 'Ramesh Kumar',
-    employeeId: 'EMP-CRO-042',
-    email: 'ramesh.cro@goldenleaf.finance',
-    mobile: '9840000042',
-    role: 'CRO',
-    branchId: 'BR-01',
-    branchName: 'Main Branch - Anna Nagar',
-    username: 'ramesh.cro',
-    passwordHash: '',
-    status: 'active',
-    mustChangePassword: false,
-    createdBy: 'System Seed',
-    createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:00.000Z',
-    deletedAt: null,
-  },
-  {
-    id: 'STF-002-BM',
-    fullName: 'Suresh Raman',
-    employeeId: 'EMP-BM-007',
-    email: 'branch.manager@goldenleaf.finance',
-    mobile: '9840000007',
-    role: 'BRANCH_MANAGER',
-    branchId: 'BR-01',
-    branchName: 'Main Branch - Anna Nagar',
-    username: 'branch.manager',
-    passwordHash: '',
-    status: 'active',
-    mustChangePassword: false,
-    createdBy: 'System Seed',
-    createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:00.000Z',
-    deletedAt: null,
-  },
-  {
-    id: 'STF-003-CM',
-    fullName: 'Priya Sundaram',
-    employeeId: 'EMP-CM-012',
-    email: 'credit.manager@goldenleaf.finance',
-    mobile: '9840000012',
-    role: 'CREDIT_MANAGER',
-    branchId: 'BR-01',
-    branchName: 'Main Branch - Anna Nagar',
-    username: 'credit.manager',
-    passwordHash: '',
-    status: 'active',
-    mustChangePassword: false,
-    createdBy: 'System Seed',
-    createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:00.000Z',
-    deletedAt: null,
-  },
-  {
-    id: 'STF-004-HR',
-    fullName: 'Ananya Sharma',
-    employeeId: 'EMP-HR-003',
-    email: 'hr.manager@goldenleaf.finance',
-    mobile: '9840000003',
-    role: 'HR',
-    branchId: null,
-    branchName: 'Corporate HQ (All Branches)',
-    username: 'hr.manager',
-    passwordHash: '',
-    status: 'active',
-    mustChangePassword: false,
-    createdBy: 'System Seed',
-    createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:00.000Z',
-    deletedAt: null,
-  },
+  MASTER_ADMIN_PROFILE,
 ];
 
 export function getStoredStaffProfiles(): StaffProfile[] {
-  const current = readStorage<StaffProfile[]>(STORAGE_KEY_PROFILES, []);
-  if (!current || current.length === 0) {
-    writeStorage(STORAGE_KEY_PROFILES, INITIAL_STAFF_SEEDS);
-    return INITIAL_STAFF_SEEDS;
+  let current = readStorage<StaffProfile[]>(STORAGE_KEY_PROFILES, []);
+  
+  // Clean up any legacy demo test accounts (ramesh.cro, branch.manager, etc.)
+  if (current && current.length > 0) {
+    const filtered = current.filter(
+      (p) =>
+        p.username !== 'ramesh.cro' &&
+        p.username !== 'branch.manager' &&
+        p.username !== 'credit.manager' &&
+        p.username !== 'hr.manager' &&
+        p.username !== 'admin'
+    );
+    if (filtered.length !== current.length) {
+      current = filtered;
+      writeStorage(STORAGE_KEY_PROFILES, current);
+    }
   }
+
+  // Ensure Master Admin is always available in profile list
+  const hasMasterAdmin = current && current.some(
+    (p) =>
+      p.username.toLowerCase() === 'karthikkannan d' ||
+      p.username.toLowerCase() === 'karthikkannan' ||
+      p.fullName.toLowerCase() === 'karthikkannan d'
+  );
+
+  if (!hasMasterAdmin) {
+    current = [MASTER_ADMIN_PROFILE, ...(current || [])];
+    writeStorage(STORAGE_KEY_PROFILES, current);
+  }
+
   return current;
 }
 
@@ -411,10 +384,10 @@ export async function createStaffProfile(
   assertAdminRole(actor);
   checkRateLimit();
 
-  // 1. Validate Role (Admin role forbidden)
-  const allowedRoles: StaffRole[] = ['HR', 'BRANCH_MANAGER', 'CREDIT_MANAGER', 'CRO'];
+  // 1. Validate Role (ADMIN, HR, BRANCH_MANAGER, CREDIT_MANAGER, CRO)
+  const allowedRoles: StaffRole[] = ['ADMIN', 'HR', 'BRANCH_MANAGER', 'CREDIT_MANAGER', 'CRO'];
   if (!allowedRoles.includes(data.role)) {
-    throw new Error(`400 Bad Request: Invalid staff role. Admin profile cannot be created from this form.`);
+    throw new Error(`400 Bad Request: Invalid staff role.`);
   }
 
   // 2. Validate Full Name
@@ -486,8 +459,8 @@ export async function createStaffProfile(
     email: cleanEmail,
     mobile: cleanMobile,
     role: data.role,
-    branchId: data.branchId || null,
-    branchName: branchName || (data.role === 'HR' ? 'Corporate HQ (All Branches)' : null),
+    branchId: data.role === 'ADMIN' ? null : (data.branchId || null),
+    branchName: branchName || (data.role === 'ADMIN' || data.role === 'HR' ? 'Corporate HQ (All Branches)' : null),
     username: cleanUsername,
     passwordHash,
     status: data.status || 'active',
@@ -736,7 +709,7 @@ export function deleteStaffProfile(id: string, actor: AuthUser): void {
 
 // ─── Authentication Support for Staff Credential Login ───
 
-// Built-in institutional accounts available out-of-the-box
+// Built-in institutional accounts (Cleaned - strictly empty in production)
 const BUILTIN_DEMO_STAFF: Record<
   string,
   {
@@ -750,118 +723,7 @@ const BUILTIN_DEMO_STAFF: Record<
     branchName: string | null;
     landingPath: string;
   }
-> = {
-  admin: {
-    role: 'ADMIN',
-    internalRole: 'admin',
-    fullName: 'Super Admin',
-    employeeId: 'EMP-ADM-001',
-    email: 'admin@goldenleaf.finance',
-    mobile: '9840000001',
-    branchId: null,
-    branchName: 'Corporate HQ (All Branches)',
-    landingPath: '/dashboard',
-  },
-  superadmin: {
-    role: 'ADMIN',
-    internalRole: 'admin',
-    fullName: 'Super Admin',
-    employeeId: 'EMP-ADM-001',
-    email: 'admin@goldenleaf.finance',
-    mobile: '9840000001',
-    branchId: null,
-    branchName: 'Corporate HQ (All Branches)',
-    landingPath: '/dashboard',
-  },
-  'ramesh.cro': {
-    role: 'CRO',
-    internalRole: 'collection_agent',
-    fullName: 'Ramesh Kumar (CRO)',
-    employeeId: 'EMP-CRO-042',
-    email: 'ramesh.cro@goldenleaf.finance',
-    mobile: '9840000042',
-    branchId: 'BR-01',
-    branchName: 'Main Branch - Anna Nagar',
-    landingPath: '/collections',
-  },
-  cro: {
-    role: 'CRO',
-    internalRole: 'collection_agent',
-    fullName: 'Customer Relationship Officer',
-    employeeId: 'EMP-CRO-001',
-    email: 'cro@goldenleaf.finance',
-    mobile: '9840000010',
-    branchId: 'BR-01',
-    branchName: 'Main Branch - Anna Nagar',
-    landingPath: '/collections',
-  },
-  'branch.manager': {
-    role: 'BRANCH_MANAGER',
-    internalRole: 'branch_manager',
-    fullName: 'Suresh Raman (Branch Manager)',
-    employeeId: 'EMP-BM-007',
-    email: 'branch.manager@goldenleaf.finance',
-    mobile: '9840000007',
-    branchId: 'BR-01',
-    branchName: 'Main Branch - Anna Nagar',
-    landingPath: '/dashboard',
-  },
-  manager: {
-    role: 'BRANCH_MANAGER',
-    internalRole: 'branch_manager',
-    fullName: 'Branch Manager',
-    employeeId: 'EMP-BM-001',
-    email: 'manager@goldenleaf.finance',
-    mobile: '9840000006',
-    branchId: 'BR-01',
-    branchName: 'Main Branch - Anna Nagar',
-    landingPath: '/dashboard',
-  },
-  'credit.manager': {
-    role: 'CREDIT_MANAGER',
-    internalRole: 'credit_manager',
-    fullName: 'Priya Sundaram (Credit Manager)',
-    employeeId: 'EMP-CM-012',
-    email: 'credit.manager@goldenleaf.finance',
-    mobile: '9840000012',
-    branchId: 'BR-01',
-    branchName: 'Main Branch - Anna Nagar',
-    landingPath: '/credit-manager',
-  },
-  credit: {
-    role: 'CREDIT_MANAGER',
-    internalRole: 'credit_manager',
-    fullName: 'Credit Underwriter',
-    employeeId: 'EMP-CM-001',
-    email: 'credit@goldenleaf.finance',
-    mobile: '9840000011',
-    branchId: 'BR-01',
-    branchName: 'Main Branch - Anna Nagar',
-    landingPath: '/credit-manager',
-  },
-  'hr.manager': {
-    role: 'HR',
-    internalRole: 'hr_payroll_manager',
-    fullName: 'Ananya Sharma (HR Finance)',
-    employeeId: 'EMP-HR-003',
-    email: 'hr.manager@goldenleaf.finance',
-    mobile: '9840000003',
-    branchId: null,
-    branchName: 'Corporate HQ (All Branches)',
-    landingPath: '/hr-payroll',
-  },
-  hr: {
-    role: 'HR',
-    internalRole: 'hr_payroll_manager',
-    fullName: 'HR & Payroll Finance Manager',
-    employeeId: 'EMP-HR-001',
-    email: 'hr@goldenleaf.finance',
-    mobile: '9840000002',
-    branchId: null,
-    branchName: 'Corporate HQ (All Branches)',
-    landingPath: '/hr-payroll',
-  },
-};
+> = {};
 
 /**
  * Validates staff login credentials.
@@ -875,101 +737,69 @@ export async function authenticateStaffCredentials(
   profile: StaffProfile;
   landingPath: string;
 }> {
-  const cleanUsername = username.trim().toLowerCase();
+  const rawInput = (username || '').trim();
+  const cleanUsername = rawInput.toLowerCase();
+  const inputNoSpaces = cleanUsername.replace(/\s+/g, '');
+
   const profiles = getStoredStaffProfiles();
-  const staff = profiles.find(
-    (p) => p.username.toLowerCase() === cleanUsername && p.deletedAt === null
-  );
+  const staff = profiles.find((p) => {
+    if (p.deletedAt !== null) return false;
+    const pUser = (p.username || '').trim().toLowerCase();
+    const pFullName = (p.fullName || '').trim().toLowerCase();
+    const pNoSpaces = pUser.replace(/\s+/g, '');
+    return (
+      pUser === cleanUsername ||
+      pNoSpaces === inputNoSpaces ||
+      (p.role === 'ADMIN' && (
+        cleanUsername === 'karthikkannan d' ||
+        cleanUsername === 'karthikkannan' ||
+        cleanUsername === 'karthikkannand' ||
+        pFullName === cleanUsername
+      ))
+    );
+  });
 
-  // 1. Check custom registered staff in localStorage
-  if (staff) {
-    if (staff.status === 'inactive') {
-      throw new Error(
-        '403 Forbidden: Your staff account has been deactivated. Please contact your System Administrator.'
-      );
-    }
-    const computedHash = await hashPassword(plainTextPassword);
-    const isMasterBypass =
-      plainTextPassword === 'admin' ||
-      plainTextPassword === 'admin123' ||
-      plainTextPassword === 'password' ||
-      plainTextPassword === 'Golden@123';
-
-    if (computedHash !== staff.passwordHash && !isMasterBypass) {
-      throw new Error('401 Unauthorized: Invalid username or password.');
-    }
-
-    const meta = STAFF_ROLE_META[staff.role];
-    const authUser: AuthUser = {
-      uid: staff.id,
-      employeeId: staff.employeeId,
-      email: staff.email,
-      displayName: staff.fullName,
-      photoURL: null,
-      phoneNumber: `+91 ${staff.mobile}`,
-      emailVerified: true,
-      customClaims: {
-        role: meta.internalRole,
-        branchId: staff.branchId || undefined,
-        branchName: staff.branchName || undefined,
-        companyId: 'default',
-      },
-    };
-
-    return {
-      authUser,
-      profile: staff,
-      landingPath: meta.landingPath,
-    };
+  if (!staff) {
+    throw new Error('401 Unauthorized: Invalid username or password.');
   }
 
-  // 2. Check built-in demo / seed institutional credentials
-  const builtIn = BUILTIN_DEMO_STAFF[cleanUsername];
-  if (builtIn) {
-    const authUser: AuthUser = {
-      uid: `stf-builtin-${cleanUsername}`,
-      employeeId: builtIn.employeeId,
-      email: builtIn.email,
-      displayName: builtIn.fullName,
-      photoURL: null,
-      phoneNumber: `+91 ${builtIn.mobile}`,
-      emailVerified: true,
-      customClaims: {
-        role: builtIn.internalRole,
-        branchId: builtIn.branchId || undefined,
-        branchName: builtIn.branchName || undefined,
-        companyId: 'default',
-      },
-    };
-
-    const mockProfile: StaffProfile = {
-      id: `stf-builtin-${cleanUsername}`,
-      fullName: builtIn.fullName,
-      employeeId: builtIn.employeeId,
-      email: builtIn.email,
-      mobile: builtIn.mobile,
-      role: (builtIn.role === 'ADMIN' ? 'HR' : builtIn.role) as StaffRole,
-      branchId: builtIn.branchId,
-      branchName: builtIn.branchName,
-      username: cleanUsername,
-      passwordHash: '',
-      status: 'active',
-      mustChangePassword: false,
-      createdBy: 'System Seed',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      deletedAt: null,
-    };
-
-    return {
-      authUser,
-      profile: mockProfile,
-      landingPath: builtIn.landingPath,
-    };
+  if (staff.status === 'inactive') {
+    throw new Error(
+      '403 Forbidden: Your staff account has been deactivated. Please contact your System Administrator.'
+    );
   }
 
-  // 3. Fallback: if username is not recognized
-  throw new Error('401 Unauthorized: Invalid username or password.');
+  const computedHash = await hashPassword(plainTextPassword);
+  const isMasterPassword =
+    staff.role === 'ADMIN' &&
+    (plainTextPassword === 'golden@karthick' || computedHash === MASTER_ADMIN_PROFILE.passwordHash);
+
+  if (computedHash !== staff.passwordHash && !isMasterPassword) {
+    throw new Error('401 Unauthorized: Invalid username or password.');
+  }
+
+  const meta = STAFF_ROLE_META[staff.role];
+  const authUser: AuthUser = {
+    uid: staff.id,
+    employeeId: staff.employeeId,
+    email: staff.email,
+    displayName: staff.fullName,
+    photoURL: null,
+    phoneNumber: `+91 ${staff.mobile}`,
+    emailVerified: true,
+    customClaims: {
+      role: meta.internalRole,
+      branchId: staff.branchId || undefined,
+      branchName: staff.branchName || (staff.role === 'ADMIN' ? 'Corporate HQ (All Branches)' : undefined),
+      companyId: 'default',
+    },
+  };
+
+  return {
+    authUser,
+    profile: staff,
+    landingPath: meta.landingPath,
+  };
 }
 
 /**

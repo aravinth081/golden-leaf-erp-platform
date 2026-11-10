@@ -117,29 +117,22 @@ async function runStaffTestSuite() {
   }
   assert(bmBlocked, 'Branch Manager blocked from listing staff profiles (403 Forbidden)');
 
-  // Admin cannot create ADMIN role from staff page
-  let adminRoleBlocked = false;
-  try {
-    await createStaffProfile(
-      {
-        fullName: 'Fake Admin',
-        employeeId: 'EMP-902',
-        email: 'fakeadmin@goldenleaf.finance',
-        mobile: '9840011112',
-        role: 'ADMIN' as any,
-        branchId: 'BR-01',
-        username: 'fake.admin',
-        password: 'Password@123',
-        status: 'active',
-      },
-      adminActor
-    );
-  } catch (err: any) {
-    if (err.message.includes('Invalid staff role')) {
-      adminRoleBlocked = true;
-    }
-  }
-  assert(adminRoleBlocked, 'Creation of ADMIN role is forbidden on staff provisioning page');
+  // Admin CAN create another ADMIN role with full privileges
+  const secondaryAdmin = await createStaffProfile(
+    {
+      fullName: 'Co Admin',
+      employeeId: 'EMP-902',
+      email: 'coadmin@goldenleaf.finance',
+      mobile: '9840011112',
+      role: 'ADMIN',
+      branchId: null,
+      username: 'co.admin',
+      password: 'Password@123',
+      status: 'active',
+    },
+    adminActor
+  );
+  assert(secondaryAdmin.profile.role === 'ADMIN', 'Admin can successfully provision another Admin account');
 
   // ── 2. INPUT VALIDATION TESTS ──
   console.log('\n2. FIELD VALIDATION & COMPLEXITY TESTS:');

@@ -5,7 +5,7 @@
 
 import type { UserRole } from './auth.types';
 
-export type StaffRole = 'HR' | 'BRANCH_MANAGER' | 'CREDIT_MANAGER' | 'CRO';
+export type StaffRole = 'ADMIN' | 'HR' | 'BRANCH_MANAGER' | 'CREDIT_MANAGER' | 'CRO';
 
 export type StaffStatus = 'active' | 'inactive';
 
@@ -91,6 +91,14 @@ export const STAFF_ROLE_META: Record<
     landingPath: string;
   }
 > = {
+  ADMIN: {
+    label: 'Super Administrator',
+    description: 'Master system authority, user provisioning, global overrides, and company-wide oversight',
+    internalRole: 'admin',
+    badgeClass: 'bg-rose-50 text-rose-800 border-rose-300',
+    requiresBranch: false,
+    landingPath: '/dashboard',
+  },
   HR: {
     label: 'HR & Payroll Finance Manager',
     description: 'Corporate HR, CTC structures, payroll runs, statutory compliance',

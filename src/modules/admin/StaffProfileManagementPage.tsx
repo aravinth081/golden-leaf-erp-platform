@@ -633,7 +633,8 @@ Access Portal: http://localhost:3000/
               }}
               className="w-full sm:w-auto px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 focus:border-[#0B1F3A] text-xs font-semibold text-slate-800 cursor-pointer focus:outline-none"
             >
-              <option value="all">All Roles (4 Staff Roles)</option>
+              <option value="all">All Roles</option>
+              <option value="ADMIN">Super Administrator</option>
               <option value="HR">HR & Payroll Manager</option>
               <option value="BRANCH_MANAGER">Branch Manager</option>
               <option value="CREDIT_MANAGER">Credit Manager</option>
@@ -994,7 +995,7 @@ Access Portal: http://localhost:3000/
                       onChange={(e) => {
                         const r = e.target.value as StaffRole;
                         setCreateForm((p) => ({ ...p, role: r }));
-                        if (r === 'HR') {
+                        if (r === 'ADMIN' || r === 'HR') {
                           setCreateErrors((prev) => {
                             const n = { ...prev };
                             delete n.branchId;
@@ -1004,6 +1005,7 @@ Access Portal: http://localhost:3000/
                       }}
                       className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-xs font-semibold text-slate-900 focus:bg-white focus:border-[#0B1F3A] focus:outline-none cursor-pointer"
                     >
+                      <option value="ADMIN">Super Administrator (Full Admin Authority)</option>
                       <option value="HR">HR & Payroll Finance Manager</option>
                       <option value="BRANCH_MANAGER">Branch Manager</option>
                       <option value="CREDIT_MANAGER">Credit Manager</option>
@@ -1016,8 +1018,8 @@ Access Portal: http://localhost:3000/
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
                       Branch Assignment{' '}
-                      {createForm.role === 'HR' ? (
-                        <span className="text-slate-400 font-normal">(Optional for HR)</span>
+                      {createForm.role === 'ADMIN' || createForm.role === 'HR' ? (
+                        <span className="text-slate-400 font-normal">(Optional for Admin & HR)</span>
                       ) : (
                         <span className="text-rose-500">*</span>
                       )}
@@ -1069,7 +1071,7 @@ Access Portal: http://localhost:3000/
                             setCreateForm((p) => ({ ...p, username: val }));
                             validateCreateField('username', val);
                           }}
-                          placeholder="e.g. ramesh.cro"
+                          placeholder="e.g. staff.username"
                           className={`w-full pl-8 pr-3 py-2 rounded-xl bg-slate-50 border text-xs font-mono font-semibold focus:bg-white focus:outline-none ${
                             createErrors.username
                               ? 'border-rose-400 bg-rose-50/30'
@@ -1383,6 +1385,7 @@ Access Portal: http://localhost:3000/
                       onChange={(e) => setEditForm((p) => ({ ...p, role: e.target.value as StaffRole }))}
                       className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-xs font-semibold cursor-pointer"
                     >
+                      <option value="ADMIN">Super Administrator</option>
                       <option value="HR">HR Manager</option>
                       <option value="BRANCH_MANAGER">Branch Manager</option>
                       <option value="CREDIT_MANAGER">Credit Manager</option>

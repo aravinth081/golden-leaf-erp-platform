@@ -301,14 +301,14 @@ export const AuthLayout: React.FC = () => {
           </div>
 
           {/* Mobile-only single brand header */}
-          <div className="sm:hidden flex flex-col items-center pt-1 mb-2 text-center relative z-10 w-full shrink-0">
-            <div className="relative w-[76px] h-[76px] mb-2 flex items-center justify-center">
+          <div className="sm:hidden flex flex-col items-center pt-2 mb-4 text-center relative z-10 w-full shrink-0">
+            <div className="relative w-[96px] h-[96px] mb-3 flex items-center justify-center">
               {/* Soft ambient golden glow behind the emblem */}
-              <div className="absolute inset-0 bg-[#D4AF37]/20 rounded-[22px] blur-md -z-10" />
+              <div className="absolute inset-0 bg-[#D4AF37]/25 rounded-[26px] blur-md -z-10" />
               <img
                 src={goldenLeafLogo}
                 alt="Golden Leaf Finance"
-                className="w-full h-full object-contain rounded-[20px] drop-shadow-[0_8px_18px_rgba(212,175,55,0.3)]"
+                className="w-full h-full object-contain rounded-[24px] drop-shadow-[0_10px_24px_rgba(212,175,55,0.35)]"
                 onError={(e) => {
                   const target = e.currentTarget;
                   if (!target.src.includes('pwa-512x512.png')) {
@@ -317,15 +317,15 @@ export const AuthLayout: React.FC = () => {
                 }}
               />
             </div>
-            <h1 className="font-serif font-black text-[19px] text-[#0F1F38] uppercase tracking-[0.09em] leading-tight">
+            <h1 className="font-serif font-black text-[25px] text-[#0F1F38] uppercase tracking-[0.08em] leading-tight drop-shadow-2xs">
               Golden Leaf
             </h1>
-            <p className="text-[10px] font-extrabold text-[#A88219] uppercase tracking-[0.24em] mt-0.5">
+            <p className="text-[11px] font-extrabold text-[#A88219] uppercase tracking-[0.24em] mt-1">
               Finance & Loan Management
             </p>
           </div>
 
-          <div className="w-full max-w-[380px] sm:max-w-[440px] mx-auto relative z-10 my-0 sm:my-auto shrink-0">
+          <div className="w-full max-w-[440px] sm:max-w-[440px] mx-auto relative z-10 my-0 sm:my-auto shrink-0 px-1 sm:px-0">
             <Outlet />
           </div>
         </div>
