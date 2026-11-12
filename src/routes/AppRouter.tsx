@@ -13,7 +13,7 @@ import { PageSkeleton } from '../components/ui';
 import { useAuthStore } from '../store';
 
 // Auth Pages
-const LoginPage = lazy(() => import('../modules/auth/LoginPage'));
+import LoginPage from '../modules/auth/LoginPage';
 const ForgotPasswordPage = lazy(() => import('../modules/auth/ForgotPasswordPage'));
 
 // Role Dashboards
@@ -147,6 +147,14 @@ const SuspenseWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) 
   <Suspense fallback={<PageSkeleton />}>{children}</Suspense>
 );
 
+const RootRoute: React.FC = () => {
+  const { isAuthenticated, user } = useAuthStore();
+  if (isAuthenticated && user) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <LoginPage />;
+};
+
 export const router = createBrowserRouter([
   // Auth routes
   {
@@ -154,8 +162,12 @@ export const router = createBrowserRouter([
     errorElement: <RouteErrorBoundary />,
     children: [
       {
+        path: '/',
+        element: <RootRoute />,
+      },
+      {
         path: '/login',
-        element: <SuspenseWrapper><LoginPage /></SuspenseWrapper>,
+        element: <LoginPage />,
       },
       {
         path: '/forgot-password',
@@ -173,10 +185,6 @@ export const router = createBrowserRouter([
     ),
     errorElement: <RouteErrorBoundary />,
     children: [
-      {
-        path: '/',
-        element: <Navigate to="/dashboard" replace />,
-      },
       // Shared Universal Dashboard Route (Automatically adapts to user's role)
       {
         path: '/dashboard',

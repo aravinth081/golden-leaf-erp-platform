@@ -6,12 +6,13 @@
 import React, { useState } from 'react';
 import {
   X, User, MapPin, ShieldCheck, Landmark, CheckCircle,
-  Upload, ArrowRight, ArrowLeft
+  Upload, ArrowRight, ArrowLeft, Loader2
 } from 'lucide-react';
-import type { Investor, InvestorCategory, TaxDeclaration } from '../../../types/investor.types';
+import type { Investor, InvestorCategory, TaxDeclaration, InvestorDocuments } from '../../../types/investor.types';
 import { calculateAge, isSeniorCitizen } from '../../../utils/fdCalculations';
 import { createInvestor } from '../../../services/investorService';
 import { getStoredBranches } from '../../../services/branchService';
+import { uploadImage } from '../../../services/cloudinary';
 
 interface InvestorRegistrationModalProps {
   onClose: () => void;
@@ -33,6 +34,14 @@ const FALLBACK_BRANCHES = [
   { id: 'BR-02', name: 'Madurai Central Branch', code: 'GL-BR-002' },
   { id: 'BR-03', name: 'Coimbatore South Branch', code: 'GL-BR-003' },
   { id: 'BR-04', name: 'Tiruchirappalli Junction Branch', code: 'GL-BR-004' },
+];
+
+const VAULT_DOCS: { key: keyof InvestorDocuments; name: string }[] = [
+  { key: 'photoUrl', name: '1) Investor Photograph' },
+  { key: 'panCopyUrl', name: '2) PAN Card Copy' },
+  { key: 'aadhaarFrontUrl', name: '3) Aadhaar Card (Front & Back)' },
+  { key: 'chequeCopyUrl', name: '4) Cancelled Cheque / Passbook' },
+  { key: 'signatureUrl', name: '5) Signature Specimen' },
 ];
 
 export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps> = ({
@@ -77,6 +86,8 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
   const [pan, setPan] = useState('');
   const [aadhaar, setAadhaar] = useState('');
   const [taxDeclaration, setTaxDeclaration] = useState<TaxDeclaration>('Standard TDS');
+  const [documents, setDocuments] = useState<InvestorDocuments>({});
+  const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
 
   // 04 Bank Account
   const [bankHolderName, setBankHolderName] = useState('');
@@ -90,6 +101,40 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
 
   const age = calculateAge(dob);
   const isSenior = isSeniorCitizen(dob);
+
+  const handleFileUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    docKey: keyof InvestorDocuments
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingDoc(docKey);
+    try {
+      const res = await uploadImage(file, 'investors/vault');
+      if (res?.secure_url) {
+        setDocuments((prev) => ({
+          ...prev,
+          [docKey]: res.secure_url,
+        }));
+      }
+    } catch (err: any) {
+      console.warn('Cloudinary upload warning:', err);
+      // Fallback: Read as data URL if offline/error so user data is retained
+      const reader = new FileReader();
+      reader.onload = () => {
+        setDocuments((prev) => ({
+          ...prev,
+          [docKey]: reader.result as string,
+        }));
+      };
+      reader.readAsDataURL(file);
+      alert(`Upload notification: ${err?.message || 'Upload error'}. Image saved in session.`);
+    } finally {
+      setUploadingDoc(null);
+      e.target.value = '';
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -138,6 +183,7 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
         ifsc: ifsc.trim().toUpperCase(),
         accountType,
         payoutMode,
+        documents,
       });
 
       onSuccess(created);
@@ -517,27 +563,50 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
                   Digital Document Vault Uploads (5 Documents)
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                  {[
-                    '1) Investor Photograph',
-                    '2) PAN Card Copy',
-                    '3) Aadhaar Card (Front & Back)',
-                    '4) Cancelled Cheque / Passbook',
-                    '5) Signature Specimen',
-                  ].map((docName, idx) => (
-                    <div
-                      key={idx}
-                      className="p-2.5 bg-white rounded-xl border border-[#E2E8F0] flex items-center justify-between"
-                    >
-                      <span className="text-[#334155] font-medium text-[11px]">{docName}</span>
-                      <button
-                        type="button"
-                        onClick={() => alert(`Upload simulator: ${docName} attached.`)}
-                        className="px-2 py-1 rounded-lg bg-[#FAF7F0] hover:bg-[#F3EAD3] text-[#8C6808] border border-[#D4AF37]/40 text-[10px] font-bold flex items-center gap-1"
+                  {VAULT_DOCS.map((doc) => {
+                    const isAttached = !!documents[doc.key];
+                    const isUploading = uploadingDoc === doc.key;
+
+                    return (
+                      <div
+                        key={doc.key}
+                        className="p-2.5 bg-white rounded-xl border border-[#E2E8F0] flex items-center justify-between gap-2"
                       >
-                        <Upload size={10} /> Attach
-                      </button>
-                    </div>
-                  ))}
+                        <span className="text-[#334155] font-medium text-[11px] truncate">{doc.name}</span>
+                        <label
+                          className={`px-2 py-1 rounded-lg border text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors shrink-0 ${
+                            isAttached
+                              ? 'bg-emerald-50 text-[#059669] border-emerald-300 hover:bg-emerald-100'
+                              : 'bg-[#FAF7F0] hover:bg-[#F3EAD3] text-[#8C6808] border-[#D4AF37]/40'
+                          } ${isUploading ? 'opacity-70 pointer-events-none' : ''}`}
+                        >
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => handleFileUpload(e, doc.key)}
+                            disabled={isUploading}
+                          />
+                          {isUploading ? (
+                            <>
+                              <Loader2 size={10} className="animate-spin text-[#D4AF37]" />
+                              <span>Uploading...</span>
+                            </>
+                          ) : isAttached ? (
+                            <>
+                              <CheckCircle size={10} className="text-[#059669]" />
+                              <span>Attached</span>
+                            </>
+                          ) : (
+                            <>
+                              <Upload size={10} />
+                              <span>Attach</span>
+                            </>
+                          )}
+                        </label>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -615,10 +684,10 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                 <div>
                   <label className="block text-xs font-bold text-[#475569] mb-1 uppercase tracking-wider">
-                    IFSC Code (11 Chars) *
+                    IFSC Code (11 Chars) <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -626,19 +695,19 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
                     value={ifsc}
                     onChange={(e) => setIfsc(e.target.value.toUpperCase())}
                     placeholder="e.g. SBIN0001234"
-                    className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] font-mono text-xs font-bold text-[#0B1F3A] outline-none"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#CBD5E1] font-mono text-xs font-bold text-[#0B1F3A] outline-none"
                     required
                   />
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-[#475569] mb-1 uppercase tracking-wider">
-                    Account Type *
+                    Account Type <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={accountType}
                     onChange={(e) => setAccountType(e.target.value as any)}
-                    className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] text-xs font-medium text-[#0B1F3A] bg-white outline-none"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#CBD5E1] text-xs font-medium text-[#0B1F3A] bg-white outline-none"
                   >
                     <option value="Savings">Savings Account</option>
                     <option value="Current">Current Account</option>
@@ -647,12 +716,12 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
 
                 <div>
                   <label className="block text-xs font-bold text-[#475569] mb-1 uppercase tracking-wider">
-                    Preferred Payout Mode *
+                    Preferred Payout Mode <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={payoutMode}
                     onChange={(e) => setPayoutMode(e.target.value as any)}
-                    className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] text-xs font-medium text-[#0B1F3A] bg-white outline-none"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#CBD5E1] text-xs font-medium text-[#0B1F3A] bg-white outline-none"
                   >
                     <option value="NEFT">NEFT (Direct Bank Transfer)</option>
                     <option value="RTGS">RTGS (High Value ₹2L+)</option>

@@ -68,7 +68,8 @@ export const useUIStore = create<UIStore>()((set, get) => {
     toasts: [],
     addToast: (toast) => {
       const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      const newToast = { ...toast, id, duration: toast.duration ?? 5000 };
+      const isWelcomeToast = toast.title?.toLowerCase().startsWith('welcome');
+      const newToast = { ...toast, id, duration: toast.duration ?? (isWelcomeToast ? 2000 : 5000) };
       set((s) => ({ toasts: [...s.toasts, newToast] }));
 
       // Auto-remove after duration

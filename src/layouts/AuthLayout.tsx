@@ -50,7 +50,7 @@ export const AuthLayout: React.FC = () => {
       <motion.div
         initial={{ opacity: 0, scale: 0.98 }}
         animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.5, ease: "easeOut" }}
+        transition={{ duration: 0.15, ease: "easeOut" }}
         className="login-card-ratio w-full max-sm:h-full max-sm:max-h-full max-sm:overflow-hidden max-sm:rounded-none max-sm:border-none max-sm:shadow-none max-sm:m-0 sm:w-[min(94vw,1160px,calc((100dvh-36px)*1.778))] sm:aspect-[16/9] sm:max-h-[calc(100dvh-24px)] bg-white sm:rounded-[32px] lg:rounded-[36px] sm:shadow-[0_25px_65px_-15px_rgba(15,23,42,0.14),0_0_0_1px_rgba(232,223,200,0.85)] sm:border sm:border-[#E8DFC8] flex flex-col sm:flex-row overflow-hidden relative sm:my-auto"
       >
         {/* Left Panel (Strictly 50% width on laptops/computers) */}

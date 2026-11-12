@@ -154,6 +154,7 @@ export const LoginPage: React.FC = () => {
         type: 'success',
         title: `Welcome, ${profile.title}!`,
         message: `Signed in with ${profile.scope}.`,
+        duration: 2000,
       });
       navigate('/dashboard', { replace: true });
     }, 280);
@@ -183,6 +184,7 @@ export const LoginPage: React.FC = () => {
         message: `Signed in as ${result.authUser.customClaims?.role.toUpperCase()} at ${
           result.authUser.customClaims?.branchName || 'HQ'
         }.`,
+        duration: 2000,
       });
       navigate(result.landingPath, { replace: true });
     } catch (err: any) {
@@ -196,9 +198,9 @@ export const LoginPage: React.FC = () => {
     <div className="w-full max-w-[420px] sm:max-w-[380px] px-2 sm:px-0 flex flex-col items-center select-none py-0">
       {/* Header section */}
       <motion.div
-        initial={{ opacity: 0, y: -6 }}
+        initial={{ opacity: 0, y: -4 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
+        transition={{ duration: 0.15 }}
         className="text-center mb-4 sm:mb-6 w-full flex flex-col items-center"
       >
         <h2 className="text-[25px] sm:text-[clamp(22px,2.2vw,28px)] font-black text-[#0B1F3A] tracking-[0.08em] uppercase leading-tight font-serif drop-shadow-2xs">
@@ -214,9 +216,9 @@ export const LoginPage: React.FC = () => {
 
       {/* Staff Credential Login Form - Seamless with page, no separate image-like box */}
       <motion.form
-        initial={{ opacity: 0, scale: 0.98 }}
+        initial={{ opacity: 0, scale: 0.99 }}
         animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.25 }}
+        transition={{ duration: 0.15 }}
         onSubmit={handleStaffCredentialLogin}
         className="w-full space-y-4 sm:space-y-4.5"
       >
