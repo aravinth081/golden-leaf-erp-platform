@@ -207,7 +207,7 @@ export const LoginPage: React.FC = () => {
           Sign In
         </h2>
         {/* Sleek Golden Accent Motif */}
-        <div className="flex items-center justify-center gap-2 mt-2 w-32 sm:w-28">
+        <div className="flex items-center justify-center gap-2 mt-2 w-32 sm:w-28" aria-hidden="true">
           <div className="h-[1.5px] flex-1 bg-gradient-to-r from-transparent to-[#D4AF37]" />
           <div className="w-1.5 h-1.5 rotate-45 bg-[#D4AF37]" />
           <div className="h-[1.5px] flex-1 bg-gradient-to-l from-transparent to-[#D4AF37]" />
@@ -230,43 +230,49 @@ export const LoginPage: React.FC = () => {
         )}
 
         <div>
-          <label className="block text-[12.5px] sm:text-xs font-bold text-[#0B1F3A] tracking-[0.05em] uppercase mb-1.5 sm:mb-1.5">
+          <label htmlFor="staff-username" className="block text-[12.5px] sm:text-xs font-bold text-[#0B1F3A] tracking-[0.05em] uppercase mb-1.5 sm:mb-1.5">
             Username
           </label>
           <div className="relative group">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#0B1F3A] transition-colors">
+            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-[#0B1F3A] transition-colors" aria-hidden="true">
               <User size={19} />
             </span>
             <input
+              id="staff-username"
+              name="username"
               type="text"
               value={staffUsername}
               onChange={(e) => setStaffUsername(e.target.value)}
               placeholder="Enter your username"
               autoComplete="username"
-              className="w-full h-[52px] sm:h-auto pl-12 pr-4 py-3 sm:py-3 rounded-2xl sm:rounded-xl bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-[#C59B27] focus:ring-3 focus:ring-[#D4AF37]/15 text-[15px] sm:text-sm font-semibold text-[#0B1F3A] placeholder:text-slate-400 placeholder:font-normal focus:outline-none transition-all shadow-2xs"
+              className="w-full h-[52px] sm:h-auto pl-12 pr-4 py-3 sm:py-3 rounded-2xl sm:rounded-xl bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-[#C59B27] focus:ring-3 focus:ring-[#D4AF37]/15 text-[15px] sm:text-sm font-semibold text-[#0B1F3A] placeholder:text-slate-500 placeholder:font-normal focus:outline-none transition-all shadow-2xs"
             />
           </div>
         </div>
 
         <div>
-          <label className="block text-[12.5px] sm:text-xs font-bold text-[#0B1F3A] tracking-[0.05em] uppercase mb-1.5 sm:mb-1.5">
+          <label htmlFor="staff-password" className="block text-[12.5px] sm:text-xs font-bold text-[#0B1F3A] tracking-[0.05em] uppercase mb-1.5 sm:mb-1.5">
             Password
           </label>
           <div className="relative group">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#0B1F3A] transition-colors">
+            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-[#0B1F3A] transition-colors" aria-hidden="true">
               <Lock size={19} />
             </span>
             <input
+              id="staff-password"
+              name="password"
               type={showStaffPassword ? 'text' : 'password'}
               value={staffPassword}
               onChange={(e) => setStaffPassword(e.target.value)}
               placeholder="Enter password"
-              className="w-full h-[52px] sm:h-auto pl-12 pr-12 py-3 sm:py-3 rounded-2xl sm:rounded-xl bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-[#C59B27] focus:ring-3 focus:ring-[#D4AF37]/15 text-[15px] sm:text-sm font-semibold text-[#0B1F3A] placeholder:text-slate-400 placeholder:font-normal focus:outline-none transition-all shadow-2xs"
+              autoComplete="current-password"
+              className="w-full h-[52px] sm:h-auto pl-12 pr-12 py-3 sm:py-3 rounded-2xl sm:rounded-xl bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-[#C59B27] focus:ring-3 focus:ring-[#D4AF37]/15 text-[15px] sm:text-sm font-semibold text-[#0B1F3A] placeholder:text-slate-500 placeholder:font-normal focus:outline-none transition-all shadow-2xs"
             />
             <button
               type="button"
               onClick={() => setShowStaffPassword((p) => !p)}
-              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#0B1F3A] p-2 transition-colors cursor-pointer"
+              aria-label={showStaffPassword ? "Hide password" : "Show password"}
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-[#0B1F3A] p-2 transition-colors cursor-pointer"
             >
               {showStaffPassword ? <EyeOff size={19} /> : <Eye size={19} />}
             </button>

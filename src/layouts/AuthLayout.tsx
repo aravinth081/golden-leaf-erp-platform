@@ -44,7 +44,7 @@ export const AuthLayout: React.FC = () => {
   }, []);
 
   return (
-    <div className="max-sm:fixed max-sm:inset-0 max-sm:w-full max-sm:h-full max-sm:overflow-hidden max-sm:overscroll-none h-[100dvh] sm:min-h-[100dvh] w-full flex items-center justify-center max-sm:bg-white bg-gradient-to-br from-[#ECE6DC] via-[#F3EDE3] to-[#E7E0D4] font-body selection:bg-[#D4A017]/20 selection:text-[#0A1628] max-sm:p-0 p-2 sm:p-4 md:p-6 sm:overflow-y-auto overflow-x-hidden">
+    <main id="main-content" role="main" className="max-sm:fixed max-sm:inset-0 max-sm:w-full max-sm:h-full max-sm:overflow-hidden max-sm:overscroll-none h-[100dvh] sm:min-h-[100dvh] w-full flex items-center justify-center max-sm:bg-white bg-gradient-to-br from-[#ECE6DC] via-[#F3EDE3] to-[#E7E0D4] font-body selection:bg-[#D4A017]/20 selection:text-[#0A1628] max-sm:p-0 p-2 sm:p-4 md:p-6 sm:overflow-y-auto overflow-x-hidden">
 
       {/* Card Container — Locked to 16:9 on laptops/desktops, full edge-to-edge native layout on mobile */}
       <motion.div
@@ -58,7 +58,7 @@ export const AuthLayout: React.FC = () => {
 
           {/* Sweeping Concentric Gold Ribbons — Top Left Corner */}
           <div className="absolute top-0 left-0 w-[45%] aspect-square pointer-events-none z-0">
-            <svg viewBox="0 0 200 200" className="w-full h-full" fill="none">
+            <svg viewBox="0 0 200 200" className="w-full h-full" fill="none" aria-hidden="true" focusable="false">
               <defs>
                 <linearGradient id="gold-wedge-tl" x1="0%" y1="0%" x2="100%" y2="100%">
                   <stop offset="0%" stopColor="#FFF0B3" />
@@ -86,7 +86,7 @@ export const AuthLayout: React.FC = () => {
 
           {/* Sweeping Concentric Gold Ribbons — Bottom Left Corner */}
           <div className="absolute bottom-0 left-0 w-[45%] aspect-square pointer-events-none z-0">
-            <svg viewBox="0 0 200 200" className="w-full h-full" fill="none">
+            <svg viewBox="0 0 200 200" className="w-full h-full" fill="none" aria-hidden="true" focusable="false">
               <defs>
                 <linearGradient id="gold-wedge-bl" x1="0%" y1="100%" x2="100%" y2="0%">
                   <stop offset="0%" stopColor="#FFF0B3" />
@@ -128,19 +128,23 @@ export const AuthLayout: React.FC = () => {
               <div className="relative w-full h-full p-[2.5px] rounded-[28px] bg-gradient-to-b from-[#F7E7A9] via-[#D4AF37] to-[#8C6207] shadow-[0_16px_36px_-6px_rgba(180,140,40,0.35)] flex items-center justify-center">
                 {/* Clean Inner Base matching White Carrara Marble */}
                 <div className="w-full h-full rounded-[25px] overflow-hidden bg-white shadow-inner flex items-center justify-center p-1">
-                  <img
-                    src={goldenLeafLogo}
-                    alt="Golden Leaf Emblem"
-                    className="w-full h-full object-contain rounded-[22px] transform group-hover:scale-105 transition-transform duration-400"
-                    onError={(e) => {
-                      const target = e.currentTarget;
-                      if (!target.src.includes('pwa-512x512.png')) {
-                        target.src = '/pwa-512x512.png';
-                      } else if (!target.src.includes('favicon.png')) {
-                        target.src = '/favicon.png';
-                      }
-                    }}
-                  />
+                  <picture>
+                    <source srcSet="/logo-icon-320.webp" type="image/webp" />
+                    <img
+                      src="/logo-icon-320.webp"
+                      alt="Golden Leaf Emblem"
+                      width={160}
+                      height={160}
+                      fetchPriority="high"
+                      className="w-full h-full object-contain rounded-[22px] transform group-hover:scale-105 transition-transform duration-400"
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        if (!target.src.includes('logo-icon.png')) {
+                          target.src = '/logo-icon.png';
+                        }
+                      }}
+                    />
+                  </picture>
                 </div>
               </div>
             </motion.div>
@@ -159,7 +163,7 @@ export const AuthLayout: React.FC = () => {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.35 }}
-              className="font-body text-[clamp(9.5px,0.78vw,11.5px)] font-extrabold tracking-[0.26em] text-[#C59B27] uppercase mt-1 drop-shadow-xs"
+              className="font-body text-[clamp(9.5px,0.78vw,11.5px)] font-extrabold tracking-[0.26em] text-[#8C6207] uppercase mt-1 drop-shadow-xs"
             >
               FINANCE & LOAN MANAGEMENT
             </motion.p>
@@ -218,7 +222,7 @@ export const AuthLayout: React.FC = () => {
 
           {/* Sweeping Concentric Gold Ribbons — Bottom Left Corner (Mobile View) */}
           <div className="sm:hidden absolute bottom-0 left-0 w-[36%] aspect-square pointer-events-none z-0 opacity-35">
-            <svg viewBox="0 0 200 200" className="w-full h-full" fill="none">
+            <svg viewBox="0 0 200 200" className="w-full h-full" fill="none" aria-hidden="true" focusable="false">
               <defs>
                 <linearGradient id="gold-wedge-bl-mob" x1="0%" y1="100%" x2="100%" y2="0%">
                   <stop offset="0%" stopColor="#FFF0B3" />
@@ -246,7 +250,7 @@ export const AuthLayout: React.FC = () => {
 
           {/* Sweeping Concentric Gold Ribbons — Top Right Corner */}
           <div className="absolute top-0 right-0 w-[36%] sm:w-[45%] aspect-square pointer-events-none z-0 opacity-35 sm:opacity-100">
-            <svg viewBox="0 0 200 200" className="w-full h-full" fill="none">
+            <svg viewBox="0 0 200 200" className="w-full h-full" fill="none" aria-hidden="true" focusable="false">
               <defs>
                 <linearGradient id="gold-wedge-tr" x1="100%" y1="0%" x2="0%" y2="100%">
                   <stop offset="0%" stopColor="#FFF0B3" />
@@ -274,7 +278,7 @@ export const AuthLayout: React.FC = () => {
 
           {/* Sweeping Concentric Gold Ribbons — Bottom Right Corner */}
           <div className="absolute bottom-0 right-0 w-[36%] sm:w-[45%] aspect-square pointer-events-none z-0 opacity-35 sm:opacity-100">
-            <svg viewBox="0 0 200 200" className="w-full h-full" fill="none">
+            <svg viewBox="0 0 200 200" className="w-full h-full" fill="none" aria-hidden="true" focusable="false">
               <defs>
                 <linearGradient id="gold-wedge-br" x1="100%" y1="100%" x2="0%" y2="0%">
                   <stop offset="0%" stopColor="#FFF0B3" />
@@ -305,22 +309,28 @@ export const AuthLayout: React.FC = () => {
             <div className="relative w-[96px] h-[96px] mb-3 flex items-center justify-center">
               {/* Soft ambient golden glow behind the emblem */}
               <div className="absolute inset-0 bg-[#D4AF37]/25 rounded-[26px] blur-md -z-10" />
-              <img
-                src={goldenLeafLogo}
-                alt="Golden Leaf Finance"
-                className="w-full h-full object-contain rounded-[24px] drop-shadow-[0_10px_24px_rgba(212,175,55,0.35)]"
-                onError={(e) => {
-                  const target = e.currentTarget;
-                  if (!target.src.includes('pwa-512x512.png')) {
-                    target.src = '/pwa-512x512.png';
-                  }
-                }}
-              />
+              <picture>
+                <source srcSet="/logo-icon-192.webp" type="image/webp" />
+                <img
+                  src="/logo-icon-192.webp"
+                  alt="Golden Leaf Finance"
+                  width={96}
+                  height={96}
+                  fetchPriority="high"
+                  className="w-full h-full object-contain rounded-[24px] drop-shadow-[0_10px_24px_rgba(212,175,55,0.35)]"
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    if (!target.src.includes('logo-icon.png')) {
+                      target.src = '/logo-icon.png';
+                    }
+                  }}
+                />
+              </picture>
             </div>
             <h1 className="font-serif font-black text-[25px] text-[#0F1F38] uppercase tracking-[0.08em] leading-tight drop-shadow-2xs">
               Golden Leaf
             </h1>
-            <p className="text-[11px] font-extrabold text-[#A88219] uppercase tracking-[0.24em] mt-1">
+            <p className="text-[11px] font-extrabold text-[#8C6207] uppercase tracking-[0.24em] mt-1">
               Finance & Loan Management
             </p>
           </div>
@@ -330,7 +340,7 @@ export const AuthLayout: React.FC = () => {
           </div>
         </div>
       </motion.div>
-    </div>
+    </main>
   );
 };
 

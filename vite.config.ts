@@ -69,6 +69,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: 'script-defer',
       devOptions: {
         enabled: false,
       },
@@ -95,8 +96,9 @@ export default defineConfig({
         ],
       },
       workbox: {
-        maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        globIgnores: ['**/pdfGenerator*', '**/jspdf*', '**/html2canvas*'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
@@ -130,6 +132,11 @@ export default defineConfig({
     },
   },
   build: {
+    modulePreload: {
+      resolveDependencies: (_filename, deps) => {
+        return deps.filter((dep) => !dep.includes('charts'));
+      },
+    },
     rollupOptions: {
       output: {
         manualChunks(id) {
