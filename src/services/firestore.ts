@@ -148,11 +148,11 @@ export async function createDocument<T extends { id: string }>(
   items.unshift(newDoc);
   saveCollectionItems(collectionName, items);
 
-  // 2. Async cloud sync to Supabase PostgreSQL
+  // 2. Persistent cloud sync to Supabase PostgreSQL
   if (isSupabaseConfigured() && supabase) {
     try {
       const client = supabase;
-      client
+      const { error } = await client
         .from('documents')
         .upsert({
           collection: collectionName,
@@ -161,10 +161,10 @@ export async function createDocument<T extends { id: string }>(
           is_deleted: false,
           created_at: now,
           updated_at: now,
-        })
-        .then(({ error }) => {
-          if (error) console.warn(`[Supabase] Create doc error (${collectionName}/${newId}):`, error.message);
         });
+      if (error) {
+        console.warn(`[Supabase] Create doc error (${collectionName}/${newId}):`, error.message);
+      }
     } catch (err) {
       console.warn(`[Supabase] Create network error:`, err);
     }
@@ -205,7 +205,7 @@ export async function createDocumentWithId<T extends { id: string }>(
   if (isSupabaseConfigured() && supabase) {
     try {
       const client = supabase;
-      client
+      const { error } = await client
         .from('documents')
         .upsert({
           collection: collectionName,
@@ -213,10 +213,10 @@ export async function createDocumentWithId<T extends { id: string }>(
           data: newDoc,
           is_deleted: false,
           updated_at: now,
-        })
-        .then(({ error }) => {
-          if (error) console.warn(`[Supabase] Upsert error (${collectionName}/${docId}):`, error.message);
         });
+      if (error) {
+        console.warn(`[Supabase] Upsert error (${collectionName}/${docId}):`, error.message);
+      }
     } catch (err) {
       console.warn(`[Supabase] Upsert network error:`, err);
     }
@@ -233,9 +233,8 @@ export async function getDocument<T>(
   // Check local cache first
   const items = getCollectionItems<T>(collectionName);
   const found = items.find((item: any) => item.id === docId);
-  if (found) return found as T;
 
-  // If not in local cache, attempt fetch from Supabase
+  // Attempt fetch from Supabase for fresh data
   if (isSupabaseConfigured() && supabase) {
     try {
       const client = supabase;
@@ -254,7 +253,7 @@ export async function getDocument<T>(
     }
   }
 
-  return null;
+  return (found as T) || null;
 }
 
 /**
@@ -335,12 +334,14 @@ export async function softDeleteDocument(
   if (isSupabaseConfigured() && supabase) {
     try {
       const client = supabase;
-      client
+      const { error } = await client
         .from('documents')
         .update({ is_deleted: true, updated_at: now })
         .eq('collection', collectionName)
-        .eq('id', docId)
-        .then();
+        .eq('id', docId);
+      if (error) {
+        console.warn(`[Supabase] Soft delete error:`, error.message);
+      }
     } catch (e) {
       console.warn(`[Supabase] Soft delete error:`, e);
     }
@@ -361,12 +362,14 @@ export async function hardDeleteDocument(
   if (isSupabaseConfigured() && supabase) {
     try {
       const client = supabase;
-      client
+      const { error } = await client
         .from('documents')
         .delete()
         .eq('collection', collectionName)
-        .eq('id', docId)
-        .then();
+        .eq('id', docId);
+      if (error) {
+        console.warn(`[Supabase] Hard delete error:`, error.message);
+      }
     } catch (e) {
       console.warn(`[Supabase] Hard delete error:`, e);
     }
@@ -381,7 +384,7 @@ export async function queryDocuments<T>(
   options: FirestoreQueryOptions = {},
   excludeDeleted: boolean = true
 ): Promise<T[]> {
-  // If Supabase is active, asynchronously sync from cloud
+  // If Supabase is active, sync from cloud
   if (isSupabaseConfigured() && supabase) {
     try {
       const client = supabase;
@@ -395,11 +398,29 @@ export async function queryDocuments<T>(
       }
 
       const { data: rows, error } = await query;
-      if (!error && Array.isArray(rows) && rows.length > 0) {
-        const cloudItems = rows.map((r: any) => r.data).filter(Boolean);
-        // Silently update local store with latest cloud state
-        saveCollectionItems(collectionName, cloudItems, false);
-        return applyFiltersAndSort<T>(cloudItems, options, excludeDeleted);
+      if (!error && Array.isArray(rows)) {
+        if (rows.length > 0) {
+          const cloudItems = rows.map((r: any) => r.data).filter(Boolean);
+          // Silently update local store with latest cloud state
+          saveCollectionItems(collectionName, cloudItems, false);
+          return applyFiltersAndSort<T>(cloudItems, options, excludeDeleted);
+        } else {
+          // If cloud has 0 rows, check if there are initial local items to seed to Supabase
+          const localItems = getCollectionItems<any>(collectionName);
+          if (localItems.length > 0) {
+            const upsertRows = localItems.map((item) => ({
+              collection: collectionName,
+              id: item.id || `${collectionName}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+              data: item,
+              is_deleted: !!item.isDeleted,
+              created_at: item.createdAt || new Date().toISOString(),
+              updated_at: item.updatedAt || new Date().toISOString(),
+            }));
+            await client.from('documents').upsert(upsertRows);
+            return applyFiltersAndSort<T>(localItems, options, excludeDeleted);
+          }
+          return [];
+        }
       }
     } catch (e) {
       console.warn(`[Supabase] Cloud query fallback to local cache:`, e);

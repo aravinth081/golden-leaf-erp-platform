@@ -15,6 +15,7 @@ import {
   type GoldOverdueNoticeRecord,
   type GoldRedemptionRecord,
 } from '../types/goldLoan.types';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 const RATE_STORAGE_KEY = 'glf_gold_rate_master_v1';
 const LOANS_STORAGE_KEY = 'glf_gold_loans_v1';
@@ -54,6 +55,29 @@ class GoldLoanService {
       this.loans = [];
       this.referrals = [];
     }
+
+    if (isSupabaseConfigured() && supabase) {
+      void (async () => {
+        try {
+          const { data: rows, error } = await supabase!
+            .from('documents')
+            .select('collection, data')
+            .in('collection', ['gold_loans', 'gold_referrals', 'gold_rate'])
+            .eq('is_deleted', false);
+          if (!error && Array.isArray(rows)) {
+            const cloudLoans = rows.filter((r: any) => r.collection === 'gold_loans').map((r: any) => r.data).filter(Boolean);
+            const cloudRefs = rows.filter((r: any) => r.collection === 'gold_referrals').map((r: any) => r.data).filter(Boolean);
+            const cloudRate = rows.find((r: any) => r.collection === 'gold_rate')?.data;
+
+            if (cloudLoans.length > 0) this.loans = cloudLoans;
+            if (cloudRefs.length > 0) this.referrals = cloudRefs;
+            if (cloudRate) this.rateMaster = cloudRate;
+          }
+        } catch (e: unknown) {
+          console.warn('[Supabase] Failed to fetch gold loans:', e);
+        }
+      })();
+    }
   }
 
   private saveState() {
@@ -63,6 +87,37 @@ class GoldLoanService {
       localStorage.setItem(REFERRALS_STORAGE_KEY, JSON.stringify(this.referrals));
     } catch (e) {
       console.warn('Failed to save gold loan state:', e);
+    }
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        const upsertRows = [
+          ...this.loans.map((l) => ({
+            collection: 'gold_loans',
+            id: l.id,
+            data: l,
+            is_deleted: false,
+            updated_at: new Date().toISOString(),
+          })),
+          ...this.referrals.map((ref) => ({
+            collection: 'gold_referrals',
+            id: ref.id,
+            data: ref,
+            is_deleted: false,
+            updated_at: new Date().toISOString(),
+          })),
+          {
+            collection: 'gold_rate',
+            id: 'master_rate',
+            data: this.rateMaster,
+            is_deleted: false,
+            updated_at: new Date().toISOString(),
+          },
+        ];
+        supabase.from('documents').upsert(upsertRows).then();
+      } catch (err) {
+        console.warn('[Supabase] Gold loan sync error:', err);
+      }
     }
   }
 

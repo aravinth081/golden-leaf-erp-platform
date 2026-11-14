@@ -21,6 +21,7 @@ import { useUIStore, useAuthStore } from '../../store';
 import { getStoredBranches, type DetailedBranch } from '../../services/branchService';
 import { getEmployeeRecords, type GPSAttendanceRecord } from '../../services/gpsAttendanceService';
 import { canManageUser, type UserRole } from '../../types/auth.types';
+import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 
 // PDF-Strict Role Definitions
 export type PDFRole = 'admin' | 'hr_payroll_manager' | 'branch_manager' | 'credit_manager' | 'collection_agent';
@@ -111,7 +112,29 @@ export const EmployeeListPage: React.FC = () => {
     return [];
   });
 
-  // Sync to localStorage
+  // Load employees from Supabase on mount
+  useEffect(() => {
+    if (isSupabaseConfigured() && supabase) {
+      void (async () => {
+        try {
+          const { data: rows, error } = await supabase!
+            .from('documents')
+            .select('data')
+            .eq('collection', 'employees')
+            .eq('is_deleted', false);
+          if (!error && Array.isArray(rows) && rows.length > 0) {
+            const cloudEmps = rows.map((r: any) => r.data).filter(Boolean);
+            setEmployees(cloudEmps);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(cloudEmps));
+          }
+        } catch (e: unknown) {
+          console.warn('[Supabase] Failed to fetch employees:', e);
+        }
+      })();
+    }
+  }, []);
+
+  // Sync to localStorage & Supabase
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(employees));
@@ -119,6 +142,18 @@ export const EmployeeListPage: React.FC = () => {
       window.dispatchEvent(new CustomEvent('glf-storage-sync'));
     } catch (e) {
       console.error('Failed to save employees', e);
+    }
+
+    if (isSupabaseConfigured() && supabase && employees.length > 0) {
+      const upsertRows = employees.map((emp) => ({
+        collection: 'employees',
+        id: emp.id,
+        data: emp,
+        is_deleted: emp.status === 'RELIEVED (INACTIVE)',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }));
+      supabase.from('documents').upsert(upsertRows).then();
     }
   }, [employees]);
 

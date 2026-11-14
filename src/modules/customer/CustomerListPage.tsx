@@ -24,6 +24,7 @@ import {
   type BranchCollectionGroup
 } from '../../services/monitoringDataService';
 import { getStoredBranches, type DetailedBranch } from '../../services/branchService';
+import { uploadImage } from '../../services/cloudinary';
 
 // ── CUSTOM MODULAR SAAS DROPDOWN (Eliminates ugly OS popups & yellow focus rings) ──
 interface CustomSelectOption {
@@ -766,15 +767,31 @@ export const CustomerListPage: React.FC = () => {
     }
   };
 
-  // Helper: File preview generator
-  const handleFileUpload = (field: keyof CustomerFormState, e: React.ChangeEvent<HTMLInputElement>) => {
+  // Helper: Cloudinary file upload
+  const handleFileUpload = async (field: keyof CustomerFormState, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      setFormData((prev) => ({ ...prev, [field]: reader.result as string }));
-    };
-    reader.readAsDataURL(file);
+
+    try {
+      const folderKey = field === 'customerPhotoUrl' ? 'photos' : field === 'nomineePhotoUrl' ? 'nominees' : 'kyc';
+      const result = await uploadImage(file, `customers/${folderKey}`);
+      if (result?.secure_url) {
+        setFormData((prev) => ({ ...prev, [field]: result.secure_url }));
+        addToast({
+          type: 'success',
+          title: 'Image Uploaded to Cloudinary',
+          message: 'Secure Cloudinary image URL attached.',
+        });
+      }
+    } catch (err: any) {
+      addToast({
+        type: 'error',
+        title: 'Upload Failed',
+        message: err.message || 'Could not upload image to Cloudinary.',
+      });
+    } finally {
+      if (e.target) e.target.value = '';
+    }
   };
 
   const handleRemoveFile = (field: keyof CustomerFormState) => {

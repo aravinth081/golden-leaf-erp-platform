@@ -5,12 +5,9 @@
 
 import {
   type BusinessLoanRecord,
-  type BusinessLoanStatus,
-  type BusinessLoanCategory,
-  type BusinessPremisesType,
-  type BusinessRepaymentFrequency,
   type BusinessLoanCollectionRecord,
 } from '../types/businessLoan.types';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 const STORAGE_KEY = 'glf_business_loans_v2';
 
@@ -31,10 +28,30 @@ class BusinessLoanService {
         this.loans = JSON.parse(stored);
       } else {
         this.loans = [];
-        this.saveState();
       }
     } catch {
       this.loans = [];
+    }
+
+    if (isSupabaseConfigured() && supabase) {
+      void (async () => {
+        try {
+          const { data: rows, error } = await supabase!
+            .from('documents')
+            .select('data')
+            .eq('collection', 'business_loans')
+            .eq('is_deleted', false);
+          if (!error && Array.isArray(rows) && rows.length > 0) {
+            const cloudLoans = rows.map((r: any) => r.data).filter(Boolean);
+            this.loans = cloudLoans;
+            try {
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(cloudLoans));
+            } catch {}
+          }
+        } catch (e: unknown) {
+          console.warn('[Supabase] Failed to fetch business loans:', e);
+        }
+      })();
     }
   }
 
@@ -43,6 +60,18 @@ class BusinessLoanService {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.loans));
     } catch (e) {
       console.warn('Failed to save business loans state:', e);
+    }
+
+    if (isSupabaseConfigured() && supabase && this.loans.length > 0) {
+      const upsertRows = this.loans.map((loan) => ({
+        collection: 'business_loans',
+        id: loan.id,
+        data: loan,
+        is_deleted: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }));
+      void supabase.from('documents').upsert(upsertRows);
     }
   }
 

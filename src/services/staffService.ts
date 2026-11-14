@@ -17,6 +17,27 @@ import type {
 } from '../types/staff.types';
 import { STAFF_ROLE_META } from '../types/staff.types';
 import { getStoredBranches } from './branchService';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
+
+export function normalizeStaffRole(role: string): StaffRole {
+  const r = (role || '').trim().toUpperCase();
+  if (r === 'ADMIN') return 'ADMIN';
+  if (r === 'HR' || r === 'HR_PAYROLL_MANAGER') return 'HR';
+  if (r === 'BRANCH_MANAGER' || r === 'BM') return 'BRANCH_MANAGER';
+  if (r === 'CREDIT_MANAGER' || r === 'CM') return 'CREDIT_MANAGER';
+  if (r === 'CRO' || r === 'COLLECTION_AGENT') return 'CRO';
+  return 'CRO';
+}
+
+export function staffRoleToUserRole(role: string): UserRole {
+  const r = (role || '').trim().toUpperCase();
+  if (r === 'ADMIN') return 'admin';
+  if (r === 'HR' || r === 'HR_PAYROLL_MANAGER') return 'hr_payroll_manager';
+  if (r === 'BRANCH_MANAGER') return 'branch_manager';
+  if (r === 'CREDIT_MANAGER') return 'credit_manager';
+  if (r === 'CRO' || r === 'COLLECTION_AGENT') return 'collection_agent';
+  return (role.toLowerCase() as UserRole) || 'admin';
+}
 
 const STORAGE_KEY_PROFILES = 'glf_staff_profiles_master_v3';
 const STORAGE_KEY_AUDIT = 'glf_staff_audit_trail_master';
@@ -475,6 +496,40 @@ export async function createStaffProfile(
   allProfiles.unshift(newProfile);
   writeStorage(STORAGE_KEY_PROFILES, allProfiles);
 
+  // Sync to Supabase PostgreSQL staff_users & documents
+  if (isSupabaseConfigured() && supabase) {
+    try {
+      await supabase.from('staff_users').upsert({
+        id: newProfile.id,
+        full_name: newProfile.fullName,
+        employee_id: newProfile.employeeId,
+        email: newProfile.email,
+        mobile: newProfile.mobile,
+        role: newProfile.role,
+        branch_id: newProfile.branchId,
+        username: newProfile.username,
+        password_hash: newProfile.passwordHash,
+        status: newProfile.status,
+        must_change_password: newProfile.mustChangePassword,
+        created_by: newProfile.createdBy,
+        created_at: newProfile.createdAt,
+        updated_at: newProfile.updatedAt,
+        deleted_at: null,
+      });
+
+      await supabase.from('documents').upsert({
+        collection: 'staff_users',
+        id: newProfile.id,
+        data: newProfile,
+        is_deleted: false,
+        created_at: newProfile.createdAt,
+        updated_at: newProfile.updatedAt,
+      });
+    } catch (err) {
+      console.warn('[Supabase] Staff profile persist error:', err);
+    }
+  }
+
   // Audit
   appendStaffAuditLog(actor, 'CREATE', newProfile.id, newProfile.username, null, {
     fullName: newProfile.fullName,
@@ -608,6 +663,31 @@ export function updateStaffProfile(
   profiles[targetIndex] = updated;
   writeStorage(STORAGE_KEY_PROFILES, profiles);
 
+  // Sync update to Supabase
+  if (isSupabaseConfigured() && supabase) {
+    void (async () => {
+      try {
+        await supabase!.from('staff_users').update({
+          full_name: updated.fullName,
+          email: updated.email,
+          mobile: updated.mobile,
+          role: updated.role,
+          branch_id: updated.branchId,
+          updated_at: updated.updatedAt,
+        }).eq('id', updated.id);
+
+        await supabase!.from('documents').upsert({
+          collection: 'staff_users',
+          id: updated.id,
+          data: updated,
+          updated_at: updated.updatedAt,
+        });
+      } catch (err: unknown) {
+        console.warn('[Supabase] Staff profile update error:', err);
+      }
+    })();
+  }
+
   appendStaffAuditLog(actor, 'UPDATE', updated.id, updated.username, oldValue, {
     fullName: updated.fullName,
     email: updated.email,
@@ -643,6 +723,27 @@ export function updateStaffStatus(
   profiles[targetIndex] = existing;
   writeStorage(STORAGE_KEY_PROFILES, profiles);
 
+  // Sync status to Supabase
+  if (isSupabaseConfigured() && supabase) {
+    void (async () => {
+      try {
+        await supabase!.from('staff_users').update({
+          status: existing.status,
+          updated_at: existing.updatedAt,
+        }).eq('id', existing.id);
+
+        await supabase!.from('documents').upsert({
+          collection: 'staff_users',
+          id: existing.id,
+          data: existing,
+          updated_at: existing.updatedAt,
+        });
+      } catch (err: unknown) {
+        console.warn('[Supabase] Staff status sync error:', err);
+      }
+    })();
+  }
+
   appendStaffAuditLog(actor, 'STATUS_CHANGE', existing.id, existing.username, { status: oldStatus }, { status });
   return existing;
 }
@@ -677,6 +778,26 @@ export async function resetStaffPassword(
   profiles[targetIndex] = existing;
   writeStorage(STORAGE_KEY_PROFILES, profiles);
 
+  // Sync password reset to Supabase
+  if (isSupabaseConfigured() && supabase) {
+    try {
+      await supabase.from('staff_users').update({
+        password_hash: existing.passwordHash,
+        must_change_password: true,
+        updated_at: existing.updatedAt,
+      }).eq('id', existing.id);
+
+      await supabase.from('documents').upsert({
+        collection: 'staff_users',
+        id: existing.id,
+        data: existing,
+        updated_at: existing.updatedAt,
+      });
+    } catch (err) {
+      console.warn('[Supabase] Staff password reset sync error:', err);
+    }
+  }
+
   appendStaffAuditLog(actor, 'RESET_PASSWORD', existing.id, existing.username, null, {
     action: 'Admin password reset',
     mustChangePassword: true,
@@ -704,6 +825,23 @@ export function deleteStaffProfile(id: string, actor: AuthUser): void {
   profiles[targetIndex] = existing;
   writeStorage(STORAGE_KEY_PROFILES, profiles);
 
+  // Sync soft-delete to Supabase
+  if (isSupabaseConfigured() && supabase) {
+    try {
+      supabase.from('staff_users').update({
+        deleted_at: existing.deletedAt,
+        updated_at: existing.updatedAt,
+      }).eq('id', existing.id).then();
+
+      supabase.from('documents').update({
+        is_deleted: true,
+        updated_at: existing.updatedAt,
+      }).eq('collection', 'staff_users').eq('id', existing.id).then();
+    } catch (err) {
+      console.warn('[Supabase] Staff delete sync error:', err);
+    }
+  }
+
   appendStaffAuditLog(actor, 'DELETE', existing.id, existing.username, { fullName: existing.fullName }, { deletedAt: existing.deletedAt });
 }
 
@@ -726,7 +864,224 @@ const BUILTIN_DEMO_STAFF: Record<
 > = {};
 
 /**
- * Validates staff login credentials.
+ * Fetches staff profiles from Supabase and merges with local cache.
+ */
+export async function fetchStaffUsersFromSupabase(): Promise<StaffProfile[]> {
+  if (isSupabaseConfigured() && supabase) {
+    try {
+      const { data: rows, error } = await supabase
+        .from('staff_users')
+        .select('*')
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false });
+
+      if (!error && Array.isArray(rows)) {
+        const cloudProfiles: StaffProfile[] = rows.map((r: any) => ({
+          id: r.id,
+          fullName: r.full_name,
+          employeeId: r.employee_id,
+          email: r.email,
+          mobile: r.mobile,
+          role: normalizeStaffRole(r.role),
+          branchId: r.branch_id,
+          branchName: resolveBranchName(r.branch_id) || (r.role?.toUpperCase() === 'ADMIN' || r.role?.toUpperCase() === 'HR' ? 'Corporate HQ (All Branches)' : null),
+          username: r.username,
+          passwordHash: r.password_hash,
+          status: r.status === 'inactive' ? 'inactive' : 'active',
+          mustChangePassword: !!r.must_change_password,
+          createdBy: r.created_by || 'Admin',
+          createdAt: r.created_at || new Date().toISOString(),
+          updatedAt: r.updated_at || new Date().toISOString(),
+          deletedAt: r.deleted_at || null,
+        }));
+
+        // Ensure Master Admin is included
+        const hasMasterAdmin = cloudProfiles.some(
+          (p) =>
+            p.username.toLowerCase() === 'karthikkannan d' ||
+            p.username.toLowerCase() === 'karthikkannan' ||
+            p.fullName.toLowerCase() === 'karthikkannan d'
+        );
+        const merged = hasMasterAdmin ? cloudProfiles : [MASTER_ADMIN_PROFILE, ...cloudProfiles];
+        writeStorage(STORAGE_KEY_PROFILES, merged);
+        return merged;
+      }
+    } catch (e) {
+      console.warn('[Supabase] Failed to fetch staff users:', e);
+    }
+  }
+
+  return getStoredStaffProfiles();
+}
+
+export interface StaffAccountInput {
+  id?: string;
+  name: string;
+  username: string;
+  password?: string;
+  role: 'admin' | 'hr_payroll_manager' | 'branch_manager' | 'credit_manager' | 'collection_agent';
+  branchName?: string;
+  branchId?: string | null;
+  phone?: string;
+  email?: string;
+  status?: 'active' | 'on_hold' | 'inactive';
+}
+
+/**
+ * Creates or updates a staff user account from the Roles & Permissions console,
+ * saving directly into Supabase PostgreSQL staff_users and documents.
+ */
+export async function createOrUpdateStaffAccount(
+  input: StaffAccountInput,
+  actor: AuthUser
+): Promise<StaffProfile> {
+  const cleanUsername = input.username.trim().toLowerCase().replace(/\s+/g, '.');
+  const staffRole = normalizeStaffRole(input.role);
+  const now = new Date().toISOString();
+  const dbStatus = input.status === 'on_hold' ? 'inactive' : 'active';
+  const cleanPhone = (input.phone || '9840100000').replace(/\D/g, '').slice(-10) || '9840100000';
+  const cleanEmail = (input.email || `${cleanUsername}@goldenleaf.finance`).trim().toLowerCase();
+  const branchName = input.branchName || resolveBranchName(input.branchId) || (staffRole === 'ADMIN' || staffRole === 'HR' ? 'Corporate HQ (All Branches)' : 'Main Branch');
+
+  const existingProfiles = getStoredStaffProfiles();
+
+  if (input.id) {
+    // ── UPDATE EXISTING ACCOUNT ──
+    const targetIndex = existingProfiles.findIndex((p) => p.id === input.id);
+    const existing = targetIndex >= 0 ? existingProfiles[targetIndex] : null;
+
+    let newPasswordHash = existing?.passwordHash || (await hashPassword('golden@123'));
+    if (input.password && input.password.trim()) {
+      newPasswordHash = await hashPassword(input.password.trim());
+    }
+
+    const updatedProfile: StaffProfile = {
+      id: input.id,
+      fullName: input.name.trim(),
+      employeeId: existing?.employeeId || `EMP-${Date.now().toString().slice(-4)}`,
+      email: cleanEmail,
+      mobile: cleanPhone,
+      role: staffRole,
+      branchId: input.branchId || existing?.branchId || null,
+      branchName: branchName,
+      username: cleanUsername,
+      passwordHash: newPasswordHash,
+      status: dbStatus as StaffStatus,
+      mustChangePassword: false,
+      createdBy: existing?.createdBy || actor.displayName || 'Admin',
+      createdAt: existing?.createdAt || now,
+      updatedAt: now,
+      deletedAt: null,
+    };
+
+    if (targetIndex >= 0) {
+      existingProfiles[targetIndex] = updatedProfile;
+    } else {
+      existingProfiles.unshift(updatedProfile);
+    }
+    writeStorage(STORAGE_KEY_PROFILES, existingProfiles);
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        await supabase.from('staff_users').upsert({
+          id: updatedProfile.id,
+          full_name: updatedProfile.fullName,
+          employee_id: updatedProfile.employeeId,
+          email: updatedProfile.email,
+          mobile: updatedProfile.mobile,
+          role: updatedProfile.role,
+          branch_id: updatedProfile.branchId,
+          username: updatedProfile.username,
+          password_hash: updatedProfile.passwordHash,
+          status: updatedProfile.status,
+          must_change_password: false,
+          created_by: updatedProfile.createdBy,
+          created_at: updatedProfile.createdAt,
+          updated_at: updatedProfile.updatedAt,
+          deleted_at: null,
+        });
+
+        await supabase.from('documents').upsert({
+          collection: 'staff_users',
+          id: updatedProfile.id,
+          data: updatedProfile,
+          is_deleted: false,
+          updated_at: now,
+        });
+      } catch (err) {
+        console.warn('[Supabase] Staff account update error:', err);
+      }
+    }
+
+    return updatedProfile;
+  } else {
+    // ── CREATE NEW ACCOUNT ──
+    const cleanPassword = input.password && input.password.trim() ? input.password.trim() : 'golden@123';
+    const passwordHash = await hashPassword(cleanPassword);
+    const newId = `STF-${Date.now().toString().slice(-6)}-${Math.random().toString(36).substring(2, 6)}`;
+    const employeeId = `EMP-${Date.now().toString().slice(-4)}`;
+
+    const newProfile: StaffProfile = {
+      id: newId,
+      fullName: input.name.trim(),
+      employeeId,
+      email: cleanEmail,
+      mobile: cleanPhone,
+      role: staffRole,
+      branchId: input.branchId || null,
+      branchName,
+      username: cleanUsername,
+      passwordHash,
+      status: dbStatus as StaffStatus,
+      mustChangePassword: false,
+      createdBy: actor.displayName || actor.email || 'Admin',
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+    };
+
+    existingProfiles.unshift(newProfile);
+    writeStorage(STORAGE_KEY_PROFILES, existingProfiles);
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        await supabase.from('staff_users').insert({
+          id: newProfile.id,
+          full_name: newProfile.fullName,
+          employee_id: newProfile.employeeId,
+          email: newProfile.email,
+          mobile: newProfile.mobile,
+          role: newProfile.role,
+          branch_id: newProfile.branchId,
+          username: newProfile.username,
+          password_hash: newProfile.passwordHash,
+          status: newProfile.status,
+          must_change_password: false,
+          created_by: newProfile.createdBy,
+          created_at: newProfile.createdAt,
+          updated_at: newProfile.updatedAt,
+          deleted_at: null,
+        });
+
+        await supabase.from('documents').upsert({
+          collection: 'staff_users',
+          id: newProfile.id,
+          data: newProfile,
+          is_deleted: false,
+          created_at: now,
+          updated_at: now,
+        });
+      } catch (err) {
+        console.warn('[Supabase] Staff account insert error:', err);
+      }
+    }
+
+    return newProfile;
+  }
+}
+
+/**
+ * Validates staff login credentials against Supabase PostgreSQL and local cache.
  * Ensures deactivated staff cannot log in.
  */
 export async function authenticateStaffCredentials(
@@ -741,23 +1096,83 @@ export async function authenticateStaffCredentials(
   const cleanUsername = rawInput.toLowerCase();
   const inputNoSpaces = cleanUsername.replace(/\s+/g, '');
 
-  const profiles = getStoredStaffProfiles();
-  const staff = profiles.find((p) => {
-    if (p.deletedAt !== null) return false;
-    const pUser = (p.username || '').trim().toLowerCase();
-    const pFullName = (p.fullName || '').trim().toLowerCase();
-    const pNoSpaces = pUser.replace(/\s+/g, '');
-    return (
-      pUser === cleanUsername ||
-      pNoSpaces === inputNoSpaces ||
-      (p.role === 'ADMIN' && (
-        cleanUsername === 'karthikkannan d' ||
-        cleanUsername === 'karthikkannan' ||
-        cleanUsername === 'karthikkannand' ||
-        pFullName === cleanUsername
-      ))
-    );
-  });
+  let staff: StaffProfile | null = null;
+
+  // 1. First, check Supabase staff_users table
+  if (isSupabaseConfigured() && supabase) {
+    try {
+      const { data: rows, error } = await supabase
+        .from('staff_users')
+        .select('*')
+        .is('deleted_at', null);
+
+      if (!error && Array.isArray(rows) && rows.length > 0) {
+        const matched = rows.find((r: any) => {
+          const rUser = (r.username || '').trim().toLowerCase();
+          const rFullName = (r.full_name || '').trim().toLowerCase();
+          const rEmail = (r.email || '').trim().toLowerCase();
+          const rNoSpaces = rUser.replace(/\s+/g, '');
+          return (
+            rUser === cleanUsername ||
+            rNoSpaces === inputNoSpaces ||
+            rEmail === cleanUsername ||
+            (r.role?.toUpperCase() === 'ADMIN' && (
+              cleanUsername === 'karthikkannan d' ||
+              cleanUsername === 'karthikkannan' ||
+              cleanUsername === 'karthikkannand' ||
+              rFullName === cleanUsername
+            ))
+          );
+        });
+
+        if (matched) {
+          staff = {
+            id: matched.id,
+            fullName: matched.full_name,
+            employeeId: matched.employee_id,
+            email: matched.email,
+            mobile: matched.mobile,
+            role: normalizeStaffRole(matched.role),
+            branchId: matched.branch_id,
+            branchName: resolveBranchName(matched.branch_id) || (matched.role?.toUpperCase() === 'ADMIN' || matched.role?.toUpperCase() === 'HR' ? 'Corporate HQ (All Branches)' : null),
+            username: matched.username,
+            passwordHash: matched.password_hash,
+            status: matched.status === 'inactive' ? 'inactive' : 'active',
+            mustChangePassword: !!matched.must_change_password,
+            createdBy: matched.created_by || 'Admin',
+            createdAt: matched.created_at,
+            updatedAt: matched.updated_at,
+            deletedAt: matched.deleted_at,
+          };
+        }
+      }
+    } catch (e) {
+      console.warn('[Supabase] Auth lookup fallback to local cache:', e);
+    }
+  }
+
+  // 2. If not found in Supabase or network failed, fallback to local storage
+  if (!staff) {
+    const profiles = getStoredStaffProfiles();
+    staff = profiles.find((p) => {
+      if (p.deletedAt !== null) return false;
+      const pUser = (p.username || '').trim().toLowerCase();
+      const pFullName = (p.fullName || '').trim().toLowerCase();
+      const pEmail = (p.email || '').trim().toLowerCase();
+      const pNoSpaces = pUser.replace(/\s+/g, '');
+      return (
+        pUser === cleanUsername ||
+        pNoSpaces === inputNoSpaces ||
+        pEmail === cleanUsername ||
+        (p.role === 'ADMIN' && (
+          cleanUsername === 'karthikkannan d' ||
+          cleanUsername === 'karthikkannan' ||
+          cleanUsername === 'karthikkannand' ||
+          pFullName === cleanUsername
+        ))
+      );
+    }) || null;
+  }
 
   if (!staff) {
     throw new Error('401 Unauthorized: Invalid username or password.');
@@ -778,7 +1193,9 @@ export async function authenticateStaffCredentials(
     throw new Error('401 Unauthorized: Invalid username or password.');
   }
 
-  const meta = STAFF_ROLE_META[staff.role];
+  const meta = STAFF_ROLE_META[staff.role] || STAFF_ROLE_META.ADMIN;
+  const verifiedRole: UserRole = meta.internalRole;
+
   const authUser: AuthUser = {
     uid: staff.id,
     employeeId: staff.employeeId,
@@ -788,12 +1205,22 @@ export async function authenticateStaffCredentials(
     phoneNumber: `+91 ${staff.mobile}`,
     emailVerified: true,
     customClaims: {
-      role: meta.internalRole,
+      role: verifiedRole,
       branchId: staff.branchId || undefined,
       branchName: staff.branchName || (staff.role === 'ADMIN' ? 'Corporate HQ (All Branches)' : undefined),
       companyId: 'default',
     },
   };
+
+  // Cache authenticated staff profile
+  const currentProfiles = getStoredStaffProfiles();
+  const existingIndex = currentProfiles.findIndex(p => p.id === staff!.id);
+  if (existingIndex >= 0) {
+    currentProfiles[existingIndex] = staff;
+  } else {
+    currentProfiles.unshift(staff);
+  }
+  writeStorage(STORAGE_KEY_PROFILES, currentProfiles);
 
   return {
     authUser,

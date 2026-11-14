@@ -23,6 +23,12 @@ import { PageHeader } from '../../components/ui';
 import { useUIStore, useAuthStore } from '../../store';
 import { getStoredBranches } from '../../services/branchService';
 import { canManageUser, type UserRole } from '../../types/auth.types';
+import {
+  fetchStaffUsersFromSupabase,
+  createOrUpdateStaffAccount,
+  deleteStaffProfile,
+  staffRoleToUserRole,
+} from '../../services/staffService';
 
 export type UserRoleType = 'admin' | 'hr_payroll_manager' | 'branch_manager' | 'credit_manager' | 'collection_agent';
 
@@ -98,7 +104,7 @@ export const RolesPermissionsPage: React.FC = () => {
     ['admin', 'hr_payroll_manager', 'branch_manager', 'credit_manager', 'collection_agent'] as UserRoleType[]
   ).filter((r) => canManageUser(currentActorRole, r));
 
-  // Retrieve stored accounts
+  // Retrieve stored accounts (cached + synced with Supabase PostgreSQL)
   const [accounts, setAccounts] = useState<UserAccount[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -115,6 +121,30 @@ export const RolesPermissionsPage: React.FC = () => {
   useEffect(() => {
     const list = getStoredBranches().map((b) => b.name);
     setBranches(list);
+
+    // Sync accounts live from Supabase
+    fetchStaffUsersFromSupabase().then((profiles) => {
+      if (profiles && profiles.length > 0) {
+        const mappedAccounts: UserAccount[] = profiles.map((p) => ({
+          id: p.id,
+          name: p.fullName,
+          username: p.username,
+          role: staffRoleToUserRole(p.role) as UserRoleType,
+          branchName: p.branchName || 'Main Branch (Chennai)',
+          status: p.status === 'inactive' ? 'on_hold' : 'active',
+          isOnline: p.status === 'active',
+          lastSeen: 'Registered record',
+          createdAt: new Date(p.createdAt).toLocaleDateString('en-IN', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+          }),
+          phone: `+91 ${p.mobile}`,
+          email: p.email,
+        }));
+        setAccounts(mappedAccounts);
+      }
+    });
   }, []);
 
   // Save to localStorage on change
@@ -229,7 +259,7 @@ export const RolesPermissionsPage: React.FC = () => {
   };
 
   // Handle Create Account Submission
-  const handleCreateSubmit = (e: React.FormEvent) => {
+  const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!createForm.name.trim() || !createForm.username.trim() || !createForm.password.trim()) {
       addToast({ type: 'error', title: 'Validation Error', message: 'Name, username, and password are required.' });
@@ -253,44 +283,62 @@ export const RolesPermissionsPage: React.FC = () => {
       return;
     }
 
-    const newAccount: UserAccount = {
-      id: `USR-${String(accounts.length + 1).padStart(3, '0')}`,
-      name: createForm.name.trim(),
-      username: cleanUsername,
-      password: createForm.password,
-      role: createForm.role,
-      branchName: createForm.branchName || branches[0] || 'Main Branch (Chennai)',
-      status: createForm.status,
-      isOnline: createForm.isOnline,
-      lastSeen: createForm.isOnline ? 'Online now' : `Registered on ${getCurrentFormattedDateTime()}`,
-      createdAt: getCurrentFormattedDateTime(),
-      phone: createForm.phone.trim() || '+91 98401 00000',
-      email: createForm.email.trim() || `${cleanUsername}@goldenleaf.finance`,
-    };
+    try {
+      const createdStaff = await createOrUpdateStaffAccount({
+        name: createForm.name.trim(),
+        username: cleanUsername,
+        password: createForm.password.trim(),
+        role: createForm.role,
+        branchName: createForm.branchName || branches[0] || 'Main Branch (Chennai)',
+        phone: createForm.phone.trim() || '9840100000',
+        email: createForm.email.trim() || `${cleanUsername}@goldenleaf.finance`,
+        status: createForm.status,
+      }, currentUser || { uid: 'admin', email: 'admin@goldenleaf.finance', displayName: 'Administrator', photoURL: null, phoneNumber: null, emailVerified: true, customClaims: { role: 'admin', companyId: 'default' } });
 
-    setAccounts((prev) => [newAccount, ...prev]);
-    addToast({
-      type: 'success',
-      title: 'Account Created',
-      message: `${ROLE_METADATA[newAccount.role].label} account created for @${newAccount.username}.`,
-    });
+      const newAccount: UserAccount = {
+        id: createdStaff.id,
+        name: createdStaff.fullName,
+        username: createdStaff.username,
+        role: createForm.role,
+        branchName: createdStaff.branchName || 'Main Branch (Chennai)',
+        status: createForm.status,
+        isOnline: createForm.status === 'active',
+        lastSeen: `Registered on ${getCurrentFormattedDateTime()}`,
+        createdAt: getCurrentFormattedDateTime(),
+        phone: `+91 ${createdStaff.mobile}`,
+        email: createdStaff.email,
+      };
 
-    setShowCreateModal(false);
-    setCreateForm({
-      name: '',
-      username: '',
-      password: '',
-      role: 'branch_manager',
-      branchName: branches[0] || 'Main Branch (Chennai)',
-      phone: '',
-      email: '',
-      status: 'active',
-      isOnline: false,
-    });
+      setAccounts((prev) => [newAccount, ...prev.filter(a => a.id !== newAccount.id && a.username.toLowerCase() !== cleanUsername)]);
+      addToast({
+        type: 'success',
+        title: 'Account Created in Supabase',
+        message: `${ROLE_METADATA[newAccount.role].label} account created for @${newAccount.username}. Credentials ready for login.`,
+      });
+
+      setShowCreateModal(false);
+      setCreateForm({
+        name: '',
+        username: '',
+        password: '',
+        role: 'branch_manager',
+        branchName: branches[0] || 'Main Branch (Chennai)',
+        phone: '',
+        email: '',
+        status: 'active',
+        isOnline: false,
+      });
+    } catch (err: any) {
+      addToast({
+        type: 'error',
+        title: 'Creation Failed',
+        message: err.message || 'Failed to save account in Supabase.',
+      });
+    }
   };
 
   // Handle Save Edited Account
-  const handleSaveEdit = (e: React.FormEvent) => {
+  const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingAccount) return;
     if (!editForm.name.trim() || !editForm.username.trim()) {
@@ -318,33 +366,52 @@ export const RolesPermissionsPage: React.FC = () => {
       return;
     }
 
-    setAccounts((prev) =>
-      prev.map((a) =>
-        a.id === editingAccount.id
-          ? {
-              ...a,
-              name: editForm.name.trim(),
-              username: cleanUsername,
-              password: editForm.password || a.password,
-              role: editForm.role,
-              branchName: editForm.branchName || a.branchName,
-              phone: editForm.phone.trim() || a.phone,
-              email: editForm.email.trim() || a.email,
-            }
-          : a
-      )
-    );
+    try {
+      await createOrUpdateStaffAccount({
+        id: editingAccount.id,
+        name: editForm.name.trim(),
+        username: cleanUsername,
+        password: editForm.password ? editForm.password.trim() : undefined,
+        role: editForm.role,
+        branchName: editForm.branchName || editingAccount.branchName,
+        phone: editForm.phone.trim() || editingAccount.phone,
+        email: editForm.email.trim() || editingAccount.email,
+        status: editingAccount.status,
+      }, currentUser || { uid: 'admin', email: 'admin@goldenleaf.finance', displayName: 'Administrator', photoURL: null, phoneNumber: null, emailVerified: true, customClaims: { role: 'admin', companyId: 'default' } });
 
-    addToast({
-      type: 'success',
-      title: 'Account Updated',
-      message: `Account @${cleanUsername} updated successfully.`,
-    });
-    setEditingAccount(null);
+      setAccounts((prev) =>
+        prev.map((a) =>
+          a.id === editingAccount.id
+            ? {
+                ...a,
+                name: editForm.name.trim(),
+                username: cleanUsername,
+                role: editForm.role,
+                branchName: editForm.branchName || a.branchName,
+                phone: editForm.phone.trim() || a.phone,
+                email: editForm.email.trim() || a.email,
+              }
+            : a
+        )
+      );
+
+      addToast({
+        type: 'success',
+        title: 'Account Updated in Supabase',
+        message: `Account @${cleanUsername} updated successfully.`,
+      });
+      setEditingAccount(null);
+    } catch (err: any) {
+      addToast({
+        type: 'error',
+        title: 'Update Failed',
+        message: err.message || 'Failed to update account in Supabase.',
+      });
+    }
   };
 
   // Toggle Hold / Active status
-  const handleToggleHold = (acc: UserAccount) => {
+  const handleToggleHold = async (acc: UserAccount) => {
     if (!canManageUser(currentActorRole, acc.role)) {
       addToast({
         type: 'error',
@@ -355,25 +422,41 @@ export const RolesPermissionsPage: React.FC = () => {
       return;
     }
     const newStatus = acc.status === 'active' ? 'on_hold' : 'active';
-    setAccounts((prev) =>
-      prev.map((a) =>
-        a.id === acc.id
-          ? {
-              ...a,
-              status: newStatus,
-              isOnline: newStatus === 'on_hold' ? false : a.isOnline,
-              lastSeen: newStatus === 'on_hold' ? `Placed on hold on ${getCurrentFormattedDateTime()}` : a.lastSeen,
-            }
-          : a
-      )
-    );
+    try {
+      await createOrUpdateStaffAccount({
+        id: acc.id,
+        name: acc.name,
+        username: acc.username,
+        role: acc.role,
+        branchName: acc.branchName,
+        phone: acc.phone,
+        email: acc.email,
+        status: newStatus,
+      }, currentUser || { uid: 'admin', email: 'admin@goldenleaf.finance', displayName: 'Administrator', photoURL: null, phoneNumber: null, emailVerified: true, customClaims: { role: 'admin', companyId: 'default' } });
 
-    addToast({
-      type: newStatus === 'on_hold' ? 'warning' : 'success',
-      title: newStatus === 'on_hold' ? 'Account Placed On Hold' : 'Account Re-Activated',
-      message: `@${acc.username} is now ${newStatus === 'on_hold' ? 'On Hold (Suspended)' : 'Active'}.`,
-    });
-    setAccountToHold(null);
+      setAccounts((prev) =>
+        prev.map((a) =>
+          a.id === acc.id
+            ? {
+                ...a,
+                status: newStatus,
+                isOnline: newStatus === 'on_hold' ? false : a.isOnline,
+                lastSeen: newStatus === 'on_hold' ? `Placed on hold on ${getCurrentFormattedDateTime()}` : a.lastSeen,
+              }
+            : a
+        )
+      );
+
+      addToast({
+        type: newStatus === 'on_hold' ? 'warning' : 'success',
+        title: newStatus === 'on_hold' ? 'Account Placed On Hold' : 'Account Re-Activated',
+        message: `@${acc.username} is now ${newStatus === 'on_hold' ? 'On Hold (Suspended)' : 'Active'} in Supabase.`,
+      });
+    } catch (err: any) {
+      addToast({ type: 'error', title: 'Hold Status Failed', message: err.message });
+    } finally {
+      setAccountToHold(null);
+    }
   };
 
   // Toggle Live Online / Offline state
@@ -399,7 +482,7 @@ export const RolesPermissionsPage: React.FC = () => {
   };
 
   // Confirm Delete Account
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!accountToDelete) return;
     if (!canManageUser(currentActorRole, accountToDelete.role)) {
       addToast({
@@ -412,13 +495,19 @@ export const RolesPermissionsPage: React.FC = () => {
     }
     const removedName = accountToDelete.name;
     const removedUsername = accountToDelete.username;
-    setAccounts((prev) => prev.filter((a) => a.id !== accountToDelete.id));
-    addToast({
-      type: 'info',
-      title: 'Account Removed',
-      message: `Account @${removedUsername} (${removedName}) permanently deleted.`,
-    });
-    setAccountToDelete(null);
+    try {
+      deleteStaffProfile(accountToDelete.id, currentUser || { uid: 'admin', email: 'admin@goldenleaf.finance', displayName: 'Administrator', photoURL: null, phoneNumber: null, emailVerified: true, customClaims: { role: 'admin', companyId: 'default' } });
+      setAccounts((prev) => prev.filter((a) => a.id !== accountToDelete.id));
+      addToast({
+        type: 'info',
+        title: 'Account Removed',
+        message: `Account @${removedUsername} (${removedName}) permanently deleted from Supabase.`,
+      });
+    } catch (err: any) {
+      addToast({ type: 'error', title: 'Delete Failed', message: err.message });
+    } finally {
+      setAccountToDelete(null);
+    }
   };
 
   // Metrics
@@ -480,7 +569,7 @@ export const RolesPermissionsPage: React.FC = () => {
               {totalCount}
             </div>
             <span className="text-[10px] text-[#94A3B8] mt-0.5 block truncate">
-              Across 4 institutional roles
+              Across 5 platform roles
             </span>
           </div>
           <div className="w-11 h-11 rounded-2xl bg-[#0B1F3A]/5 border border-[#0B1F3A]/10 flex items-center justify-center text-[#0B1F3A]">

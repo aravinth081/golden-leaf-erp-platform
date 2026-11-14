@@ -11,6 +11,7 @@
 import { getStoredBranches, type DetailedBranch } from './branchService';
 import { getAllGPSRecords, formatTime, type GPSAttendanceRecord } from './gpsAttendanceService';
 import { getAttendanceRecords } from './attendanceGateService';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 // ══════════════════════════════════════════════════════════
 // 1. CUSTOMER MONITORING DATA TYPES & METHODS
@@ -73,6 +74,8 @@ export interface BranchCollectionGroup {
 
 export const SEED_COLLECTION_GROUPS: BranchCollectionGroup[] = [];
 
+let isMonitoringCloudSynced = false;
+
 export function getBranchCollectionGroups(branchId?: string | null): BranchCollectionGroup[] {
   let list: BranchCollectionGroup[] = [];
   try {
@@ -88,6 +91,33 @@ export function getBranchCollectionGroups(branchId?: string | null): BranchColle
   } catch (e) {
     console.warn('Error reading collection groups', e);
   }
+
+  if (!isMonitoringCloudSynced && isSupabaseConfigured() && supabase) {
+    isMonitoringCloudSynced = true;
+    void (async () => {
+      try {
+        const { data: rows, error } = await supabase!
+          .from('documents')
+          .select('collection, data')
+          .in('collection', ['collection_groups', 'customers', 'loans', 'collections'])
+          .eq('is_deleted', false);
+        if (!error && Array.isArray(rows)) {
+          const cloudGroups = rows.filter((r: any) => r.collection === 'collection_groups').map((r: any) => r.data).filter(Boolean);
+          const cloudCusts = rows.filter((r: any) => r.collection === 'customers').map((r: any) => r.data).filter(Boolean);
+          const cloudLoans = rows.filter((r: any) => r.collection === 'loans').map((r: any) => r.data).filter(Boolean);
+          const cloudCols = rows.filter((r: any) => r.collection === 'collections').map((r: any) => r.data).filter(Boolean);
+
+          if (cloudGroups.length > 0) localStorage.setItem(GROUPS_STORAGE_KEY, JSON.stringify(cloudGroups));
+          if (cloudCusts.length > 0) localStorage.setItem(CUSTOMER_STORAGE_KEY, JSON.stringify(cloudCusts));
+          if (cloudLoans.length > 0) localStorage.setItem(LOAN_STORAGE_KEY, JSON.stringify(cloudLoans));
+          if (cloudCols.length > 0) localStorage.setItem(COLLECTION_STORAGE_KEY, JSON.stringify(cloudCols));
+        }
+      } catch (e: unknown) {
+        console.warn('[Supabase] Monitoring cloud sync error:', e);
+      }
+    })();
+  }
+
   if (!branchId || branchId === 'all') return list;
   return list.filter(
     (g) =>
@@ -103,6 +133,18 @@ export function saveBranchCollectionGroups(groups: BranchCollectionGroup[]): voi
     window.dispatchEvent(new CustomEvent('glf-collection-groups-updated'));
   } catch (e) {
     console.error('Failed to save collection groups to localStorage:', e);
+  }
+
+  if (isSupabaseConfigured() && supabase && groups.length > 0) {
+    const upsertRows = groups.map((g) => ({
+      collection: 'collection_groups',
+      id: g.id,
+      data: g,
+      is_deleted: false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }));
+    supabase.from('documents').upsert(upsertRows).then();
   }
 }
 
@@ -284,6 +326,18 @@ export function saveMonitoredCustomers(customers: MonitoredCustomer[]): void {
   } catch (e) {
     console.error('Failed to save customers to localStorage:', e);
   }
+
+  if (isSupabaseConfigured() && supabase && customers.length > 0) {
+    const upsertRows = customers.map((c) => ({
+      collection: 'customers',
+      id: c.id,
+      data: c,
+      is_deleted: false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }));
+    supabase.from('documents').upsert(upsertRows).then();
+  }
 }
 
 export function addMonitoredCustomer(customer: MonitoredCustomer): MonitoredCustomer {
@@ -367,6 +421,27 @@ export function getMonitoredLoans(branchId?: string | null): MonitoredLoan[] {
   return list.filter((l) => l.branchId === branchId || l.branchName === branchId);
 }
 
+export function saveMonitoredLoans(loans: MonitoredLoan[]): void {
+  try {
+    localStorage.setItem(LOAN_STORAGE_KEY, JSON.stringify(loans));
+    window.dispatchEvent(new CustomEvent('glf-loans-updated'));
+  } catch (e) {
+    console.error('Failed to save loans to localStorage:', e);
+  }
+
+  if (isSupabaseConfigured() && supabase && loans.length > 0) {
+    const upsertRows = loans.map((loan) => ({
+      collection: 'loans',
+      id: loan.id,
+      data: loan,
+      is_deleted: false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }));
+    void supabase.from('documents').upsert(upsertRows);
+  }
+}
+
 // ══════════════════════════════════════════════════════════
 // 3. COLLECTION MONITORING DATA TYPES & METHODS
 // ══════════════════════════════════════════════════════════
@@ -422,6 +497,18 @@ export function saveMonitoredCollections(collections: MonitoredCollection[]): vo
     window.dispatchEvent(new CustomEvent('glf-collections-updated'));
   } catch (e) {
     console.error('Failed to save collections to localStorage:', e);
+  }
+
+  if (isSupabaseConfigured() && supabase && collections.length > 0) {
+    const upsertRows = collections.map((col) => ({
+      collection: 'collections',
+      id: col.id,
+      data: col,
+      is_deleted: false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }));
+    supabase.from('documents').upsert(upsertRows).then();
   }
 }
 

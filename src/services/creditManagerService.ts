@@ -3,6 +3,8 @@
 // Centralized Verification, KYC, Document Audit, Loan Appraisal & Approval State
 // ──────────────────────────────────────────────────
 
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
+
 export interface VerificationDocument {
   id: string;
   name: string;
@@ -218,6 +220,28 @@ class CreditManagerService {
     } catch {
       this.applicants = [];
     }
+
+    if (isSupabaseConfigured() && supabase) {
+      void (async () => {
+        try {
+          const { data: rows, error } = await supabase!
+            .from('documents')
+            .select('data')
+            .eq('collection', 'credit_applicants')
+            .eq('is_deleted', false);
+          if (!error && Array.isArray(rows) && rows.length > 0) {
+            const cloudApplicants = rows.map((r: any) => r.data).filter(Boolean);
+            this.applicants = cloudApplicants;
+            try {
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(cloudApplicants));
+            } catch {}
+            this.notifyListeners();
+          }
+        } catch (e: unknown) {
+          console.warn('[Supabase] Failed to fetch credit applicants:', e);
+        }
+      })();
+    }
   }
 
   private listeners: Set<() => void> = new Set();
@@ -258,6 +282,18 @@ class CreditManagerService {
       this.notifyListeners();
     } catch (e) {
       console.warn('Failed to save credit applicants to localStorage', e);
+    }
+
+    if (isSupabaseConfigured() && supabase && this.applicants.length > 0) {
+      const upsertRows = this.applicants.map((app) => ({
+        collection: 'credit_applicants',
+        id: app.id,
+        data: app,
+        is_deleted: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }));
+      supabase.from('documents').upsert(upsertRows).then();
     }
   }
 

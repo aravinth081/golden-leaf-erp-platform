@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Upload, RotateCcw } from 'lucide-react';
+import { Upload, RotateCcw, CheckCircle2, Loader2 } from 'lucide-react';
 import { Input, Select, Button, Card, SearchableSelect, Modal } from '../../components/ui';
 import { getCenters, type Center } from '../../services/centerService';
 import { getClients, type ClientData } from '../../services/clientService';
+import { uploadImage } from '../../services/cloudinary';
+import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+import { useUIStore } from '../../store';
 
 const KycDocumentsPage: React.FC = () => {
   const [centers, setCenters] = useState<Center[]>([]);
@@ -44,6 +47,11 @@ const KycDocumentsPage: React.FC = () => {
     }
   }, [formData.clientName, clients]);
 
+  const { addToast } = useUIStore();
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
+
   const handleFormChange = (e: { target: { name: string; value: string } } | React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -60,7 +68,8 @@ const KycDocumentsPage: React.FC = () => {
       return;
     }
     
-    // File validation removed - any photo is now accepted
+    setSelectedFile(file);
+    setUploadedUrl(null);
   };
 
   const handleReset = () => {
@@ -72,7 +81,8 @@ const KycDocumentsPage: React.FC = () => {
         clientIdReadonly: '',
         dateOfJoining: '',
       });
-      // Find file input and reset it
+      setSelectedFile(null);
+      setUploadedUrl(null);
       const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
       if (fileInput) {
         fileInput.value = '';
@@ -80,8 +90,70 @@ const KycDocumentsPage: React.FC = () => {
     }
   };
 
-  const handleUpload = () => {
-    alert("Upload functionality to be implemented");
+  const handleUpload = async () => {
+    if (formData.clientName === 'select' && !formData.clientIdReadonly) {
+      setValidationError("Please select a Client before uploading.");
+      setIsErrorModalOpen(true);
+      return;
+    }
+
+    if (formData.documentName === 'select') {
+      setValidationError("Please select a Document Name before uploading.");
+      setIsErrorModalOpen(true);
+      return;
+    }
+
+    if (!selectedFile) {
+      setValidationError("Please choose a file or image to upload.");
+      setIsErrorModalOpen(true);
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const clientId = formData.clientIdReadonly || formData.clientName;
+      const folderKey = formData.documentName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      const uploadRes = await uploadImage(selectedFile, `kyc/${clientId}/${folderKey}`);
+
+      if (!uploadRes?.secure_url) {
+        throw new Error('Upload to Cloudinary did not return a valid secure URL.');
+      }
+
+      setUploadedUrl(uploadRes.secure_url);
+
+      // Persist document association to Supabase PostgreSQL
+      if (isSupabaseConfigured() && supabase) {
+        await supabase.from('documents').upsert({
+          collection: 'kyc_documents',
+          id: `kyc_${clientId}_${folderKey}`,
+          data: {
+            clientId,
+            documentName: formData.documentName,
+            secureUrl: uploadRes.secure_url,
+            uploadedAt: new Date().toISOString(),
+          },
+          is_deleted: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+      }
+
+      addToast({
+        type: 'success',
+        title: 'Document Uploaded',
+        message: `${formData.documentName} successfully uploaded to Cloudinary and stored in Supabase.`,
+      });
+
+      // Clear file input
+      setSelectedFile(null);
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      if (fileInput) fileInput.value = '';
+    } catch (err: any) {
+      setValidationError(err.message || 'Image upload failed. Please try again.');
+      setIsErrorModalOpen(true);
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const centerOptions = [
@@ -178,8 +250,34 @@ const KycDocumentsPage: React.FC = () => {
           />
         </div>
 
+        {uploadedUrl && (
+          <div className="mt-6 p-4 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center gap-4">
+            <CheckCircle2 size={24} className="text-emerald-600 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-emerald-800">Uploaded to Cloudinary & Saved in Supabase</p>
+              <a
+                href={uploadedUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-emerald-700 underline truncate block mt-0.5 hover:text-emerald-900"
+              >
+                {uploadedUrl}
+              </a>
+            </div>
+            <img src={uploadedUrl} alt="Uploaded KYC" className="w-12 h-12 object-cover rounded-lg border border-emerald-300 shrink-0" />
+          </div>
+        )}
+
         <div className="flex items-center gap-4 mt-8">
-          <Button variant="primary" onClick={handleUpload} className="px-8 shadow-md hover:shadow-lg transition-all" icon={<Upload size={18} />}>Upload</Button>
+          <Button
+            variant="primary"
+            onClick={handleUpload}
+            disabled={isUploading}
+            className="px-8 shadow-md hover:shadow-lg transition-all"
+            icon={isUploading ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
+          >
+            {isUploading ? 'Uploading to Cloudinary...' : 'Upload'}
+          </Button>
           <Button variant="danger" onClick={handleReset} className="px-8 shadow-sm hover:shadow-md transition-all" icon={<RotateCcw size={18} />}>Reset</Button>
         </div>
       </Card>

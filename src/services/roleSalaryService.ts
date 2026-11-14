@@ -16,6 +16,7 @@ import type {
   PayslipDownloadData,
 } from '../types/roleSalary.types';
 import { getStoredBranches } from './branchService';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 const STORAGE_KEY_ROLE_SALARIES = 'glf_fixed_role_salaries_master';
 const STORAGE_KEY_EMPLOYEE_SALARIES = 'glf_fixed_employee_salaries_master';
@@ -186,7 +187,31 @@ function getStorage() {
   return null;
 }
 
+let isRoleSalaryCloudSynced = false;
+
 function readData<T>(key: string, defaultVal: T): T {
+  if (!isRoleSalaryCloudSynced && isSupabaseConfigured() && supabase) {
+    isRoleSalaryCloudSynced = true;
+    void (async () => {
+      try {
+        const { data: rows, error } = await supabase!
+          .from('documents')
+          .select('id, data')
+          .eq('collection', 'role_salaries')
+          .eq('is_deleted', false);
+        if (!error && Array.isArray(rows)) {
+          rows.forEach((r: any) => {
+            if (r.id && r.data) {
+              writeData(r.id, r.data);
+            }
+          });
+        }
+      } catch (e: unknown) {
+        console.warn('[Supabase] Failed to fetch role salaries from cloud:', e);
+      }
+    })();
+  }
+
   try {
     const s = getStorage();
     if (s) {
@@ -224,6 +249,20 @@ function writeData<T>(key: string, val: T): void {
     }
   } catch (err) {
     // In environments where localStorage throws (e.g. Node CLI without file backend)
+  }
+
+  if (isSupabaseConfigured() && supabase) {
+    supabase
+      .from('documents')
+      .upsert({
+        collection: 'role_salaries',
+        id: key,
+        data: val,
+        is_deleted: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .then();
   }
 }
 

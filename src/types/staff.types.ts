@@ -121,7 +121,7 @@ export const STAFF_ROLE_META: Record<
     internalRole: 'credit_manager',
     badgeClass: 'bg-purple-50 text-purple-800 border-purple-300',
     requiresBranch: true,
-    landingPath: '/credit-manager',
+    landingPath: '/dashboard',
   },
   CRO: {
     label: 'Customer Relationship Officer (CRO)',
@@ -129,7 +129,7 @@ export const STAFF_ROLE_META: Record<
     internalRole: 'collection_agent',
     badgeClass: 'bg-emerald-50 text-emerald-800 border-emerald-300',
     requiresBranch: true,
-    landingPath: '/collections',
+    landingPath: '/dashboard',
   },
 };
 

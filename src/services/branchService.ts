@@ -4,6 +4,8 @@
 // Source of truth for Branch Management & Branch Dashboard
 // ──────────────────────────────────────────────────
 
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
+
 export interface BranchActivity {
   id: string;
   userName: string;
@@ -191,11 +193,62 @@ export const getStoredBranches = (): DetailedBranch[] => {
   return INITIAL_BRANCHES;
 };
 
+export const fetchBranchesFromSupabase = async (): Promise<DetailedBranch[]> => {
+  if (isSupabaseConfigured() && supabase) {
+    try {
+      const { data: rows, error } = await supabase
+        .from('documents')
+        .select('data')
+        .eq('collection', 'branches')
+        .eq('is_deleted', false);
+
+      if (!error && Array.isArray(rows) && rows.length > 0) {
+        const cloudBranches = rows.map((r: any) => r.data).filter(Boolean);
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(cloudBranches));
+        } catch {}
+        return cloudBranches;
+      } else if (!error && Array.isArray(rows) && rows.length === 0) {
+        // Seed initial branches to Supabase
+        const initial = getStoredBranches();
+        const upsertRows = initial.map((b) => ({
+          collection: 'branches',
+          id: b.id,
+          data: b,
+          is_deleted: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }));
+        await supabase.from('documents').upsert(upsertRows);
+      }
+    } catch (e) {
+      console.warn('[Supabase] Failed to fetch branches from cloud:', e);
+    }
+  }
+  return getStoredBranches();
+};
+
 export const saveStoredBranches = (branches: DetailedBranch[]): void => {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(branches));
   } catch (e) {
     console.error('Failed to save branches to localStorage:', e);
+  }
+
+  if (isSupabaseConfigured() && supabase) {
+    try {
+      const upsertRows = branches.map((b) => ({
+        collection: 'branches',
+        id: b.id,
+        data: b,
+        is_deleted: b.status === 'Disabled',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }));
+      supabase.from('documents').upsert(upsertRows).then();
+    } catch (e) {
+      console.warn('[Supabase] Branch sync error:', e);
+    }
   }
 };
 

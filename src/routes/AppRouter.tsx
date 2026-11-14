@@ -190,6 +190,30 @@ export const router = createBrowserRouter([
         path: '/dashboard',
         element: <SuspenseWrapper><DashboardRouter /></SuspenseWrapper>,
       },
+      {
+        path: '/admin',
+        element: <Navigate to="/dashboard" replace />,
+      },
+      {
+        path: '/hr',
+        element: <Navigate to="/hr-payroll" replace />,
+      },
+      {
+        path: '/branch',
+        element: <Navigate to="/dashboard" replace />,
+      },
+      {
+        path: '/credit',
+        element: <Navigate to="/dashboard" replace />,
+      },
+      {
+        path: '/credit-manager',
+        element: <Navigate to="/dashboard" replace />,
+      },
+      {
+        path: '/agent',
+        element: <Navigate to="/dashboard" replace />,
+      },
 
       // ── HR & PAYROLL FINANCE SUITE (COMPANY-WIDE) ──
       {

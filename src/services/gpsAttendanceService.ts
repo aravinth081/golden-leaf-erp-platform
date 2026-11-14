@@ -5,6 +5,8 @@
 // ──────────────────────────────────────────────────
 
 import { getStoredBranches, saveStoredBranches } from './branchService';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { uploadImage } from './cloudinary';
 
 const GPS_ATTENDANCE_KEY = 'glf_gps_attendance_records';
 
@@ -98,10 +100,31 @@ export const isWithinGeofence = (
 
 // ── CRUD ──
 
+let isCloudSynced = false;
+
 /**
- * Get all GPS attendance records from localStorage.
+ * Get all GPS attendance records from localStorage & sync from Supabase.
  */
 export const getAllGPSRecords = (): GPSAttendanceRecord[] => {
+  if (!isCloudSynced && isSupabaseConfigured() && supabase) {
+    isCloudSynced = true;
+    void (async () => {
+      try {
+        const { data: rows, error } = await supabase!
+          .from('documents')
+          .select('data')
+          .eq('collection', 'gps_attendance')
+          .eq('is_deleted', false);
+        if (!error && Array.isArray(rows) && rows.length > 0) {
+          const cloudRecords = rows.map((r: any) => r.data).filter(Boolean);
+          localStorage.setItem(GPS_ATTENDANCE_KEY, JSON.stringify(cloudRecords));
+        }
+      } catch (e: unknown) {
+        console.warn('[Supabase] Failed to fetch GPS records:', e);
+      }
+    })();
+  }
+
   try {
     const raw = localStorage.getItem(GPS_ATTENDANCE_KEY);
     return raw ? JSON.parse(raw) : [];
@@ -112,6 +135,18 @@ export const getAllGPSRecords = (): GPSAttendanceRecord[] => {
 
 const saveAllRecords = (records: GPSAttendanceRecord[]): void => {
   localStorage.setItem(GPS_ATTENDANCE_KEY, JSON.stringify(records));
+
+  if (isSupabaseConfigured() && supabase && records.length > 0) {
+    const upsertRows = records.map((rec) => ({
+      collection: 'gps_attendance',
+      id: rec.id,
+      data: rec,
+      is_deleted: false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }));
+    supabase.from('documents').upsert(upsertRows).then();
+  }
 };
 
 /**
@@ -197,6 +232,23 @@ export const gpsPunchIn = (data: {
 
   const existing = getAllGPSRecords();
   saveAllRecords([record, ...existing]);
+
+  // Upload selfie to Cloudinary to prevent storing raw binary in database
+  if (data.selfie && data.selfie.startsWith('data:')) {
+    uploadImage(data.selfie, `attendance/${data.employeeId}`)
+      .then((res) => {
+        if (res?.secure_url) {
+          record.punchInSelfie = res.secure_url;
+          const current = getAllGPSRecords();
+          const idx = current.findIndex(r => r.id === record.id);
+          if (idx >= 0) {
+            current[idx].punchInSelfie = res.secure_url;
+            saveAllRecords(current);
+          }
+        }
+      })
+      .catch((e) => console.warn('[Cloudinary] Attendance selfie upload warning:', e));
+  }
 
   return record;
 };

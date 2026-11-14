@@ -10,6 +10,7 @@ import {
   type ResignationPortfolioItem,
 } from '../types/resignation.types';
 import { type UserRole } from '../types';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 const STORAGE_KEY = 'glf_resignation_records_v2';
 const EMPLOYEES_STORAGE_KEY = 'glf_pdf_strict_employees_master';
@@ -29,10 +30,31 @@ class ResignationService {
         this.records = JSON.parse(stored);
       } else {
         this.records = [];
-        this.saveState();
       }
     } catch {
       this.records = [];
+    }
+
+    if (isSupabaseConfigured() && supabase) {
+      void (async () => {
+        try {
+          const { data: rows, error } = await supabase!
+            .from('documents')
+            .select('data')
+            .eq('collection', 'resignations')
+            .eq('is_deleted', false);
+          if (!error && Array.isArray(rows) && rows.length > 0) {
+            const cloudRecords = rows.map((r: any) => r.data).filter(Boolean);
+            this.records = cloudRecords;
+            try {
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(cloudRecords));
+            } catch {}
+            window.dispatchEvent(new Event('glf_resignation_updated'));
+          }
+        } catch (e: unknown) {
+          console.warn('[Supabase] Failed to fetch resignations:', e);
+        }
+      })();
     }
   }
 
@@ -42,6 +64,18 @@ class ResignationService {
       window.dispatchEvent(new Event('glf_resignation_updated'));
     } catch (e) {
       console.error('Failed to save resignation state:', e);
+    }
+
+    if (isSupabaseConfigured() && supabase && this.records.length > 0) {
+      const upsertRows = this.records.map((r) => ({
+        collection: 'resignations',
+        id: r.id,
+        data: r,
+        is_deleted: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }));
+      supabase.from('documents').upsert(upsertRows).then();
     }
   }
 

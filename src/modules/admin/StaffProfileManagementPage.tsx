@@ -37,6 +37,7 @@ import { PageHeader } from '../../components/ui/PageHeader';
 import {
   createStaffProfile,
   getStaffProfiles,
+  fetchStaffUsersFromSupabase,
   updateStaffProfile,
   updateStaffStatus,
   resetStaffPassword,
@@ -137,13 +138,16 @@ export const StaffProfileManagementPage: React.FC = () => {
   // Audit Logs State
   const [auditLogs, setAuditLogs] = useState<StaffAuditLogEntry[]>([]);
 
-  // Load branches
+  // Load branches and sync cloud staff profiles
   useEffect(() => {
     const list = getStoredBranches();
     setBranches(list);
     if (list.length > 0 && !createForm.branchId) {
       setCreateForm((prev) => ({ ...prev, branchId: list[0].id }));
     }
+    fetchStaffUsersFromSupabase().then(() => {
+      loadProfiles();
+    });
   }, []);
 
   // Fetch Profiles
