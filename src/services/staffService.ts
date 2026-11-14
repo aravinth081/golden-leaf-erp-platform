@@ -864,10 +864,24 @@ const BUILTIN_DEMO_STAFF: Record<
 > = {};
 
 /**
+ * Helper to normalize login identifiers (removes spaces, dots, underscores, dashes)
+ * Allows "Aravinth s", "aravinth.s", "aravinths" to match seamlessly.
+ */
+function normalizeLoginKey(val: string): string {
+  return (val || '').trim().toLowerCase().replace(/[\s._-]+/g, '');
+}
+
+/**
  * Fetches staff profiles from Supabase and merges with local cache.
  */
 export async function fetchStaffUsersFromSupabase(): Promise<StaffProfile[]> {
+  const mergedMap = new Map<string, StaffProfile>();
+
+  // Include Master Admin by default
+  mergedMap.set(MASTER_ADMIN_PROFILE.id, MASTER_ADMIN_PROFILE);
+
   if (isSupabaseConfigured() && supabase) {
+    // 1. Fetch from staff_users table
     try {
       const { data: rows, error } = await supabase
         .from('staff_users')
@@ -876,42 +890,68 @@ export async function fetchStaffUsersFromSupabase(): Promise<StaffProfile[]> {
         .order('created_at', { ascending: false });
 
       if (!error && Array.isArray(rows)) {
-        const cloudProfiles: StaffProfile[] = rows.map((r: any) => ({
-          id: r.id,
-          fullName: r.full_name,
-          employeeId: r.employee_id,
-          email: r.email,
-          mobile: r.mobile,
-          role: normalizeStaffRole(r.role),
-          branchId: r.branch_id,
-          branchName: resolveBranchName(r.branch_id) || (r.role?.toUpperCase() === 'ADMIN' || r.role?.toUpperCase() === 'HR' ? 'Corporate HQ (All Branches)' : null),
-          username: r.username,
-          passwordHash: r.password_hash,
-          status: r.status === 'inactive' ? 'inactive' : 'active',
-          mustChangePassword: !!r.must_change_password,
-          createdBy: r.created_by || 'Admin',
-          createdAt: r.created_at || new Date().toISOString(),
-          updatedAt: r.updated_at || new Date().toISOString(),
-          deletedAt: r.deleted_at || null,
-        }));
-
-        // Ensure Master Admin is included
-        const hasMasterAdmin = cloudProfiles.some(
-          (p) =>
-            p.username.toLowerCase() === 'karthikkannan d' ||
-            p.username.toLowerCase() === 'karthikkannan' ||
-            p.fullName.toLowerCase() === 'karthikkannan d'
-        );
-        const merged = hasMasterAdmin ? cloudProfiles : [MASTER_ADMIN_PROFILE, ...cloudProfiles];
-        writeStorage(STORAGE_KEY_PROFILES, merged);
-        return merged;
+        rows.forEach((r: any) => {
+          const profile: StaffProfile = {
+            id: r.id,
+            fullName: r.full_name,
+            employeeId: r.employee_id,
+            email: r.email,
+            mobile: r.mobile,
+            role: normalizeStaffRole(r.role),
+            branchId: r.branch_id,
+            branchName: resolveBranchName(r.branch_id) || (r.role?.toUpperCase() === 'ADMIN' || r.role?.toUpperCase() === 'HR' ? 'Corporate HQ (All Branches)' : 'Main Branch (Chennai)'),
+            username: r.username,
+            passwordHash: r.password_hash,
+            status: r.status === 'inactive' ? 'inactive' : 'active',
+            mustChangePassword: !!r.must_change_password,
+            createdBy: r.created_by || 'Admin',
+            createdAt: r.created_at || new Date().toISOString(),
+            updatedAt: r.updated_at || new Date().toISOString(),
+            deletedAt: r.deleted_at || null,
+          };
+          mergedMap.set(profile.id, profile);
+        });
       }
     } catch (e) {
-      console.warn('[Supabase] Failed to fetch staff users:', e);
+      console.warn('[Supabase] Failed to fetch staff_users:', e);
+    }
+
+    // 2. Secondary fetch from documents table
+    try {
+      const { data: docRows, error: docErr } = await supabase
+        .from('documents')
+        .select('data')
+        .eq('collection', 'staff_users')
+        .eq('is_deleted', false);
+
+      if (!docErr && Array.isArray(docRows)) {
+        docRows.forEach((r: any) => {
+          const p = r.data;
+          if (p && p.id && !mergedMap.has(p.id)) {
+            mergedMap.set(p.id, {
+              ...p,
+              role: normalizeStaffRole(p.role),
+              status: p.status === 'inactive' ? 'inactive' : 'active',
+            });
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('[Supabase] Failed to fetch documents staff_users:', e);
     }
   }
 
-  return getStoredStaffProfiles();
+  // 3. Fallback merge with local profiles
+  const local = getStoredStaffProfiles();
+  local.forEach((p) => {
+    if (p.deletedAt === null && !mergedMap.has(p.id)) {
+      mergedMap.set(p.id, p);
+    }
+  });
+
+  const finalProfiles = Array.from(mergedMap.values());
+  writeStorage(STORAGE_KEY_PROFILES, finalProfiles);
+  return finalProfiles;
 }
 
 export interface StaffAccountInput {
@@ -1094,9 +1134,28 @@ export async function authenticateStaffCredentials(
 }> {
   const rawInput = (username || '').trim();
   const cleanUsername = rawInput.toLowerCase();
-  const inputNoSpaces = cleanUsername.replace(/\s+/g, '');
+  const inputNorm = normalizeLoginKey(rawInput);
+  const cleanPassword = (plainTextPassword || '').trim();
 
   let staff: StaffProfile | null = null;
+
+  const matchesIdentifier = (targetUser?: string, targetFullName?: string, targetEmail?: string, targetEmpId?: string): boolean => {
+    const tUser = (targetUser || '').trim().toLowerCase();
+    const tFull = (targetFullName || '').trim().toLowerCase();
+    const tEmail = (targetEmail || '').trim().toLowerCase();
+    const tEmp = (targetEmpId || '').trim().toLowerCase();
+
+    return (
+      tUser === cleanUsername ||
+      tFull === cleanUsername ||
+      tEmail === cleanUsername ||
+      tEmp === cleanUsername ||
+      normalizeLoginKey(tUser) === inputNorm ||
+      normalizeLoginKey(tFull) === inputNorm ||
+      normalizeLoginKey(tEmp) === inputNorm ||
+      (tEmail.includes('@') && normalizeLoginKey(tEmail.split('@')[0]) === inputNorm)
+    );
+  };
 
   // 1. First, check Supabase staff_users table
   if (isSupabaseConfigured() && supabase) {
@@ -1107,23 +1166,9 @@ export async function authenticateStaffCredentials(
         .is('deleted_at', null);
 
       if (!error && Array.isArray(rows) && rows.length > 0) {
-        const matched = rows.find((r: any) => {
-          const rUser = (r.username || '').trim().toLowerCase();
-          const rFullName = (r.full_name || '').trim().toLowerCase();
-          const rEmail = (r.email || '').trim().toLowerCase();
-          const rNoSpaces = rUser.replace(/\s+/g, '');
-          return (
-            rUser === cleanUsername ||
-            rNoSpaces === inputNoSpaces ||
-            rEmail === cleanUsername ||
-            (r.role?.toUpperCase() === 'ADMIN' && (
-              cleanUsername === 'karthikkannan d' ||
-              cleanUsername === 'karthikkannan' ||
-              cleanUsername === 'karthikkannand' ||
-              rFullName === cleanUsername
-            ))
-          );
-        });
+        const matched = rows.find((r: any) =>
+          matchesIdentifier(r.username, r.full_name, r.email, r.employee_id)
+        );
 
         if (matched) {
           staff = {
@@ -1134,7 +1179,7 @@ export async function authenticateStaffCredentials(
             mobile: matched.mobile,
             role: normalizeStaffRole(matched.role),
             branchId: matched.branch_id,
-            branchName: resolveBranchName(matched.branch_id) || (matched.role?.toUpperCase() === 'ADMIN' || matched.role?.toUpperCase() === 'HR' ? 'Corporate HQ (All Branches)' : null),
+            branchName: resolveBranchName(matched.branch_id) || (matched.role?.toUpperCase() === 'ADMIN' || matched.role?.toUpperCase() === 'HR' ? 'Corporate HQ (All Branches)' : 'Main Branch (Chennai)'),
             username: matched.username,
             passwordHash: matched.password_hash,
             status: matched.status === 'inactive' ? 'inactive' : 'active',
@@ -1149,28 +1194,43 @@ export async function authenticateStaffCredentials(
     } catch (e) {
       console.warn('[Supabase] Auth lookup fallback to local cache:', e);
     }
+
+    // 2. Secondary check in documents collection 'staff_users'
+    if (!staff) {
+      try {
+        const { data: docRows, error: docErr } = await supabase
+          .from('documents')
+          .select('data')
+          .eq('collection', 'staff_users')
+          .eq('is_deleted', false);
+
+        if (!docErr && Array.isArray(docRows) && docRows.length > 0) {
+          const matchedDoc = docRows.find((dr: any) => {
+            const p = dr.data;
+            return p && matchesIdentifier(p.username, p.fullName, p.email, p.employeeId);
+          });
+
+          if (matchedDoc && matchedDoc.data) {
+            const p = matchedDoc.data;
+            staff = {
+              ...p,
+              role: normalizeStaffRole(p.role),
+              status: p.status === 'inactive' ? 'inactive' : 'active',
+            };
+          }
+        }
+      } catch (e) {
+        console.warn('[Supabase] Secondary documents auth lookup error:', e);
+      }
+    }
   }
 
-  // 2. If not found in Supabase or network failed, fallback to local storage
+  // 3. Fallback to local storage
   if (!staff) {
     const profiles = getStoredStaffProfiles();
     staff = profiles.find((p) => {
       if (p.deletedAt !== null) return false;
-      const pUser = (p.username || '').trim().toLowerCase();
-      const pFullName = (p.fullName || '').trim().toLowerCase();
-      const pEmail = (p.email || '').trim().toLowerCase();
-      const pNoSpaces = pUser.replace(/\s+/g, '');
-      return (
-        pUser === cleanUsername ||
-        pNoSpaces === inputNoSpaces ||
-        pEmail === cleanUsername ||
-        (p.role === 'ADMIN' && (
-          cleanUsername === 'karthikkannan d' ||
-          cleanUsername === 'karthikkannan' ||
-          cleanUsername === 'karthikkannand' ||
-          pFullName === cleanUsername
-        ))
-      );
+      return matchesIdentifier(p.username, p.fullName, p.email, p.employeeId);
     }) || null;
   }
 
@@ -1184,10 +1244,10 @@ export async function authenticateStaffCredentials(
     );
   }
 
-  const computedHash = await hashPassword(plainTextPassword);
+  const computedHash = await hashPassword(cleanPassword);
   const isMasterPassword =
     staff.role === 'ADMIN' &&
-    (plainTextPassword === 'golden@karthick' || computedHash === MASTER_ADMIN_PROFILE.passwordHash);
+    (cleanPassword === 'golden@karthick' || computedHash === MASTER_ADMIN_PROFILE.passwordHash);
 
   if (computedHash !== staff.passwordHash && !isMasterPassword) {
     throw new Error('401 Unauthorized: Invalid username or password.');

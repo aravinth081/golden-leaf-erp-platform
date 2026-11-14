@@ -28,6 +28,8 @@ import {
   createOrUpdateStaffAccount,
   deleteStaffProfile,
   staffRoleToUserRole,
+  MASTER_ADMIN_PROFILE,
+  getStoredStaffProfiles,
 } from '../../services/staffService';
 
 export type UserRoleType = 'admin' | 'hr_payroll_manager' | 'branch_manager' | 'credit_manager' | 'collection_agent';
@@ -107,25 +109,9 @@ export const RolesPermissionsPage: React.FC = () => {
   // Retrieve stored accounts (cached + synced with Supabase PostgreSQL)
   const [accounts, setAccounts] = useState<UserAccount[]>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      console.error('Failed to load accounts from localStorage', e);
-    }
-    return [];
-  });
-
-  // Available branches from branchService
-  const [branches, setBranches] = useState<string[]>([]);
-
-  useEffect(() => {
-    const list = getStoredBranches().map((b) => b.name);
-    setBranches(list);
-
-    // Sync accounts live from Supabase
-    fetchStaffUsersFromSupabase().then((profiles) => {
-      if (profiles && profiles.length > 0) {
-        const mappedAccounts: UserAccount[] = profiles.map((p) => ({
+      const storedProfiles = getStoredStaffProfiles();
+      if (storedProfiles && storedProfiles.length > 0) {
+        return storedProfiles.map((p) => ({
           id: p.id,
           name: p.fullName,
           username: p.username,
@@ -142,9 +128,68 @@ export const RolesPermissionsPage: React.FC = () => {
           phone: `+91 ${p.mobile}`,
           email: p.email,
         }));
-        setAccounts(mappedAccounts);
       }
-    });
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error('Failed to load accounts from localStorage', e);
+    }
+    return [
+      {
+        id: MASTER_ADMIN_PROFILE.id,
+        name: MASTER_ADMIN_PROFILE.fullName,
+        username: MASTER_ADMIN_PROFILE.username,
+        role: 'admin',
+        branchName: 'Corporate HQ (All Branches)',
+        status: 'active',
+        isOnline: true,
+        lastSeen: 'System Master Authority',
+        createdAt: '01 Jan 2026',
+        phone: '+91 9840000001',
+        email: MASTER_ADMIN_PROFILE.email,
+      },
+    ];
+  });
+
+  // Available branches from branchService
+  const [branches, setBranches] = useState<string[]>([]);
+
+  useEffect(() => {
+    const list = getStoredBranches().map((b) => b.name);
+    setBranches(list);
+
+    const syncAccountsFromCloud = () => {
+      fetchStaffUsersFromSupabase().then((profiles) => {
+        if (profiles && profiles.length > 0) {
+          const mappedAccounts: UserAccount[] = profiles.map((p) => ({
+            id: p.id,
+            name: p.fullName,
+            username: p.username,
+            role: staffRoleToUserRole(p.role) as UserRoleType,
+            branchName: p.branchName || 'Main Branch (Chennai)',
+            status: p.status === 'inactive' ? 'on_hold' : 'active',
+            isOnline: p.status === 'active',
+            lastSeen: 'Registered record',
+            createdAt: new Date(p.createdAt).toLocaleDateString('en-IN', {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+            }),
+            phone: `+91 ${p.mobile}`,
+            email: p.email,
+          }));
+          setAccounts(mappedAccounts);
+        }
+      });
+    };
+
+    syncAccountsFromCloud();
+    window.addEventListener('focus', syncAccountsFromCloud);
+    window.addEventListener('glf-staff-updated', syncAccountsFromCloud);
+    return () => {
+      window.removeEventListener('focus', syncAccountsFromCloud);
+      window.removeEventListener('glf-staff-updated', syncAccountsFromCloud);
+    };
   }, []);
 
   // Save to localStorage on change
@@ -310,6 +355,7 @@ export const RolesPermissionsPage: React.FC = () => {
       };
 
       setAccounts((prev) => [newAccount, ...prev.filter(a => a.id !== newAccount.id && a.username.toLowerCase() !== cleanUsername)]);
+      window.dispatchEvent(new CustomEvent('glf-staff-updated'));
       addToast({
         type: 'success',
         title: 'Account Created in Supabase',
@@ -394,6 +440,7 @@ export const RolesPermissionsPage: React.FC = () => {
             : a
         )
       );
+      window.dispatchEvent(new CustomEvent('glf-staff-updated'));
 
       addToast({
         type: 'success',
@@ -446,6 +493,7 @@ export const RolesPermissionsPage: React.FC = () => {
             : a
         )
       );
+      window.dispatchEvent(new CustomEvent('glf-staff-updated'));
 
       addToast({
         type: newStatus === 'on_hold' ? 'warning' : 'success',
