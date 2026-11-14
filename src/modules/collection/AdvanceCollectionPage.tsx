@@ -37,6 +37,7 @@ import { Avatar } from '../../components/ui/Avatar';
 import { useAuthStore, useUIStore } from '../../store';
 import {
   getMonitoredCustomers,
+  saveMonitoredCustomers,
   getMonitoredLoans,
   getMonitoredCollections,
   saveMonitoredCollections,
@@ -423,7 +424,7 @@ export const AdvanceCollectionPage: React.FC = () => {
           history: [historyEntry, ...(c.history || [])],
         };
         try {
-          localStorage.setItem('glf_monitored_customers_master', JSON.stringify(allCustomers));
+          saveMonitoredCustomers(allCustomers);
         } catch {}
       }
 

@@ -6,6 +6,8 @@
 // 3. Admin views consolidated verified data across all branches and exports official PDF reports
 // ──────────────────────────────────────────────────
 
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
+
 export interface DenominationBreakdown {
   notes2000?: number; // ₹2000 notes (withdrawn from circulation)
   notes500: number;  // ₹500 notes
@@ -113,7 +115,33 @@ export function calculatePhysicalCashTotal(d: DenominationBreakdown): number {
 }
 
 const SEED_EOD_SETTLEMENTS: EODSettlementRecord[] = [];
+let isEODCloudSynced = false;
+
 export function getStoredEODSettlements(): EODSettlementRecord[] {
+  if (!isEODCloudSynced && isSupabaseConfigured() && supabase) {
+    isEODCloudSynced = true;
+    void (async () => {
+      try {
+        const { data: rows, error } = await supabase!
+          .from('documents')
+          .select('data')
+          .eq('collection', 'eod_settlements')
+          .eq('is_deleted', false);
+        if (!error && Array.isArray(rows) && rows.length > 0) {
+          const cloudRecords = rows.map((r: any) => r.data).filter(Boolean);
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(cloudRecords));
+          } catch {}
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('glf_eod_updated', { detail: { records: cloudRecords } }));
+          }
+        }
+      } catch (e) {
+        console.warn('[Supabase] Failed to fetch EOD settlements:', e);
+      }
+    })();
+  }
+
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
@@ -138,6 +166,18 @@ export function saveStoredEODSettlements(records: EODSettlementRecord[]): void {
     }
   } catch (e) {
     console.error('Failed to save EOD settlements:', e);
+  }
+
+  if (isSupabaseConfigured() && supabase && records.length > 0) {
+    const upsertRows = records.map((rec) => ({
+      collection: 'eod_settlements',
+      id: rec.id,
+      data: rec,
+      is_deleted: false,
+      created_at: rec.timestamp || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }));
+    void supabase.from('documents').upsert(upsertRows);
   }
 }
 

@@ -53,6 +53,7 @@ import {
   type PDFAttendanceOptions,
 } from '../../utils/pdfGenerator';
 import { LeaveODPanel } from './LeaveODPanel';
+import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { ResignationExitPanel } from './ResignationExitPanel';
 import { getStoredLeaveRequests } from '../../services/leaveService';
 
@@ -672,13 +673,25 @@ export const AttendancePage: React.FC = () => {
     setRecords(initialMap);
   }, [currentUser]);
 
-  // Save to localStorage strictly isolated to the current user
+  // Save to localStorage & Supabase PostgreSQL cloud
   const persistRecords = (updated: Record<string, TimesheetDayRecord>) => {
     setRecords(updated);
     try {
       localStorage.setItem(userTimesheetKey, JSON.stringify(updated));
     } catch (err) {
       console.error(err);
+    }
+
+    if (isSupabaseConfigured() && supabase) {
+      void supabase
+        .from('documents')
+        .upsert({
+          collection: 'user_timesheets',
+          id: userTimesheetKey,
+          data: updated,
+          is_deleted: false,
+          updated_at: new Date().toISOString(),
+        });
     }
   };
 

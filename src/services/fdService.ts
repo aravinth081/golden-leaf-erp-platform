@@ -420,6 +420,7 @@ export function getRateSlabs(): FDRateSlab[] {
 
 export function updateRateSlabs(slabs: FDRateSlab[]): void {
   localStorage.setItem(STORAGE_KEY_SLABS, JSON.stringify(slabs));
+  void createDocumentWithId(SETTINGS_COLLECTION, 'fd_rate_slabs', { slabs } as any);
 }
 
 /**
@@ -441,6 +442,7 @@ export function setCertificateTitleSetting(title: CertificateTitleOption): void 
     const current = JSON.parse(localStorage.getItem(STORAGE_KEY_SETTINGS) || '{}');
     current.certTitle = title;
     localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(current));
+    void createDocumentWithId(SETTINGS_COLLECTION, 'fd_certificate_title', { certTitle: title } as any);
   } catch (e) {
     console.warn('Setting save error', e);
   }

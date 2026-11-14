@@ -7,6 +7,7 @@
 // ──────────────────────────────────────────────────
 
 import type { UserRole } from '../types';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 export type LeaveCategory = 'LEAVE' | 'OD';
 
@@ -70,7 +71,33 @@ export interface LeaveBalance {
 const STORAGE_KEY = 'glf_leave_od_records_v12';
 
 const SEED_REQUESTS: LeaveODRequest[] = [];
+let isLeaveCloudSynced = false;
+
 export function getStoredLeaveRequests(): LeaveODRequest[] {
+  if (!isLeaveCloudSynced && isSupabaseConfigured() && supabase) {
+    isLeaveCloudSynced = true;
+    void (async () => {
+      try {
+        const { data: rows, error } = await supabase!
+          .from('documents')
+          .select('data')
+          .eq('collection', 'leave_requests')
+          .eq('is_deleted', false);
+        if (!error && Array.isArray(rows) && rows.length > 0) {
+          const cloudRecords = rows.map((r: any) => r.data).filter(Boolean);
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(cloudRecords));
+          } catch {}
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('glf_leave_updated', { detail: { records: cloudRecords } }));
+          }
+        }
+      } catch (e) {
+        console.warn('[Supabase] Failed to fetch leave requests:', e);
+      }
+    })();
+  }
+
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
@@ -95,6 +122,18 @@ export function saveStoredLeaveRequests(records: LeaveODRequest[]): void {
     }
   } catch (e) {
     console.error('Failed to save leave requests:', e);
+  }
+
+  if (isSupabaseConfigured() && supabase && records.length > 0) {
+    const upsertRows = records.map((rec) => ({
+      collection: 'leave_requests',
+      id: rec.id,
+      data: rec,
+      is_deleted: false,
+      created_at: rec.appliedAt || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }));
+    void supabase.from('documents').upsert(upsertRows);
   }
 }
 

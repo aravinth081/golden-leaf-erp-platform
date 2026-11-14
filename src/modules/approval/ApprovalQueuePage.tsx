@@ -18,6 +18,7 @@ import { creditManagerService, normalizeBranchId, type CreditApplicant } from '.
 import { getStoredBranches, type DetailedBranch } from '../../services/branchService';
 import { SanctionLetterModal } from '../loan/components/SanctionLetterModal';
 import { type SanctionLetterRecord } from '../../types/sanctionLetter.types';
+import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 
 // ─── Audit Log Helper ───
 const AUDIT_STORAGE_KEY = 'glf_bm_approval_audit_log';
@@ -48,6 +49,19 @@ function addBMAuditEntry(entry: Omit<BMAuditEntry, 'id' | 'timestamp'>): void {
     };
     existing.unshift(newEntry);
     localStorage.setItem(AUDIT_STORAGE_KEY, JSON.stringify(existing.slice(0, 200)));
+
+    if (isSupabaseConfigured() && supabase) {
+      void supabase
+        .from('documents')
+        .upsert({
+          collection: 'bm_audit_logs',
+          id: newEntry.id,
+          data: newEntry,
+          is_deleted: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+    }
   } catch (e) {
     console.warn('Failed to write BM audit entry:', e);
   }

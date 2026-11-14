@@ -19,6 +19,7 @@ import {
   getMonitoredCollections,
   type MonitoredCollection,
 } from '../../services/monitoringDataService';
+import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 
 // ─── Local Storage Keys ───
 const DAILY_CLOSING_STORAGE_KEY = 'glf_daily_closings';
@@ -58,7 +59,31 @@ interface BMAuditEntry {
 }
 
 // ─── Helper Functions ───
+let isDailyClosingCloudSynced = false;
+
 function getStoredDailyClosings(): DailyClosingRecord[] {
+  if (!isDailyClosingCloudSynced && isSupabaseConfigured() && supabase) {
+    isDailyClosingCloudSynced = true;
+    void (async () => {
+      try {
+        const { data: rows, error } = await supabase!
+          .from('documents')
+          .select('data')
+          .eq('collection', 'daily_closings')
+          .eq('is_deleted', false);
+        if (!error && Array.isArray(rows) && rows.length > 0) {
+          const cloudRecords = rows.map((r: any) => r.data).filter(Boolean);
+          try {
+            localStorage.setItem(DAILY_CLOSING_STORAGE_KEY, JSON.stringify(cloudRecords));
+          } catch {}
+          window.dispatchEvent(new CustomEvent('glf-daily-closing-synced'));
+        }
+      } catch (e) {
+        console.warn('[Supabase] Daily closing cloud fetch warning:', e);
+      }
+    })();
+  }
+
   try {
     const raw = localStorage.getItem(DAILY_CLOSING_STORAGE_KEY);
     if (raw) {
@@ -82,6 +107,19 @@ function saveDailyClosingRecord(record: DailyClosingRecord): void {
     window.dispatchEvent(new CustomEvent('glf-daily-closing-updated', { detail: record }));
   } catch (e) {
     console.error('Failed to save daily closing record:', e);
+  }
+
+  if (isSupabaseConfigured() && supabase) {
+    void supabase
+      .from('documents')
+      .upsert({
+        collection: 'daily_closings',
+        id: `dc_${record.branchId}_${record.closingDate}`,
+        data: record,
+        is_deleted: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
   }
 }
 

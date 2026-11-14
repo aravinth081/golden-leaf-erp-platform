@@ -40,7 +40,9 @@ import { Avatar } from '../../components/ui/Avatar';
 import { useAuthStore, useUIStore } from '../../store';
 import {
   getMonitoredCustomers,
+  saveMonitoredCustomers,
   getMonitoredLoans,
+  saveMonitoredLoans,
   getMonitoredCollections,
   saveMonitoredCollections,
   type MonitoredCustomer,
@@ -459,7 +461,7 @@ export const WeeklyCollectionPage: React.FC = () => {
           outstandingAmount: Math.max(0, (l.outstandingAmount || 0) - enteredAmt),
         };
         try {
-          localStorage.setItem('glf_monitored_loans_master', JSON.stringify(allLoans));
+          saveMonitoredLoans(allLoans);
         } catch {}
       }
 
@@ -479,7 +481,7 @@ export const WeeklyCollectionPage: React.FC = () => {
           outstandingBalance: Math.max(0, (cust.outstandingBalance || 0) - enteredAmt),
         };
         try {
-          localStorage.setItem('glf_monitored_customers_master', JSON.stringify(allCustomers));
+          saveMonitoredCustomers(allCustomers);
         } catch {}
       }
 

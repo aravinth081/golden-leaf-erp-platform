@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { PageHeader, Button } from '../../components/ui';
 import { useAuthStore, useUIStore } from '../../store';
+import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 
 interface SecurityEvent {
   id: string;
@@ -61,6 +62,16 @@ export const SecurityPage: React.FC = () => {
       setSecurityEvents(updated);
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+        if (isSupabaseConfigured() && supabase) {
+          void supabase.from('documents').upsert({
+            collection: 'security_events',
+            id: newEvt.id,
+            data: newEvt,
+            is_deleted: false,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+        }
       } catch (e) {
         console.error('Failed to save security log', e);
       }

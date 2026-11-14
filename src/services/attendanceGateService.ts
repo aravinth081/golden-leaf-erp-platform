@@ -4,6 +4,7 @@
 // ──────────────────────────────────────────────────
 
 import type { AuthUser } from '../types';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 export interface AttendanceCheckInRecord {
   user_id: string;
@@ -30,10 +31,36 @@ export const getNowTimeString = (): string => {
   return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
 };
 
+let isAttendanceCloudSynced = false;
+
 /**
- * Retrieve all check-in attendance records from storage
+ * Retrieve all check-in attendance records from storage & Supabase
  */
 export const getAttendanceRecords = (): AttendanceCheckInRecord[] => {
+  if (!isAttendanceCloudSynced && isSupabaseConfigured() && supabase) {
+    isAttendanceCloudSynced = true;
+    void (async () => {
+      try {
+        const { data: rows, error } = await supabase!
+          .from('documents')
+          .select('data')
+          .eq('collection', 'attendance_checkins')
+          .eq('is_deleted', false);
+        if (!error && Array.isArray(rows) && rows.length > 0) {
+          const cloudRecords = rows.map((r: any) => r.data).filter(Boolean);
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(cloudRecords));
+          } catch {}
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('glf-attendance-synced'));
+          }
+        }
+      } catch (e) {
+        console.warn('[Supabase] Attendance cloud sync warning:', e);
+      }
+    })();
+  }
+
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) return JSON.parse(raw);
@@ -171,6 +198,19 @@ export const markAttendanceToday = (
 
   // Fire event to notify listeners & reactive UI
   window.dispatchEvent(new CustomEvent('glf-attendance-checked-in', { detail: record }));
+
+  if (isSupabaseConfigured() && supabase) {
+    void supabase
+      .from('documents')
+      .upsert({
+        collection: 'attendance_checkins',
+        id: `att_${record.user_id}_${record.date}`,
+        data: record,
+        is_deleted: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+  }
 
   return record;
 };

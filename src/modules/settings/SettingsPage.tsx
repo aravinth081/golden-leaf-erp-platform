@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { PageHeader, Card, Button, Input, Select, Tabs } from '../../components/ui';
 import { useUIStore } from '../../store';
+import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 
 interface LoanPlan {
   id: string;
@@ -61,10 +62,24 @@ export const SettingsPage: React.FC = () => {
     isActive: true
   });
 
+  const syncPlansToSupabase = (list: LoanPlan[]) => {
+    if (isSupabaseConfigured() && supabase && list.length > 0) {
+      const upsertRows = list.map((p) => ({
+        collection: 'loanPlans',
+        id: p.id,
+        data: p,
+        is_deleted: false,
+        updated_at: new Date().toISOString(),
+      }));
+      void supabase.from('documents').upsert(upsertRows);
+    }
+  };
+
   const handleSave = () => {
     setIsSaving(true);
     try {
       localStorage.setItem('glf_loan_plans_master', JSON.stringify(plans));
+      syncPlansToSupabase(plans);
     } catch (e) {
       console.error('Failed to save plans', e);
     }
@@ -83,6 +98,7 @@ export const SettingsPage: React.FC = () => {
       const updated = prev.map(p => p.id === id ? { ...p, isActive: !p.isActive } : p);
       try {
         localStorage.setItem('glf_loan_plans_master', JSON.stringify(updated));
+        syncPlansToSupabase(updated);
       } catch (e) {
         console.error('Failed to save plans', e);
       }
@@ -114,6 +130,7 @@ export const SettingsPage: React.FC = () => {
     setPlans(updated);
     try {
       localStorage.setItem('glf_loan_plans_master', JSON.stringify(updated));
+      syncPlansToSupabase(updated);
     } catch (e) {
       console.error('Failed to save plans', e);
     }

@@ -29,6 +29,7 @@ import {
   calculateBankDetailsDiff,
   MakerCheckerViolationError,
 } from './makerCheckerService';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 // Storage keys for persistence
 export const STORAGE_KEYS = {
@@ -129,8 +130,35 @@ const MOCK_EMPLOYEE_NAMES = [
   'Dinesh Kumar',
 ];
 
-// Safe LocalStorage helpers
+// Safe LocalStorage & Supabase PostgreSQL cloud sync helpers
+let isHRCloudSynced = false;
+
 function readStorage<T>(key: string, defaultValue: T): T {
+  if (!isHRCloudSynced && isSupabaseConfigured() && supabase) {
+    isHRCloudSynced = true;
+    void (async () => {
+      try {
+        const { data: rows, error } = await supabase!
+          .from('documents')
+          .select('id, data')
+          .eq('collection', 'hr_payroll')
+          .eq('is_deleted', false);
+        if (!error && Array.isArray(rows) && rows.length > 0) {
+          for (const row of rows) {
+            try {
+              localStorage.setItem(row.id, JSON.stringify(row.data));
+            } catch {}
+          }
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('glf_hr_cloud_synced'));
+          }
+        }
+      } catch (e) {
+        console.warn('[Supabase] HR Payroll cloud sync notice:', e);
+      }
+    })();
+  }
+
   try {
     const raw = localStorage.getItem(key);
     if (raw) return JSON.parse(raw);
@@ -145,6 +173,18 @@ function writeStorage<T>(key: string, value: T): void {
     localStorage.setItem(key, JSON.stringify(value));
   } catch (err) {
     console.warn(`Could not write storage for key ${key}`, err);
+  }
+
+  if (isSupabaseConfigured() && supabase) {
+    void supabase
+      .from('documents')
+      .upsert({
+        collection: 'hr_payroll',
+        id: key,
+        data: value,
+        is_deleted: false,
+        updated_at: new Date().toISOString(),
+      });
   }
 }
 

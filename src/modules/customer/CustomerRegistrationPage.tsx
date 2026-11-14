@@ -247,6 +247,11 @@ const CustomerRegistrationPage: React.FC = () => {
   const [passbookDocName, setPassbookDocName] = useState<string | null>(null);
   const [passbookPreview, setPassbookPreview] = useState<string | null>(null);
 
+  // Cloudinary upload status indicators
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [isUploadingAadhaar, setIsUploadingAadhaar] = useState(false);
+  const [isUploadingPassbook, setIsUploadingPassbook] = useState(false);
+
   // Form State - Starts completely empty so all data is entered manually
   const [formData, setFormData] = useState({
     clientId: generatedClientId,
@@ -346,47 +351,90 @@ const CustomerRegistrationPage: React.FC = () => {
     }
   };
 
-  // Customer Photo Upload handler
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Customer Photo Upload handler — Direct Cloudinary Upload
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPhotoPreview(reader.result as string);
-        addToast({ type: 'success', title: 'Photo Uploaded', message: `${file.name} attached successfully.` });
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    setIsUploadingPhoto(true);
+    try {
+      const targetId = formData.clientId || generatedClientId;
+      const resUrl = await uploadCustomerPhoto(file, targetId);
+      if (resUrl) {
+        setPhotoPreview(resUrl);
+        addToast({
+          type: 'success',
+          title: 'Photo Uploaded to Cloudinary',
+          message: `${file.name} uploaded and secured.`,
+        });
+      }
+    } catch (err: any) {
+      console.error('Customer photo upload error:', err);
+      addToast({
+        type: 'error',
+        title: 'Upload Failed',
+        message: err.message || 'Could not upload photo to Cloudinary. Please try again.',
+      });
+    } finally {
+      setIsUploadingPhoto(false);
+      e.target.value = '';
     }
   };
 
-  const handleDocUpload = (type: 'aadhaar' | 'passbook', e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDocUpload = async (type: 'aadhaar' | 'passbook', e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      if (type === 'aadhaar') {
-        setAadhaarDocName(file.name);
-        if (file.type.startsWith('image/')) {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            setAadhaarPreview(reader.result as string);
-          };
-          reader.readAsDataURL(file);
-        } else {
-          setAadhaarPreview(null);
+    if (!file) return;
+
+    const targetId = formData.clientId || generatedClientId;
+
+    if (type === 'aadhaar') {
+      setIsUploadingAadhaar(true);
+      setAadhaarDocName(file.name);
+      try {
+        const resUrl = await uploadKYCDocument(file, targetId, 'aadhaar_front');
+        if (resUrl) {
+          setAadhaarPreview(resUrl);
+          addToast({
+            type: 'success',
+            title: 'Aadhaar Uploaded to Cloudinary',
+            message: `${file.name} uploaded and secured.`,
+          });
         }
+      } catch (err: any) {
+        console.error('Aadhaar upload error:', err);
+        addToast({
+          type: 'error',
+          title: 'Upload Failed',
+          message: err.message || 'Could not upload Aadhaar to Cloudinary. Please try again.',
+        });
+      } finally {
+        setIsUploadingAadhaar(false);
+        e.target.value = '';
       }
-      if (type === 'passbook') {
-        setPassbookDocName(file.name);
-        if (file.type.startsWith('image/')) {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            setPassbookPreview(reader.result as string);
-          };
-          reader.readAsDataURL(file);
-        } else {
-          setPassbookPreview(null);
+    } else {
+      setIsUploadingPassbook(true);
+      setPassbookDocName(file.name);
+      try {
+        const result = await uploadImage(file, `kyc/${targetId}/passbook`);
+        if (result?.secure_url) {
+          setPassbookPreview(result.secure_url);
+          addToast({
+            type: 'success',
+            title: 'Passbook Uploaded to Cloudinary',
+            message: `${file.name} uploaded and secured.`,
+          });
         }
+      } catch (err: any) {
+        console.error('Passbook upload error:', err);
+        addToast({
+          type: 'error',
+          title: 'Upload Failed',
+          message: err.message || 'Could not upload passbook to Cloudinary. Please try again.',
+        });
+      } finally {
+        setIsUploadingPassbook(false);
+        e.target.value = '';
       }
-      addToast({ type: 'success', title: 'Document Uploaded', message: `${file.name} attached successfully.` });
     }
   };
 
@@ -605,37 +653,16 @@ const CustomerRegistrationPage: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      // Upload customer photo & KYC documents permanently to Cloudinary
-      let cloudPhotoUrl = photoPreview || undefined;
-      let cloudAadhaarUrl = aadhaarPreview || undefined;
-      let cloudPassbookUrl = passbookPreview || undefined;
+      // Ensure only valid HTTPS Cloudinary URLs are stored (never store raw binary/base64 in Supabase)
+      const sanitizeCloudUrl = (url: string | null | undefined): string | undefined => {
+        if (!url) return undefined;
+        if (url.startsWith('https://') || url.startsWith('http://')) return url;
+        return undefined;
+      };
 
-      try {
-        if (photoPreview && (photoPreview.startsWith('data:') || photoPreview.startsWith('blob:'))) {
-          const res = await uploadCustomerPhoto(photoPreview as any, formData.clientId);
-          if (res) cloudPhotoUrl = res;
-        }
-      } catch (err) {
-        console.warn('Customer photo Cloudinary upload notice:', err);
-      }
-
-      try {
-        if (aadhaarPreview && (aadhaarPreview.startsWith('data:') || aadhaarPreview.startsWith('blob:'))) {
-          const res = await uploadKYCDocument(aadhaarPreview as any, formData.clientId, 'aadhaar_front');
-          if (res) cloudAadhaarUrl = res;
-        }
-      } catch (err) {
-        console.warn('Aadhaar Cloudinary upload notice:', err);
-      }
-
-      try {
-        if (passbookPreview && (passbookPreview.startsWith('data:') || passbookPreview.startsWith('blob:'))) {
-          const res = await uploadImage(passbookPreview as any, `kyc/${formData.clientId}/passbook`);
-          if (res?.secure_url) cloudPassbookUrl = res.secure_url;
-        }
-      } catch (err) {
-        console.warn('Passbook Cloudinary upload notice:', err);
-      }
+      const cloudPhotoUrl = sanitizeCloudUrl(photoPreview);
+      const cloudAadhaarUrl = sanitizeCloudUrl(aadhaarPreview);
+      const cloudPassbookUrl = sanitizeCloudUrl(passbookPreview);
 
       const kycData = {
         aadhaarNumber: formData.aadhaarNumber,
@@ -1800,9 +1827,16 @@ const CustomerRegistrationPage: React.FC = () => {
                         <p className="text-xs font-bold text-[#0B1F3A] uppercase">Borrower Passport Photo</p>
                         <p className="text-[10px] text-gray-400 mt-0.5">JPEG / PNG under 5MB</p>
                       </div>
-                      <label className="mt-3 px-4 py-2 rounded-lg bg-[#0B1F3A] text-white hover:bg-[#162D4A] text-xs font-bold cursor-pointer transition-all">
-                        {photoPreview ? 'Change Photo' : 'Select Photo'}
-                        <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+                      <label className={`mt-3 px-4 py-2 rounded-lg bg-[#0B1F3A] text-white hover:bg-[#162D4A] text-xs font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 ${isUploadingPhoto ? 'opacity-70 pointer-events-none' : ''}`}>
+                        {isUploadingPhoto ? (
+                          <>
+                            <Loader2 size={13} className="animate-spin text-[#D4AF37]" />
+                            <span>Uploading to Cloudinary...</span>
+                          </>
+                        ) : (
+                          <span>{photoPreview ? 'Change Photo' : 'Select Photo'}</span>
+                        )}
+                        <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" disabled={isUploadingPhoto} />
                       </label>
                     </div>
 
@@ -1834,9 +1868,16 @@ const CustomerRegistrationPage: React.FC = () => {
                         <p className="text-xs font-bold text-[#0B1F3A] uppercase">Aadhaar Card Scan (Front & Back)</p>
                         <p className="text-[10px] text-gray-400 mt-0.5 truncate max-w-[180px]">{aadhaarDocName || 'PDF or Image proof'}</p>
                       </div>
-                      <label className="mt-3 px-4 py-2 rounded-lg bg-[#0B1F3A] text-white hover:bg-[#162D4A] text-xs font-bold cursor-pointer transition-all">
-                        {aadhaarPreview || aadhaarDocName ? 'Change Aadhaar' : 'Upload Aadhaar'}
-                        <input type="file" accept="image/*,.pdf" onChange={(e) => handleDocUpload('aadhaar', e)} className="hidden" />
+                      <label className={`mt-3 px-4 py-2 rounded-lg bg-[#0B1F3A] text-white hover:bg-[#162D4A] text-xs font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 ${isUploadingAadhaar ? 'opacity-70 pointer-events-none' : ''}`}>
+                        {isUploadingAadhaar ? (
+                          <>
+                            <Loader2 size={13} className="animate-spin text-[#D4AF37]" />
+                            <span>Uploading to Cloudinary...</span>
+                          </>
+                        ) : (
+                          <span>{aadhaarPreview || aadhaarDocName ? 'Change Aadhaar' : 'Upload Aadhaar'}</span>
+                        )}
+                        <input type="file" accept="image/*,.pdf" onChange={(e) => handleDocUpload('aadhaar', e)} className="hidden" disabled={isUploadingAadhaar} />
                       </label>
                     </div>
 
@@ -1868,9 +1909,16 @@ const CustomerRegistrationPage: React.FC = () => {
                         <p className="text-xs font-bold text-[#0B1F3A] uppercase">Bank Passbook / Cheque</p>
                         <p className="text-[10px] text-gray-400 mt-0.5 truncate max-w-[180px]">{passbookDocName || 'Account statement scan'}</p>
                       </div>
-                      <label className="mt-3 px-4 py-2 rounded-lg bg-[#0B1F3A] text-white hover:bg-[#162D4A] text-xs font-bold cursor-pointer transition-all">
-                        {passbookPreview || passbookDocName ? 'Change Passbook' : 'Upload Passbook'}
-                        <input type="file" accept="image/*,.pdf" onChange={(e) => handleDocUpload('passbook', e)} className="hidden" />
+                      <label className={`mt-3 px-4 py-2 rounded-lg bg-[#0B1F3A] text-white hover:bg-[#162D4A] text-xs font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 ${isUploadingPassbook ? 'opacity-70 pointer-events-none' : ''}`}>
+                        {isUploadingPassbook ? (
+                          <>
+                            <Loader2 size={13} className="animate-spin text-[#D4AF37]" />
+                            <span>Uploading to Cloudinary...</span>
+                          </>
+                        ) : (
+                          <span>{passbookPreview || passbookDocName ? 'Change Passbook' : 'Upload Passbook'}</span>
+                        )}
+                        <input type="file" accept="image/*,.pdf" onChange={(e) => handleDocUpload('passbook', e)} className="hidden" disabled={isUploadingPassbook} />
                       </label>
                     </div>
                   </div>
