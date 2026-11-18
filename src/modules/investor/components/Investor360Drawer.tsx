@@ -6,7 +6,7 @@
 import React, { useState } from 'react';
 import {
   X, PieChart, FileText, Landmark, ShieldAlert,
-  Download, Printer, PlusCircle, CheckCircle, Clock,
+  Download, Printer, CheckCircle, Clock,
   Smartphone, Bell, AlertCircle, ArrowUpRight, Lock
 } from 'lucide-react';
 import type { Investor } from '../../../types/investor.types';
@@ -18,7 +18,6 @@ interface Investor360DrawerProps {
   investor: Investor;
   fds: FixedDeposit[];
   onClose: () => void;
-  onBookFD?: (investor: Investor) => void;
   onViewBond?: (fd: FixedDeposit) => void;
 }
 
@@ -26,7 +25,6 @@ export const Investor360Drawer: React.FC<Investor360DrawerProps> = ({
   investor,
   fds,
   onClose,
-  onBookFD,
   onViewBond,
 }) => {
   const [activeTab, setActiveTab] = useState<'summary' | 'bonds' | 'ledger' | 'tax'>('summary');
@@ -172,7 +170,7 @@ Authorized Signatory: Golden Leaf Finance Corporate Audit Cell
           </div>
 
           {/* Quick Action Ribbon */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 mt-4 sm:mt-5 pt-3 sm:pt-4 border-t border-white/10">
+          <div className="flex items-center justify-between gap-2.5 mt-4 sm:mt-5 pt-3 sm:pt-4 border-t border-white/10">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-[#10B981]/20 text-[#34D399] border border-[#10B981]/40 flex items-center gap-1">
                 <CheckCircle size={12} /> KYC {investor.kycStatus}
@@ -183,13 +181,6 @@ Authorized Signatory: Golden Leaf Finance Corporate Audit Cell
                 </span>
               )}
             </div>
-
-            <button
-              onClick={() => onBookFD?.(investor)}
-              className="px-3.5 py-2 min-h-[38px] rounded-xl bg-[#D4AF37] hover:bg-[#C9A227] text-white font-bold text-xs transition-colors shadow-sm flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.98]"
-            >
-              <PlusCircle size={14} /> + Book New FD
-            </button>
           </div>
         </div>
 
@@ -359,12 +350,6 @@ Authorized Signatory: Golden Leaf Finance Corporate Audit Cell
               {fds.length === 0 ? (
                 <div className="py-12 text-center text-[#64748B]">
                   <p className="text-sm font-semibold">No Fixed Deposits found for this investor.</p>
-                  <button
-                    onClick={() => onBookFD?.(investor)}
-                    className="mt-3 px-4 py-2 rounded-xl bg-[#D4AF37] text-white text-xs font-bold shadow-sm"
-                  >
-                    + Book First FD
-                  </button>
                 </div>
               ) : (
                 fds.map((fd) => (

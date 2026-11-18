@@ -17,7 +17,6 @@ import { FDKPIRibbon } from '../fd/components/FDKPIRibbon';
 import { Investor360Drawer } from './components/Investor360Drawer';
 import { InvestorRegistrationModal } from './components/InvestorRegistrationModal';
 import { FDBondCertificateModal } from '../fd/components/FDBondCertificateModal';
-import { FDBookingModal } from '../fd/components/FDBookingModal';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { useAuthStore } from '../../store';
 
@@ -31,7 +30,6 @@ export const InvestorListPage: React.FC = () => {
   // Modals & Drawers state
   const [selectedInvestor, setSelectedInvestor] = useState<Investor | null>(null);
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
-  const [bookingInvestor, setBookingInvestor] = useState<Investor | null>(null);
   const [viewingBondFD, setViewingBondFD] = useState<FixedDeposit | null>(null);
 
   const user = useAuthStore((s) => s.user);
@@ -330,10 +328,6 @@ export const InvestorListPage: React.FC = () => {
           investor={selectedInvestor}
           fds={fds.filter((f) => f.investorId === selectedInvestor.investorId)}
           onClose={() => setSelectedInvestor(null)}
-          onBookFD={(inv) => {
-            setSelectedInvestor(null);
-            setBookingInvestor(inv);
-          }}
           onViewBond={(fd) => setViewingBondFD(fd)}
         />
       )}
@@ -346,19 +340,6 @@ export const InvestorListPage: React.FC = () => {
             setIsRegisterOpen(false);
             loadData();
             setSelectedInvestor(newInv);
-          }}
-        />
-      )}
-
-      {/* FD Booking Modal */}
-      {bookingInvestor && (
-        <FDBookingModal
-          initialInvestor={bookingInvestor}
-          onClose={() => setBookingInvestor(null)}
-          onSuccess={(newFD) => {
-            setBookingInvestor(null);
-            loadData();
-            setViewingBondFD(newFD);
           }}
         />
       )}

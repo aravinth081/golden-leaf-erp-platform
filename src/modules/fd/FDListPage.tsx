@@ -582,11 +582,6 @@ export const FDListPage: React.FC = () => {
           investor={drawerInvestor}
           fds={fds.filter((f) => f.investorId === drawerInvestor.investorId)}
           onClose={() => setDrawerInvestor(null)}
-          onBookFD={(inv) => {
-            setDrawerInvestor(null);
-            setPrefilledInvestor(inv);
-            setIsBookingOpen(true);
-          }}
           onViewBond={(fd) => setSelectedBondFD(fd)}
         />
       )}
