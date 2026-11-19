@@ -324,7 +324,7 @@ export const GoldLoanAppraisalModal: React.FC<GoldLoanAppraisalModalProps> = ({
     } else if (field === 'quantity') {
       current.quantity = parseInt(value) || 1;
     } else {
-      current[field] = value;
+      (current as any)[field] = value;
     }
 
     // Auto Carat Purity Adjustment: Carat rate formula

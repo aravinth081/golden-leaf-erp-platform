@@ -479,6 +479,8 @@ export const getPincodeDetailsSync = (pincode: string): PincodeDetails | null =>
   return null;
 };
 
+export const lookupPincode = getPincodeDetailsSync;
+
 /**
  * Asynchronous resolver — checks India Post API for complete authoritative details.
  * Falls back to sync local resolver on failure or timeout.

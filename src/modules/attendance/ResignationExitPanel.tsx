@@ -673,7 +673,7 @@ export const ResignationExitPanel: React.FC = () => {
                               </button>
 
                               {/* HR Early Relief / Waiver Button */}
-                              {!isComplete && (isAdmin || isBranchManager || userRole === 'hr') && (
+                              {!isComplete && (isAdmin || isBranchManager || userRole === 'hr_payroll_manager' || (userRole as string) === 'hr') && (
                                 <button
                                   onClick={() => handleApproveStage2HR(r, true)}
                                   title="Verify situation & approve early relief waiver"

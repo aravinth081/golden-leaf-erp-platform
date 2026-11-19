@@ -111,7 +111,7 @@ export function getStoredLeaveRequests(): LeaveODRequest[] {
         const isHigherRole =
           r.role === 'branch_manager' ||
           r.role === 'hr_payroll_manager' ||
-          r.role === 'hr' ||
+          (r.role as string) === 'hr' ||
           r.role === 'area_manager' ||
           (r.roleTitle && (
             r.roleTitle.toLowerCase().includes('hr') ||
@@ -202,7 +202,7 @@ export function submitLeaveODRequest(input: CreateLeaveInput): LeaveODRequest {
   const isRequiresAdminApproval =
     input.role === 'branch_manager' ||
     input.role === 'hr_payroll_manager' ||
-    input.role === 'hr' ||
+    (input.role as string) === 'hr' ||
     input.role === 'area_manager' ||
     input.role === 'admin' ||
     (input.roleTitle && (
