@@ -6,10 +6,11 @@
 import React, { useState } from 'react';
 import {
   X, User, MapPin, ShieldCheck, Landmark, CheckCircle,
-  Upload, ArrowRight, ArrowLeft, Loader2
+  Upload, ArrowRight, ArrowLeft, Loader2, Coins, TrendingUp,
+  Calendar, Percent, Calculator
 } from 'lucide-react';
 import type { Investor, InvestorCategory, TaxDeclaration, InvestorDocuments } from '../../../types/investor.types';
-import { calculateAge, isSeniorCitizen } from '../../../utils/fdCalculations';
+import { calculateAge, isSeniorCitizen, numberToWords } from '../../../utils/fdCalculations';
 import { createInvestor } from '../../../services/investorService';
 import { getStoredBranches } from '../../../services/branchService';
 import { uploadImage } from '../../../services/cloudinary';
@@ -60,7 +61,7 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
     return FALLBACK_BRANCHES;
   }, []);
 
-  const [activeStep, setActiveStep] = useState<1 | 2 | 3 | 4>(1);
+  const [activeStep, setActiveStep] = useState<1 | 2 | 3 | 4 | 5>(1);
   const [loading, setLoading] = useState(false);
 
   // 01 Basic Identity
@@ -89,7 +90,33 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
   const [documents, setDocuments] = useState<InvestorDocuments>({});
   const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
 
-  // 04 Bank Account
+  // 04 Investment & Interest Terms (New Column / Section Before Payout Bank)
+  const [investmentAmount, setInvestmentAmount] = useState<number | string>(500000);
+  const [investmentDisplay, setInvestmentDisplay] = useState<string>((500000).toLocaleString('en-IN'));
+  const [interestRate, setInterestRate] = useState<string>('12.00');
+  const [tenureYears, setTenureYears] = useState<number>(1);
+  const [tenureMonths, setTenureMonths] = useState<number>(12);
+  const [payoutFrequency, setPayoutFrequency] = useState<'Monthly' | 'Quarterly' | 'Cumulative'>('Monthly');
+  const [investmentDate, setInvestmentDate] = useState<string>(new Date().toISOString().slice(0, 10));
+
+  const handleInvestmentChange = (rawStr: string) => {
+    const raw = rawStr.replace(/,/g, '').replace(/\D/g, '');
+    if (!raw) {
+      setInvestmentDisplay('');
+      setInvestmentAmount('');
+      return;
+    }
+    const num = parseInt(raw, 10);
+    setInvestmentAmount(num);
+    setInvestmentDisplay(num.toLocaleString('en-IN'));
+  };
+
+  const handleQuickInvestment = (num: number) => {
+    setInvestmentAmount(num);
+    setInvestmentDisplay(num.toLocaleString('en-IN'));
+  };
+
+  // 05 Bank Account
   const [bankHolderName, setBankHolderName] = useState('');
   const [bankName, setBankName] = useState('State Bank of India');
   const [bankBranch, setBankBranch] = useState('Main Branch');
@@ -101,6 +128,27 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
 
   const age = calculateAge(dob);
   const isSenior = isSeniorCitizen(dob);
+
+  // Auto-calculated interest and returns like FD
+  const principalNum = Number(investmentAmount) || 0;
+  const rateNum = Number(interestRate) || 0;
+  const effectiveMonths = Number(tenureMonths) || (Number(tenureYears) * 12) || 12;
+  const effectiveYears = Number(tenureYears) || Math.max(1, Math.round(effectiveMonths / 12));
+
+  const monthlyInterestCalc = principalNum > 0 && rateNum > 0 ? Math.round((principalNum * (rateNum / 100)) / 12) : 0;
+  const annualInterestCalc = principalNum > 0 && rateNum > 0 ? Math.round(principalNum * (rateNum / 100)) : 0;
+  const totalInterestCalc = Math.round(principalNum * (rateNum / 100) * (effectiveMonths / 12));
+  const maturityValueCalc = principalNum + totalInterestCalc;
+
+  const calculatedMaturityDate = React.useMemo(() => {
+    try {
+      const d = new Date(investmentDate);
+      d.setMonth(d.getMonth() + effectiveMonths);
+      return d.toISOString().slice(0, 10);
+    } catch {
+      return '';
+    }
+  }, [investmentDate, effectiveMonths]);
 
   const handleFileUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -141,13 +189,25 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
 
     if (accountNumber !== accountNumberConfirm) {
       alert('Bank Account numbers do not match. Please verify double-entry.');
-      setActiveStep(4);
+      setActiveStep(5);
       return;
     }
 
     if (pan.trim().length !== 10) {
       alert('PAN must be exactly 10 characters.');
       setActiveStep(3);
+      return;
+    }
+
+    if (principalNum <= 0) {
+      alert('Please enter a valid investment amount.');
+      setActiveStep(4);
+      return;
+    }
+
+    if (rateNum <= 0) {
+      alert('Please enter an agreed annual rate of interest.');
+      setActiveStep(4);
       return;
     }
 
@@ -161,6 +221,15 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
         fatherSpouseName: fatherSpouseName.trim(),
         dob,
         gender,
+        investmentAmount: principalNum,
+        interestRate: rateNum,
+        tenureYears: effectiveYears,
+        tenureMonths: effectiveMonths,
+        payoutFrequency,
+        investmentDate,
+        maturityDate: calculatedMaturityDate,
+        totalInterestPayable: totalInterestCalc,
+        maturityAmount: maturityValueCalc,
         primaryMobile: primaryMobile.trim(),
         secondaryMobile: secondaryMobile.trim() || undefined,
         email: email.trim() || undefined,
@@ -216,12 +285,13 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
         </div>
 
         {/* Wizard Steps Bar */}
-        <div className="grid grid-cols-4 border-b border-[#E2E8F0] bg-[#FAF7F0] shrink-0 text-xs">
+        <div className="grid grid-cols-5 border-b border-[#E2E8F0] bg-[#FAF7F0] shrink-0 text-xs">
           {[
             { num: 1, label: '01 Identity' },
             { num: 2, label: '02 Contact & Branch' },
             { num: 3, label: '03 KYC & Tax' },
-            { num: 4, label: '04 Payout Bank' },
+            { num: 4, label: '04 Investment Terms' },
+            { num: 5, label: '05 Payout Bank' },
           ].map((s) => (
             <button
               key={s.num}
@@ -345,11 +415,34 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
                     <strong className="text-[#0B1F3A]">{age} Years</strong>
                     {isSenior && (
                       <span className="ml-2 font-bold text-[#059669] bg-[#ECFDF5] px-1.5 py-0.5 rounded text-[10px]">
-                        👴 Senior Citizen (+0.50% Booster Active)
+                        👴 Senior Citizen (+1.00% Booster Active)
                       </span>
                     )}
                   </div>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#475569] mb-1 uppercase tracking-wider">
+                  Investor Investment Amount (₹) <span className="text-red-500">*</span>
+                </label>
+                <div className="relative flex items-center">
+                  <span className="absolute left-3.5 text-sm font-bold text-[#64748B]">₹</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={investmentDisplay}
+                    onChange={(e) => handleInvestmentChange(e.target.value)}
+                    placeholder="Enter investment amount (e.g. 10,00,000)"
+                    className="w-full pl-8 pr-4 py-2.5 rounded-xl border border-[#CBD5E1] font-mono text-sm font-bold text-[#0B1F3A] outline-none focus:border-[#D4AF37]"
+                    required
+                  />
+                </div>
+                {Number(investmentAmount) > 0 && (
+                  <p className="text-[11px] text-[#8C6808] font-serif italic mt-1 pl-1">
+                    Rupees {numberToWords(Number(investmentAmount))} Only
+                  </p>
+                )}
               </div>
             </div>
           )}
@@ -612,12 +705,294 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
             </div>
           )}
 
-          {/* STEP 4: Payout Bank Account Inputs */}
+          {/* STEP 4: Capital Investment & Interest Terms (New Column / Section before Payout Bank) */}
           {activeStep === 4 && (
+            <div className="space-y-4">
+              <div className="pb-2 border-b border-[#F1F5F9] flex items-center justify-between">
+                <div>
+                  <h3 className="font-display font-bold text-sm text-[#0B1F3A] uppercase tracking-wider flex items-center gap-1.5">
+                    <Coins size={16} className="text-[#D4AF37]" />
+                    04 Capital Investment & Interest Terms
+                  </h3>
+                  <p className="text-xs text-[#64748B] mt-0.5">
+                    Configure principal investment, manual annual interest rate & auto-calculated payout yields
+                  </p>
+                </div>
+                <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-[#FAF7F0] text-[#8C6808] border border-[#D4AF37]/40">
+                  <Calculator size={11} /> Auto Interest Engine Active
+                </span>
+              </div>
+
+              {/* Investment Principal Amount */}
+              <div className="p-4 rounded-2xl bg-[#FFFDF7] border border-[#D4AF37]/30 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-[#0B1F3A] uppercase tracking-wider">
+                    Investment Principal Amount (₹) <span className="text-red-500">*</span>
+                  </label>
+                  <span className="text-[11px] font-mono font-bold text-[#8C6808]">
+                    Min ₹10,000
+                  </span>
+                </div>
+
+                <div className="relative flex items-center">
+                  <span className="absolute left-3.5 text-base font-bold text-[#8C6808]">₹</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={investmentDisplay}
+                    onChange={(e) => handleInvestmentChange(e.target.value)}
+                    placeholder="Enter investment amount (e.g. 10,00,000)"
+                    className="w-full pl-9 pr-4 py-3 rounded-xl border border-[#CBD5E1] font-mono text-base font-bold text-[#0B1F3A] outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] bg-white shadow-inner"
+                    required
+                  />
+                </div>
+
+                {/* Quick Amount Pills */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] text-[#64748B] font-bold uppercase mr-1">Quick Select:</span>
+                  {[100000, 200000, 500000, 1000000, 2500000, 5000000].map((amt) => (
+                    <button
+                      key={amt}
+                      type="button"
+                      onClick={() => handleQuickInvestment(amt)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        Number(investmentAmount) === amt
+                          ? 'bg-[#8C6808] text-white shadow-sm'
+                          : 'bg-white hover:bg-[#FAF7F0] text-[#475569] border border-[#CBD5E1]'
+                      }`}
+                    >
+                      ₹{amt.toLocaleString('en-IN')}
+                    </button>
+                  ))}
+                </div>
+
+                {principalNum > 0 && (
+                  <p className="text-xs text-[#8C6808] font-serif italic pl-0.5">
+                    Rupees {numberToWords(principalNum)} Only
+                  </p>
+                )}
+              </div>
+
+              {/* Rate of Interest (Manual Typing Option + Presets) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="p-4 rounded-2xl bg-white border border-[#CBD5E1] space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-[#0B1F3A] uppercase tracking-wider flex items-center gap-1">
+                      <Percent size={13} className="text-[#059669]" />
+                      Annual Interest Rate (% p.a.) <span className="text-red-500">*</span>
+                    </label>
+                    <span className="text-[10px] font-semibold text-[#059669] bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                      Manual Input
+                    </span>
+                  </div>
+
+                  <div className="relative flex items-center">
+                    <input
+                      type="number"
+                      step="0.05"
+                      min="1"
+                      max="36"
+                      value={interestRate}
+                      onChange={(e) => setInterestRate(e.target.value)}
+                      placeholder="e.g. 12.00"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-[#CBD5E1] font-mono text-base font-bold text-[#059669] outline-none focus:border-[#059669] bg-emerald-50/20"
+                      required
+                    />
+                    <span className="absolute right-3.5 text-xs font-bold text-[#64748B]">% per annum</span>
+                  </div>
+
+                  {/* Preset Quick Rate Chips */}
+                  <div className="flex items-center gap-1 flex-wrap pt-1">
+                    <span className="text-[10px] text-[#64748B] font-semibold mr-1">Presets:</span>
+                    {['9.00', '10.00', '11.00', '12.00', '13.50', '15.00'].map((r) => (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => setInterestRate(r)}
+                        className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold transition-colors cursor-pointer ${
+                          interestRate === r
+                            ? 'bg-[#059669] text-white'
+                            : 'bg-[#F1F5F9] hover:bg-[#E2E8F0] text-[#334155]'
+                        }`}
+                      >
+                        {r}%
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Tenure Selector */}
+                <div className="p-4 rounded-2xl bg-white border border-[#CBD5E1] space-y-2.5">
+                  <label className="block text-xs font-bold text-[#0B1F3A] uppercase tracking-wider flex items-center gap-1">
+                    <Calendar size={13} className="text-[#1E40AF]" />
+                    Investment Tenure <span className="text-red-500">*</span>
+                  </label>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <span className="block text-[10px] text-[#64748B] mb-0.5 font-bold">Years</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="20"
+                        value={tenureYears}
+                        onChange={(e) => {
+                          const y = Number(e.target.value) || 0;
+                          setTenureYears(y);
+                          setTenureMonths(y * 12);
+                        }}
+                        className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] font-mono text-xs font-bold text-[#0B1F3A] outline-none"
+                      />
+                    </div>
+                    <div>
+                      <span className="block text-[10px] text-[#64748B] mb-0.5 font-bold">Total Months</span>
+                      <input
+                        type="number"
+                        min="1"
+                        max="240"
+                        value={tenureMonths}
+                        onChange={(e) => {
+                          const m = Number(e.target.value) || 0;
+                          setTenureMonths(m);
+                          setTenureYears(Math.max(1, Math.round(m / 12)));
+                        }}
+                        className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] font-mono text-xs font-bold text-[#0B1F3A] outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                    <span className="text-[10px] text-[#64748B] font-semibold mr-1">Quick:</span>
+                    {[
+                      { y: 1, m: 12, label: '1 Year' },
+                      { y: 2, m: 24, label: '2 Years' },
+                      { y: 3, m: 36, label: '3 Years' },
+                      { y: 5, m: 60, label: '5 Years' },
+                    ].map((t) => (
+                      <button
+                        key={t.m}
+                        type="button"
+                        onClick={() => {
+                          setTenureYears(t.y);
+                          setTenureMonths(t.m);
+                        }}
+                        className={`px-2 py-0.5 rounded text-[11px] font-bold transition-colors cursor-pointer ${
+                          tenureMonths === t.m
+                            ? 'bg-[#1E40AF] text-white'
+                            : 'bg-[#F1F5F9] hover:bg-[#E2E8F0] text-[#334155]'
+                        }`}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Payout Frequency & Value Date */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[#475569] mb-1.5 uppercase tracking-wider">
+                    Interest Payout Frequency <span className="text-red-500">*</span>
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { id: 'Monthly', label: 'Monthly', desc: 'Direct Bank NEFT' },
+                      { id: 'Quarterly', label: 'Quarterly', desc: 'Every 3 Mos' },
+                      { id: 'Cumulative', label: 'Cumulative', desc: 'At Maturity' },
+                    ].map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setPayoutFrequency(item.id as any)}
+                        className={`p-2 rounded-xl border text-left transition-all cursor-pointer ${
+                          payoutFrequency === item.id
+                            ? 'border-[#D4AF37] bg-[#FAF7F0] shadow-sm'
+                            : 'border-[#CBD5E1] bg-white hover:bg-[#F8FAFC]'
+                        }`}
+                      >
+                        <div className="font-bold text-xs text-[#0B1F3A]">{item.label}</div>
+                        <div className="text-[9px] text-[#64748B] mt-0.5">{item.desc}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[#475569] mb-1.5 uppercase tracking-wider">
+                    Investment Value Date (Start Date) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={investmentDate}
+                    onChange={(e) => setInvestmentDate(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#CBD5E1] text-xs font-semibold text-[#0B1F3A] outline-none"
+                    required
+                  />
+                  {calculatedMaturityDate && (
+                    <span className="text-[10px] text-[#64748B] mt-1 block">
+                      Maturity Date: <strong className="font-mono text-[#0B1F3A]">{new Date(calculatedMaturityDate).toLocaleDateString('en-IN')}</strong>
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Automatic Live Interest Calculation Box (Like FD) */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-[#0B1F3A] to-[#1E3A8A] text-white shadow-lg space-y-3">
+                <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp size={16} className="text-[#D4AF37]" />
+                    <span className="font-display font-bold text-xs uppercase tracking-wider text-white">
+                      Live Interest & Return Yield Calculation (Auto Engine)
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-mono text-[#D4AF37]">
+                    {rateNum.toFixed(2)}% p.a. • {effectiveMonths} Mos
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                  <div className="p-2.5 rounded-xl bg-white/5 border border-white/10">
+                    <span className="text-[10px] text-white/70 block uppercase">Principal</span>
+                    <strong className="text-sm sm:text-base font-mono text-white block mt-0.5">
+                      ₹{principalNum.toLocaleString('en-IN')}
+                    </strong>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-white/5 border border-white/10">
+                    <span className="text-[10px] text-[#93C5FD] block uppercase">Monthly Interest</span>
+                    <strong className="text-sm sm:text-base font-mono text-[#60A5FA] block mt-0.5">
+                      {payoutFrequency === 'Cumulative' ? 'N.A. (Compounded)' : `₹${monthlyInterestCalc.toLocaleString('en-IN')}`}
+                    </strong>
+                    <span className="text-[9px] text-white/60">/ Month</span>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-white/5 border border-white/10">
+                    <span className="text-[10px] text-[#86EFAC] block uppercase">Total Interest Yield</span>
+                    <strong className="text-sm sm:text-base font-mono text-[#4ADE80] block mt-0.5">
+                      ₹{totalInterestCalc.toLocaleString('en-IN')}
+                    </strong>
+                    <span className="text-[9px] text-white/60">Over {effectiveYears} Year(s)</span>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-[#D4AF37]/20 border border-[#D4AF37]/40">
+                    <span className="text-[10px] text-[#FDE68A] block uppercase font-bold">Total Maturity Return</span>
+                    <strong className="text-sm sm:text-base font-mono text-[#FCD34D] block mt-0.5">
+                      ₹{maturityValueCalc.toLocaleString('en-IN')}
+                    </strong>
+                    <span className="text-[9px] text-white/70">Principal + Returns</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 5: Payout Bank Account Inputs */}
+          {activeStep === 5 && (
             <div className="space-y-4">
               <div className="pb-2 border-b border-[#F1F5F9]">
                 <h3 className="font-display font-bold text-sm text-[#0B1F3A] uppercase tracking-wider">
-                  04 Investor Payout Bank Account Inputs
+                  05 Investor Payout Bank Account Inputs
                 </h3>
                 <p className="text-xs text-[#64748B] mt-0.5">
                   Verified against Investor Name for monthly interest & maturity RTGS/NEFT transfers
@@ -756,13 +1131,35 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
                 Cancel
               </button>
 
-              {activeStep < 4 ? (
+              {activeStep < 5 ? (
                 <button
                   type="button"
                   onClick={() => {
-                    if (activeStep === 1 && !fullName.trim()) {
-                      alert('Please enter investor full name.');
-                      return;
+                    if (activeStep === 1) {
+                      if (!fullName.trim()) {
+                        alert('Please enter investor full name.');
+                        return;
+                      }
+                      if (!investmentAmount || Number(investmentAmount) <= 0) {
+                        alert('Please enter a valid investor investment amount.');
+                        return;
+                      }
+                    }
+                    if (activeStep === 3) {
+                      if (pan.trim().length !== 10) {
+                        alert('PAN must be exactly 10 characters.');
+                        return;
+                      }
+                    }
+                    if (activeStep === 4) {
+                      if (!investmentAmount || Number(investmentAmount) <= 0) {
+                        alert('Please enter a valid investment amount.');
+                        return;
+                      }
+                      if (!interestRate || Number(interestRate) <= 0) {
+                        alert('Please enter an agreed annual rate of interest.');
+                        return;
+                      }
                     }
                     setActiveStep((s) => (s + 1) as any);
                   }}

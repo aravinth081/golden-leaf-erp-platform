@@ -226,7 +226,7 @@ export const GoldLoanAppraisalModal: React.FC<GoldLoanAppraisalModalProps> = ({
   // Loan Scheme & Financials
   const [repaymentScheme, setRepaymentScheme] = useState<GoldRepaymentScheme>('Monthly Interest Servicing');
   const [tenureMonths, setTenureMonths] = useState<number>(12);
-  const [sanctionedAmount, setSanctionedAmount] = useState<number>(180000);
+  const [sanctionedAmount, setSanctionedAmount] = useState<number | string>(180000);
   const [interestRateAnnual, setInterestRateAnnual] = useState<number>(12.0); // 1% per month
   const [appraiserFee, setAppraiserFee] = useState<number>(500);
 
@@ -268,16 +268,18 @@ export const GoldLoanAppraisalModal: React.FC<GoldLoanAppraisalModalProps> = ({
     };
   }, [items, rateMaster.maxPermittedLtvPercent]);
 
+  const numSanctioned = typeof sanctionedAmount === 'number' ? sanctionedAmount : parseFloat(String(sanctionedAmount)) || 0;
+
   // Auto-sync default sanctioned amount when eligible changes
   React.useEffect(() => {
-    if (sanctionedAmount > appraisalTotals.maxEligible || sanctionedAmount === 0) {
+    if (numSanctioned > appraisalTotals.maxEligible || numSanctioned === 0) {
       setSanctionedAmount(appraisalTotals.maxEligible);
     }
   }, [appraisalTotals.maxEligible]);
 
   // Monthly interest amount
-  const monthlyInterest = Math.round((sanctionedAmount * (interestRateAnnual / 100)) / 12);
-  const netDisbursal = Math.max(0, sanctionedAmount - appraiserFee);
+  const monthlyInterest = Math.round((numSanctioned * (interestRateAnnual / 100)) / 12);
+  const netDisbursal = Math.max(0, numSanctioned - appraiserFee);
 
   // Add Item Row
   const handleAddItem = () => {
@@ -310,13 +312,19 @@ export const GoldLoanAppraisalModal: React.FC<GoldLoanAppraisalModalProps> = ({
   // Update Item Row with Auto Carat & Net Weight calculations
   const handleUpdateItem = (idx: number, field: keyof GoldAppraisalItem, value: any) => {
     const updated = [...items];
-    const current = { ...updated[idx], [field]: value };
+    const current = { ...updated[idx] };
 
     // Auto Net Weight Calculation: Gross - Stone
     if (field === 'grossWeightGrams' || field === 'stoneDeductionGrams') {
-      const gross = field === 'grossWeightGrams' ? parseFloat(value) || 0 : current.grossWeightGrams;
-      const stone = field === 'stoneDeductionGrams' ? parseFloat(value) || 0 : current.stoneDeductionGrams;
+      const numVal = parseFloat(value) || 0;
+      current[field] = numVal as any;
+      const gross = field === 'grossWeightGrams' ? numVal : Number(current.grossWeightGrams) || 0;
+      const stone = field === 'stoneDeductionGrams' ? numVal : Number(current.stoneDeductionGrams) || 0;
       current.netWeightGrams = Math.max(0, Math.round((gross - stone) * 1000) / 1000);
+    } else if (field === 'quantity') {
+      current.quantity = parseInt(value) || 1;
+    } else {
+      current[field] = value;
     }
 
     // Auto Carat Purity Adjustment: Carat rate formula
@@ -325,7 +333,9 @@ export const GoldLoanAppraisalModal: React.FC<GoldLoanAppraisalModalProps> = ({
     }
 
     // Auto Market Value: Net Wt * Rate/g
-    current.eligibleMarketValue = Math.round(current.netWeightGrams * current.ratePerGram);
+    const net = Number(current.netWeightGrams) || 0;
+    const rate = Number(current.ratePerGram) || 0;
+    current.eligibleMarketValue = Math.round(net * rate);
 
     updated[idx] = current;
     setItems(updated);
@@ -352,11 +362,11 @@ export const GoldLoanAppraisalModal: React.FC<GoldLoanAppraisalModalProps> = ({
       return;
     }
 
-    if (sanctionedAmount > appraisalTotals.maxEligible) {
+    if (numSanctioned > appraisalTotals.maxEligible || numSanctioned <= 0) {
       addToast({
         type: 'error',
         title: 'LTV Violation (Max 75% Limit)',
-        message: `Sanctioned amount ₹${sanctionedAmount.toLocaleString('en-IN')} cannot exceed max eligible limit ₹${appraisalTotals.maxEligible.toLocaleString('en-IN')}.`,
+        message: `Sanctioned amount ₹${numSanctioned.toLocaleString('en-IN')} cannot exceed max eligible limit ₹${appraisalTotals.maxEligible.toLocaleString('en-IN')}.`,
       });
       return;
     }
@@ -384,7 +394,7 @@ export const GoldLoanAppraisalModal: React.FC<GoldLoanAppraisalModalProps> = ({
       liveCustomerCounterPhotoUrl: customerCounterPhoto || undefined,
 
       maxEligibleLoanAmount: appraisalTotals.maxEligible,
-      sanctionedLoanAmount: sanctionedAmount,
+      sanctionedLoanAmount: numSanctioned,
       repaymentScheme,
       tenureMonths,
       interestRateAnnual,
@@ -641,7 +651,7 @@ export const GoldLoanAppraisalModal: React.FC<GoldLoanAppraisalModalProps> = ({
                           />
                         </td>
                         <td className="p-2 text-right font-mono font-extrabold text-emerald-800">
-                          {item.netWeightGrams.toFixed(3)}g
+                          {Number(item.netWeightGrams || 0).toFixed(3)}g
                         </td>
                         <td className="p-2 text-center">
                           <select
@@ -649,6 +659,7 @@ export const GoldLoanAppraisalModal: React.FC<GoldLoanAppraisalModalProps> = ({
                             onChange={(e) => handleUpdateItem(idx, 'caratPurity', e.target.value)}
                             className="p-1.5 bg-gray-50 border border-gray-200 rounded-lg font-bold text-xs"
                           >
+                            <option value="24K">24K</option>
                             <option value="22K">22K</option>
                             <option value="20K">20K</option>
                             <option value="18K">18K</option>
@@ -687,10 +698,10 @@ export const GoldLoanAppraisalModal: React.FC<GoldLoanAppraisalModalProps> = ({
                         TOTAL APPRAISED SUMMARY:
                       </td>
                       <td className="p-2.5 text-center font-mono">{appraisalTotals.totalQty} Pcs</td>
-                      <td className="p-2.5 text-right font-mono">{appraisalTotals.totalGross.toFixed(3)}g</td>
-                      <td className="p-2.5 text-right font-mono text-red-700">-{appraisalTotals.totalStone.toFixed(3)}g</td>
+                      <td className="p-2.5 text-right font-mono">{Number(appraisalTotals.totalGross || 0).toFixed(3)}g</td>
+                      <td className="p-2.5 text-right font-mono text-red-700">-{Number(appraisalTotals.totalStone || 0).toFixed(3)}g</td>
                       <td className="p-2.5 text-right font-mono text-emerald-900 text-sm">
-                        {appraisalTotals.totalNet.toFixed(3)}g
+                        {Number(appraisalTotals.totalNet || 0).toFixed(3)}g
                       </td>
                       <td className="p-2.5 text-center text-gray-500">MIX</td>
                       <td className="p-2.5 text-right text-[10px] text-gray-500 uppercase font-bold">MAX 75% LTV:</td>
@@ -970,7 +981,15 @@ export const GoldLoanAppraisalModal: React.FC<GoldLoanAppraisalModalProps> = ({
                       type="number"
                       max={appraisalTotals.maxEligible}
                       value={sanctionedAmount}
-                      onChange={(e) => setSanctionedAmount(parseFloat(e.target.value) || 0)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '') {
+                          setSanctionedAmount('');
+                        } else {
+                          const clean = val.replace(/^0+(?=\d)/, '');
+                          setSanctionedAmount(clean);
+                        }
+                      }}
                       className="w-full px-3 py-2 bg-emerald-50 border border-emerald-300 rounded-xl font-black text-emerald-900 text-sm"
                     />
                   </div>
@@ -1087,7 +1106,7 @@ export const GoldLoanAppraisalModal: React.FC<GoldLoanAppraisalModalProps> = ({
                   />
                   <div>
                     <strong className="block text-gray-900 text-[11px]">1. Credit Manager (Appraiser) Sign-Off</strong>
-                    <span className="text-[10px] text-gray-500">Confirmed weight, stone deduction & 18K-22K testing.</span>
+                    <span className="text-[10px] text-gray-500">Confirmed weight, stone deduction & 18K-24K testing.</span>
                   </div>
                 </label>
 

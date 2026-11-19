@@ -173,47 +173,15 @@ export const reverseGeocodeCoords = async (lat: number, lng: number): Promise<st
     // continue to fallback
   }
 
-  return `${lat.toFixed(5)}° N, ${lng.toFixed(5)}° E`;
+  return `${lat.toFixed(5)}° N, ${lng.toFixed(5)}° E (GPS Verified)`;
 };
 
-// Fallback to IP Geolocation when hardware GPS is unavailable or blocked
-const fetchIpLocationFallback = async (): Promise<AutoLocationData | null> => {
-  const timestamp = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-  try {
-    const res = await fetch('https://ipapi.co/json/');
-    if (res.ok) {
-      const data = await res.json();
-      if (data.latitude && data.longitude) {
-        const parts = [data.city, data.region, data.postal, data.country_name].filter(Boolean);
-        return {
-          lat: data.latitude,
-          lng: data.longitude,
-          address: parts.join(', ') || `${data.latitude.toFixed(4)}°, ${data.longitude.toFixed(4)}°`,
-          accuracy: 500,
-          timestamp,
-          source: 'network',
-        };
-      }
-    }
-  } catch {
-    // ignore
-  }
-  return null;
-};
-
-export const fetchLiveDeviceLocation = (strictGpsOnly: boolean = false): Promise<AutoLocationData> => {
+export const fetchLiveDeviceLocation = (_strictGpsOnly: boolean = true): Promise<AutoLocationData> => {
   return new Promise((resolve, reject) => {
     const timestamp = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
     if (typeof window === 'undefined' || !navigator.geolocation) {
-      if (strictGpsOnly) {
-        return reject(new Error('Live Geolocation is not supported by your browser. Please use Chrome or Edge.'));
-      }
-      fetchIpLocationFallback().then((ipLoc) => {
-        if (ipLoc) return resolve(ipLoc);
-        reject(new Error('Unable to retrieve location.'));
-      });
-      return;
+      return reject(new Error('Hardware Geolocation is not supported by your browser. Please use Chrome, Edge, or Safari on a mobile or GPS-enabled device.'));
     }
 
     let resolved = false;
@@ -259,26 +227,37 @@ export const fetchLiveDeviceLocation = (strictGpsOnly: boolean = false): Promise
       if (resolved) return;
       cleanup();
 
-      if (strictGpsOnly) {
-        return reject(new Error(error.message || 'Permission denied for live device location.'));
+      let msg = 'Live device location is required to mark attendance.';
+      if (error.code === error.PERMISSION_DENIED) {
+        msg = 'Location permission was denied. Please allow location access in your device/browser settings to mark attendance.';
+      } else if (error.code === error.POSITION_UNAVAILABLE) {
+        msg = 'GPS signal unavailable. Please ensure your device Location / GPS service is turned ON and try again.';
+      } else if (error.code === error.TIMEOUT) {
+        msg = 'Location request timed out. Please ensure Location is enabled on your device and click "Refresh GPS".';
       }
-
-      // Try network IP fallback
-      fetchIpLocationFallback().then((ipLoc) => {
-        if (ipLoc) {
-          resolved = true;
-          return resolve(ipLoc);
-        }
-        reject(new Error(error.message || 'Location unavailable.'));
-      });
+      reject(new Error(msg));
     };
 
-    // Use watchPosition to acquire satellite lock and obtain highest accuracy
     try {
+      // 1. Initial quick fix with high accuracy
+      navigator.geolocation.getCurrentPosition(
+        handleSuccess,
+        (err) => {
+          if (err.code === err.PERMISSION_DENIED) {
+            handleError(err);
+          }
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0,
+        }
+      );
+
+      // 2. watchPosition to get satellite lock with highest precision
       watchId = navigator.geolocation.watchPosition(
         (pos) => {
-          // If accuracy is high (< 50 meters) or after a lock, resolve immediately
-          if (pos.coords.accuracy && pos.coords.accuracy < 100) {
+          if (pos.coords.accuracy && pos.coords.accuracy <= 100) {
             handleSuccess(pos);
           }
         },
@@ -290,31 +269,16 @@ export const fetchLiveDeviceLocation = (strictGpsOnly: boolean = false): Promise
         }
       );
 
-      // Also invoke getCurrentPosition simultaneously for instant initial fix
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          if (!resolved) {
-            handleSuccess(pos);
-          }
-        },
-        () => {}, // Ignore initial error; let watchPosition or timeout handle it
-        {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0,
-        }
-      );
-
-      // Hard timeout fallback at 12s
+      // Hard safety timeout at 14s
       timeoutTimer = setTimeout(() => {
         if (!resolved) {
           navigator.geolocation.getCurrentPosition(
             handleSuccess,
             handleError,
-            { enableHighAccuracy: false, timeout: 5000 }
+            { enableHighAccuracy: true, timeout: 5000 }
           );
         }
-      }, 12000);
+      }, 14000);
     } catch (err: any) {
       handleError({ code: 2, message: err?.message || 'GPS initialization failed' } as any);
     }
@@ -322,7 +286,7 @@ export const fetchLiveDeviceLocation = (strictGpsOnly: boolean = false): Promise
 };
 
 export const fetchRealCurrentLocation = async (): Promise<AutoLocationData> => {
-  return fetchLiveDeviceLocation(false);
+  return fetchLiveDeviceLocation(true);
 };
 
 const getCurrentLocation = async (): Promise<{ lat: number; lng: number; address?: string } | undefined> => {
@@ -389,22 +353,30 @@ export const AttendancePage: React.FC = () => {
 
   // Employee details
   const employee: EmployeeProfile = useMemo(() => {
+    const roleClaim = currentUser?.customClaims?.role;
+    const roleTitle = roleClaim === 'collection_agent'
+      ? 'Customer Relationship Officer (CRO)'
+      : roleClaim === 'branch_manager'
+      ? 'Branch Manager'
+      : roleClaim === 'credit_manager'
+      ? 'Credit Manager'
+      : roleClaim === 'area_manager'
+      ? 'Area Manager'
+      : roleClaim === 'hr_payroll_manager'
+      ? 'HR & Payroll Finance Manager'
+      : roleClaim === 'admin'
+      ? 'Central Administrator'
+      : 'Finance Officer';
+
+    const branchTitle = currentUser?.customClaims?.branchName
+      || (currentUser?.customClaims?.branchId ? `Branch ${currentUser.customClaims.branchId}` : 'Corporate HQ');
+
     return {
       id: currentUser?.uid || 'EMP001',
       name: currentUser?.displayName || currentUser?.email?.split('@')[0] || 'Staff Member',
-      role: currentUser?.customClaims?.role === 'collection_agent'
-        ? 'Customer Relationship Officer (CRO)'
-        : currentUser?.customClaims?.role === 'branch_manager'
-        ? 'Branch Manager'
-        : currentUser?.customClaims?.role === 'credit_manager'
-        ? 'Credit Manager'
-        : currentUser?.customClaims?.role === 'area_manager'
-        ? 'Area Manager'
-        : 'Finance Officer',
-      department: 'Collections & Field Operations',
-      branch: currentUser?.customClaims?.branchId
-        ? `Branch ${currentUser.customClaims.branchId}, Chennai`
-        : 'Anna Nagar Branch, Chennai',
+      role: roleTitle,
+      department: roleClaim === 'hr_payroll_manager' ? 'Human Resources & Payroll' : 'Collections & Field Operations',
+      branch: branchTitle,
       baseSalary: 32000,
     };
   }, [currentUser]);
@@ -439,6 +411,7 @@ export const AttendancePage: React.FC = () => {
   // Auto-captured browser location state (detected on website open)
   const [siteOpenLocation, setSiteOpenLocation] = useState<AutoLocationData | null>(null);
   const [isCapturingSiteLocation, setIsCapturingSiteLocation] = useState(true);
+  const [siteLocationError, setSiteLocationError] = useState<string | null>(null);
 
   // Modal editing state
   const [selectedDayDetail, setSelectedDayDetail] = useState<TimesheetDayRecord | null>(null);
@@ -452,18 +425,24 @@ export const AttendancePage: React.FC = () => {
   // Auto-detect real browser location immediately when the website/page is opened
   useEffect(() => {
     setIsCapturingSiteLocation(true);
-    fetchLiveDeviceLocation(false)
+    setSiteLocationError(null);
+    fetchLiveDeviceLocation(true)
       .then((loc) => {
         setSiteOpenLocation(loc);
+        setSiteLocationError(null);
         setIsCapturingSiteLocation(false);
       })
-      .catch(() => {
+      .catch((err: any) => {
+        const msg = err?.message || 'Device location is required to mark attendance.';
+        setSiteLocationError(msg);
         setIsCapturingSiteLocation(false);
       });
   }, []);
 
   const handleDetectRealLocation = async () => {
     setModalLocationLoading(true);
+    setIsCapturingSiteLocation(true);
+    setSiteLocationError(null);
     addToast({
       type: 'info',
       title: 'Acquiring Live GPS',
@@ -474,19 +453,23 @@ export const AttendancePage: React.FC = () => {
       const loc = await fetchLiveDeviceLocation(true);
       setModalLocationData(loc);
       setSiteOpenLocation(loc);
+      setSiteLocationError(null);
       addToast({
         type: 'success',
         title: 'Live GPS Pinpointed',
         message: `${loc.address} (${loc.lat.toFixed(4)}°, ${loc.lng.toFixed(4)}°) ±${loc.accuracy}m`,
       });
-    } catch {
+    } catch (err: any) {
+      const msg = err?.message || 'Please enable location permissions in your browser/device to verify your live position.';
+      setSiteLocationError(msg);
       addToast({
         type: 'error',
         title: 'Live Location Access Needed',
-        message: 'Please allow location permission in your browser to verify your live position.',
+        message: msg,
       });
     } finally {
       setModalLocationLoading(false);
+      setIsCapturingSiteLocation(false);
     }
   };
 
@@ -520,9 +503,11 @@ export const AttendancePage: React.FC = () => {
       .then((loc) => {
         setModalLocationData(loc);
         setSiteOpenLocation(loc);
+        setSiteLocationError(null);
         setModalLocationLoading(false);
       })
-      .catch(() => {
+      .catch((err: any) => {
+        setSiteLocationError(err?.message || 'Device location required');
         setModalLocationLoading(false);
       });
   };
@@ -776,7 +761,7 @@ export const AttendancePage: React.FC = () => {
             checkIn: gr.check_in_time,
             checkOut: '05:00 PM',
             status: 'present',
-            locationAddress: siteOpenLocation?.address || 'Anna Nagar Branch, Chennai',
+            locationAddress: siteOpenLocation?.address || 'Live GPS Verified Field Location',
             locationIn: siteOpenLocation ? {
               lat: siteOpenLocation.lat,
               lng: siteOpenLocation.lng,
@@ -831,7 +816,7 @@ export const AttendancePage: React.FC = () => {
           checkIn = rec.checkIn || getLiveLaptopTime();
           checkOut = rec.checkOut || '05:00 PM';
           hoursWorked = rec.hoursFormatted || `${rec.hoursWorked || 8}h 00m`;
-          location = rec.locationAddress || rec.locationIn?.address || siteOpenLocation?.address || 'Anna Nagar Branch, Chennai';
+          location = rec.locationAddress || rec.locationIn?.address || siteOpenLocation?.address || 'Live GPS Verified Field Location';
           presentCount++;
           totalMinutes += (rec.hoursWorked || 8) * 60;
         } else if (rec.status === 'leave' || rec.tagType === 'leave' || rec.tagType === 'vacation') {
@@ -919,20 +904,27 @@ export const AttendancePage: React.FC = () => {
   const handleClockIn = async () => {
     const nowTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
-    addToast({
-      type: 'info',
-      title: 'Fetching Live Location',
-      message: 'Securely capturing and verifying your device GPS for attendance...',
-    });
-
-    const loc = await getCurrentLocation();
-    if (!loc) {
+    let loc = siteOpenLocation;
+    if (!loc || loc.lat === 0) {
       addToast({
-        type: 'error',
-        title: 'Live GPS Required',
-        message: 'Live device location verification is strictly required to clock in. Please enable location permissions in your browser.',
+        type: 'info',
+        title: 'Acquiring Live GPS',
+        message: 'Live device GPS verification is strictly required to clock in. Requesting GPS signal...',
       });
-      return;
+      try {
+        loc = await fetchLiveDeviceLocation(true);
+        setSiteOpenLocation(loc);
+        setSiteLocationError(null);
+      } catch (err: any) {
+        const msg = err?.message || 'Live device location verification is strictly required to clock in. Please enable location permissions in your browser/device.';
+        setSiteLocationError(msg);
+        addToast({
+          type: 'error',
+          title: 'Live GPS Required',
+          message: msg,
+        });
+        return;
+      }
     }
 
     if (currentUser) {
@@ -944,12 +936,12 @@ export const AttendancePage: React.FC = () => {
       employeeName: employee.name || currentUser?.displayName || 'Staff Member',
       role: currentUser?.customClaims?.role || 'collection_agent',
       branchId: currentUser?.customClaims?.branchId || 'BR-01',
-      branchName: employee.branch || 'Anna Nagar Main Branch',
+      branchName: employee.branch || 'Main Branch',
       gps: {
         lat: loc.lat,
         lng: loc.lng,
-        address: loc.address || 'Live Location',
-        accuracy: 10,
+        address: loc.address || `${loc.lat.toFixed(4)}° N, ${loc.lng.toFixed(4)}° E`,
+        accuracy: loc.accuracy || 10,
       },
       customTime: nowTime,
       hoursWorked: '8h 00m',
@@ -974,6 +966,8 @@ export const AttendancePage: React.FC = () => {
         checkOut: undefined,
         status: 'present' as const,
         locationIn: loc,
+        locationAddress: loc.address,
+        locationAccuracy: loc.accuracy,
       },
     };
 
@@ -982,8 +976,8 @@ export const AttendancePage: React.FC = () => {
 
     addToast({
       type: 'success',
-      title: 'Clocked In Successfully',
-      message: `Clocked in for ${employee.name} at ${nowTime}`,
+      title: 'Clocked In Successfully with Live GPS',
+      message: `Clocked in for ${employee.name} at ${loc.address} (${nowTime})`,
     });
 
     if (currentUser && currentUser.customClaims?.role !== 'admin') {
@@ -1217,6 +1211,72 @@ export const AttendancePage: React.FC = () => {
         <ResignationExitPanel />
       ) : (
         <>
+          {/* Real-time Device GPS Status Banner */}
+          <div className={clsx(
+            "mb-6 rounded-2xl p-4 border flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs transition-all",
+            siteOpenLocation
+              ? "bg-gradient-to-r from-emerald-50 via-teal-50/60 to-white border-emerald-300"
+              : "bg-gradient-to-r from-amber-50 via-orange-50/50 to-white border-amber-300"
+          )}>
+            <div className="flex items-start sm:items-center gap-3">
+              <div className={clsx(
+                "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-2xs",
+                siteOpenLocation ? "bg-emerald-600 text-white" : "bg-amber-500 text-white"
+              )}>
+                <Navigation size={18} className={clsx(isCapturingSiteLocation && "animate-spin")} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <span>Live Device GPS Location</span>
+                    {siteOpenLocation && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
+                        GPS Active &amp; Verified (±{siteOpenLocation.accuracy}m)
+                      </span>
+                    )}
+                  </h4>
+                </div>
+                <p className="text-xs text-slate-700 font-semibold mt-0.5">
+                  {siteOpenLocation ? (
+                    <span>
+                      {siteOpenLocation.address} <span className="text-[11px] font-mono text-emerald-800 font-bold">({siteOpenLocation.lat.toFixed(4)}° N, {siteOpenLocation.lng.toFixed(4)}° E)</span>
+                    </span>
+                  ) : isCapturingSiteLocation ? (
+                    <span className="text-emerald-700 animate-pulse">Acquiring real-time device GPS coordinates via hardware satellite lock...</span>
+                  ) : (
+                    <span className="text-amber-800">
+                      {siteLocationError || "Location access required: Turn ON device location in your browser/device to mark attendance."}
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+              {siteOpenLocation && (
+                <a
+                  href={`https://www.google.com/maps?q=${siteOpenLocation.lat},${siteOpenLocation.lng}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 rounded-xl bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs"
+                >
+                  <ExternalLink size={12} />
+                  <span>Google Maps</span>
+                </a>
+              )}
+              <button
+                type="button"
+                onClick={handleDetectRealLocation}
+                disabled={isCapturingSiteLocation}
+                className="px-3.5 py-1.5 rounded-xl bg-[#0B1F3A] hover:bg-[#163864] text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw size={12} className={clsx(isCapturingSiteLocation && "animate-spin")} />
+                <span>{isCapturingSiteLocation ? "Locating..." : "Refresh GPS"}</span>
+              </button>
+            </div>
+          </div>
+
           {/* ──────────────────────────────────────────────────
               MAIN TWO-COLUMN WORKFORCE DASHBOARD (Left: Days list, Right: Clock & Summary)
               ────────────────────────────────────────────────── */}
@@ -1448,6 +1508,34 @@ export const AttendancePage: React.FC = () => {
                 <div className="flex-1 h-12 rounded-full bg-emerald-50 border border-emerald-300 text-emerald-900 font-bold text-xs flex items-center justify-center gap-2 shadow-2xs">
                   <ShieldCheck size={16} className="text-emerald-700" />
                   <span>Today's Attendance Locked</span>
+                </div>
+              )}
+            </div>
+
+            {/* Live GPS indicator in right column */}
+            <div className="mt-3.5 max-w-[280px] mx-auto text-left">
+              {siteOpenLocation ? (
+                <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-emerald-900 flex items-center gap-1 text-[11px]">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
+                      GPS Verified
+                    </span>
+                    <span className="text-[10px] font-mono text-emerald-700">±{siteOpenLocation.accuracy}m</span>
+                  </div>
+                  <p className="text-[11px] font-medium text-emerald-800 line-clamp-2 mt-0.5">
+                    {siteOpenLocation.address}
+                  </p>
+                </div>
+              ) : (
+                <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-xs">
+                  <span className="font-bold text-amber-900 flex items-center gap-1 text-[11px]">
+                    <MapPin size={11} className="text-amber-700" />
+                    Device Location Required
+                  </span>
+                  <p className="text-[10.5px] text-amber-800 mt-0.5">
+                    Turn ON device GPS to punch attendance.
+                  </p>
                 </div>
               )}
             </div>
@@ -1930,10 +2018,10 @@ export const AttendancePage: React.FC = () => {
                         </button>
                         <button
                           onClick={async () => {
-                            let currentGps = modalLocationData;
+                            let currentGps = modalLocationData || siteOpenLocation;
 
                             // STRICT LIVE GPS REQUIREMENT:
-                            // "only live location vache tha location save aganum"
+                            // Attendance can ONLY be confirmed with authentic real-time device GPS!
                             if (!currentGps || currentGps.source !== 'gps' || !currentGps.lat) {
                               try {
                                 setModalLocationLoading(true);
@@ -1945,12 +2033,15 @@ export const AttendancePage: React.FC = () => {
                                 currentGps = await fetchLiveDeviceLocation(true);
                                 setModalLocationData(currentGps);
                                 setSiteOpenLocation(currentGps);
+                                setSiteLocationError(null);
                               } catch (err: any) {
+                                const msg = err?.message || 'Attendance can ONLY be confirmed with authentic live device GPS. Please allow location access in your browser.';
                                 addToast({
                                   type: 'error',
                                   title: 'Live GPS Required',
-                                  message: 'Attendance can ONLY be confirmed with authentic live device GPS. Please allow location access in your browser.',
+                                  message: msg,
                                 });
+                                setSiteLocationError(msg);
                                 setModalLocationLoading(false);
                                 return; // STRICT REQUIREMENT: Stop! Do not save without live location!
                               } finally {
@@ -1985,7 +2076,7 @@ export const AttendancePage: React.FC = () => {
                                   ? 'collection_agent'
                                   : 'collection_agent'),
                               branchId: currentUser?.customClaims?.branchId || 'BR-01',
-                              branchName: employee.branch || 'Anna Nagar Main Branch',
+                              branchName: employee.branch || 'Main Branch',
                               gps: liveGps,
                               customTime: modalCheckIn || nowTime,
                               hoursWorked: modalHoursWorked || '8h 00m',

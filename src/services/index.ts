@@ -18,3 +18,5 @@ export * as leaveService from './leaveService';
 export * from './leaveService';
 export * as eodService from './eodService';
 export * from './eodService';
+export * as pincodeService from './pincodeService';
+export * from './pincodeService';

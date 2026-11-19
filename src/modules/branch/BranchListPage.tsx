@@ -19,6 +19,10 @@ import {
   getStoredBranches, createNewBranch, updateExistingBranch,
   toggleBranchStatus, type DetailedBranch
 } from '../../services/branchService';
+import {
+  getPincodeDetailsSync,
+  fetchPincodeDetails
+} from '../../services/pincodeService';
 import { useUIStore } from '../../store';
 import { PageHeader } from '../../components/ui';
 
@@ -64,13 +68,15 @@ export const BranchListPage: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingBranch, setEditingBranch] = useState<DetailedBranch | null>(null);
   const [branchToToggle, setBranchToToggle] = useState<DetailedBranch | null>(null);
+  const [isLoadingPincode, setIsLoadingPincode] = useState(false);
+  const [cityOptions, setCityOptions] = useState<string[]>([]);
 
   // Form State
   const [formData, setFormData] = useState({
     name: '',
     code: '',
     address: '',
-    city: 'Chennai',
+    city: '',
     state: 'Tamil Nadu',
     pincode: '',
     phone: '',
@@ -105,13 +111,15 @@ export const BranchListPage: React.FC = () => {
   // Open Add Branch Modal
   const handleOpenAddModal = () => {
     setEditingBranch(null);
+    setCityOptions([]);
+    setIsLoadingPincode(false);
     const currentList = getStoredBranches();
     const nextCode = `GL-BR-00${currentList.length + 1}`;
     setFormData({
       name: '',
       code: nextCode,
       address: '',
-      city: 'Chennai',
+      city: '',
       state: 'Tamil Nadu',
       pincode: '',
       phone: '',
@@ -134,6 +142,8 @@ export const BranchListPage: React.FC = () => {
   // Open Edit Branch Modal
   const handleOpenEditModal = (branch: DetailedBranch) => {
     setEditingBranch(branch);
+    setCityOptions(branch.city ? [branch.city] : []);
+    setIsLoadingPincode(false);
     setFormData({
       name: branch.name,
       code: branch.code,
@@ -149,6 +159,50 @@ export const BranchListPage: React.FC = () => {
       status: branch.status,
     });
     setShowAddModal(true);
+  };
+
+  // Automatic Pincode -> City & State resolution
+  const handlePincodeChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawVal = e.target.value;
+    const cleanPin = rawVal.replace(/\D/g, '').slice(0, 6);
+
+    // Update pincode field immediately
+    setFormData((prev) => ({ ...prev, pincode: cleanPin }));
+
+    if (cleanPin.length === 6) {
+      // 1. Instant local lookup (0ms response)
+      const local = getPincodeDetailsSync(cleanPin);
+      if (local) {
+        setFormData((prev) => ({
+          ...prev,
+          city: local.city,
+          state: local.state || prev.state,
+        }));
+        if (local.options && local.options.length > 0) {
+          setCityOptions(local.options);
+        }
+      }
+
+      // 2. Authoritative live India Post API (asynchronous)
+      setIsLoadingPincode(true);
+      try {
+        const details = await fetchPincodeDetails(cleanPin);
+        if (details && details.city) {
+          setFormData((prev) => ({
+            ...prev,
+            city: details.city,
+            state: details.state || prev.state,
+          }));
+          if (details.options && details.options.length > 0) {
+            setCityOptions(details.options);
+          }
+        }
+      } catch (err) {
+        // Silently preserve local lookup if network is unavailable
+      } finally {
+        setIsLoadingPincode(false);
+      }
+    }
   };
 
   // Save Branch (Create or Update with Duplicate Prevention)
@@ -687,10 +741,19 @@ export const BranchListPage: React.FC = () => {
                     <input
                       type="text"
                       required
+                      list="branch-city-list"
                       value={formData.city}
                       onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                      placeholder="e.g. Chennai"
                       className="w-full px-3.5 py-2.5 rounded-xl border border-[#E2E8F0] focus:outline-none focus:border-[#D4AF37] text-xs min-h-[40px]"
                     />
+                    {cityOptions.length > 0 && (
+                      <datalist id="branch-city-list">
+                        {cityOptions.map((opt) => (
+                          <option key={opt} value={opt} />
+                        ))}
+                      </datalist>
+                    )}
                   </div>
 
                   <div>
@@ -700,17 +763,26 @@ export const BranchListPage: React.FC = () => {
                       required
                       value={formData.state}
                       onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                      placeholder="e.g. Tamil Nadu"
                       className="w-full px-3.5 py-2.5 rounded-xl border border-[#E2E8F0] focus:outline-none focus:border-[#D4AF37] text-xs min-h-[40px]"
                     />
                   </div>
 
                   <div>
-                    <label className="block font-semibold text-[#0B1F3A] uppercase mb-1">Pincode *</label>
+                    <label className="block font-semibold text-[#0B1F3A] uppercase mb-1 flex items-center justify-between">
+                      <span>Pincode *</span>
+                      {isLoadingPincode && (
+                        <span className="text-[10px] text-[#D4AF37] font-normal lowercase tracking-normal animate-pulse">
+                          searching city...
+                        </span>
+                      )}
+                    </label>
                     <input
                       type="text"
                       required
+                      maxLength={6}
                       value={formData.pincode}
-                      onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
+                      onChange={handlePincodeChange}
                       placeholder="600001"
                       className="w-full px-3.5 py-2.5 rounded-xl border border-[#E2E8F0] focus:outline-none focus:border-[#D4AF37] text-xs min-h-[40px]"
                     />

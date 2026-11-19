@@ -3,7 +3,7 @@
 // Production-Ready • Appraisal & Vault Register • CRO 3-Field Referral
 // ──────────────────────────────────────────────────
 
-export type GoldCaratPurity = '18K' | '20K' | '22K';
+export type GoldCaratPurity = '18K' | '20K' | '22K' | '24K';
 
 export type GoldOrnamentType =
   | 'Chain'

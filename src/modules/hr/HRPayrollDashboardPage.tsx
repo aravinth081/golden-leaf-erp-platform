@@ -292,6 +292,25 @@ export const HRPayrollDashboardPage: React.FC = () => {
   const handleSaveDocVault = (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !vaultForm.employeeId) return;
+
+    // Validate PAN & Aadhaar formats
+    if (vaultForm.panNumber && vaultForm.panNumber.length !== 10) {
+      addToast({
+        type: 'error',
+        title: 'Invalid PAN Number',
+        message: 'PAN Number must be exactly 10 alphanumeric characters (e.g. ABCDE1234F).',
+      });
+      return;
+    }
+    if (vaultForm.aadhaarNumber && vaultForm.aadhaarNumber.length !== 12) {
+      addToast({
+        type: 'error',
+        title: 'Invalid Aadhaar Number',
+        message: 'Aadhaar Number must be exactly 12 numeric digits.',
+      });
+      return;
+    }
+
     try {
       saveEmployeeDocVault(
         vaultForm.employeeId,
@@ -1063,9 +1082,9 @@ export const HRPayrollDashboardPage: React.FC = () => {
                   const vault = docVaults[first.id] || getEmployeeDocVault(first.id);
                   setVaultForm({
                     employeeId: first.id,
-                    panNumber: vault?.panNumber || '',
+                    panNumber: (vault?.panNumber || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10),
                     panVerified: vault?.panVerified || false,
-                    aadhaarNumber: vault?.aadhaarNumber || '',
+                    aadhaarNumber: (vault?.aadhaarNumber || '').replace(/\D/g, '').slice(0, 12),
                     aadhaarVerified: vault?.aadhaarVerified || false,
                     bgvStatus: vault?.bgvStatus || 'pending',
                     employmentType: vault?.employmentType || 'full_time',
@@ -1209,9 +1228,9 @@ export const HRPayrollDashboardPage: React.FC = () => {
                               onClick={() => {
                                 setVaultForm({
                                   employeeId: emp.id,
-                                  panNumber: vault?.panNumber || '',
+                                  panNumber: (vault?.panNumber || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10),
                                   panVerified: vault?.panVerified || false,
-                                  aadhaarNumber: vault?.aadhaarNumber || '',
+                                  aadhaarNumber: (vault?.aadhaarNumber || '').replace(/\D/g, '').slice(0, 12),
                                   aadhaarVerified: vault?.aadhaarVerified || false,
                                   bgvStatus: bgv,
                                   employmentType: empType,
@@ -2725,9 +2744,9 @@ export const HRPayrollDashboardPage: React.FC = () => {
                         const vault = docVaults[selectedId] || getEmployeeDocVault(selectedId);
                         setVaultForm({
                           employeeId: selectedId,
-                          panNumber: vault?.panNumber || '',
+                          panNumber: (vault?.panNumber || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10),
                           panVerified: vault?.panVerified || false,
-                          aadhaarNumber: vault?.aadhaarNumber || '',
+                          aadhaarNumber: (vault?.aadhaarNumber || '').replace(/\D/g, '').slice(0, 12),
                           aadhaarVerified: vault?.aadhaarVerified || false,
                           bgvStatus: vault?.bgvStatus || 'pending',
                           employmentType: vault?.employmentType || 'full_time',
@@ -2806,13 +2825,22 @@ export const HRPayrollDashboardPage: React.FC = () => {
                   <div className="font-bold text-slate-800 text-[11px]">Government ID Documents</div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block font-medium text-slate-600 mb-1">PAN Number</label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block font-medium text-slate-600">PAN Number (10 Chars)</label>
+                        <span className={`text-[10px] font-mono ${vaultForm.panNumber.length === 10 ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>
+                          {vaultForm.panNumber.length}/10
+                        </span>
+                      </div>
                       <input
                         type="text"
+                        maxLength={10}
                         placeholder="ABCDE1234F"
                         value={vaultForm.panNumber}
-                        onChange={(e) => setVaultForm({ ...vaultForm, panNumber: e.target.value.toUpperCase() })}
-                        className="w-full px-3 py-1.5 rounded-lg border border-slate-200 uppercase font-mono bg-white"
+                        onChange={(e) => {
+                          const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
+                          setVaultForm({ ...vaultForm, panNumber: val });
+                        }}
+                        className="w-full px-3 py-1.5 rounded-lg border border-slate-200 uppercase font-mono bg-white focus:border-[#D4AF37] outline-none"
                       />
                       <label className="inline-flex items-center gap-1.5 mt-1 text-[10px] text-slate-600 cursor-pointer">
                         <input
@@ -2826,13 +2854,23 @@ export const HRPayrollDashboardPage: React.FC = () => {
                     </div>
 
                     <div>
-                      <label className="block font-medium text-slate-600 mb-1">Aadhaar Number</label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block font-medium text-slate-600">Aadhaar Number (12 Digits)</label>
+                        <span className={`text-[10px] font-mono ${vaultForm.aadhaarNumber.length === 12 ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>
+                          {vaultForm.aadhaarNumber.length}/12
+                        </span>
+                      </div>
                       <input
                         type="text"
+                        maxLength={12}
+                        inputMode="numeric"
                         placeholder="12-digit Aadhaar"
                         value={vaultForm.aadhaarNumber}
-                        onChange={(e) => setVaultForm({ ...vaultForm, aadhaarNumber: e.target.value })}
-                        className="w-full px-3 py-1.5 rounded-lg border border-slate-200 font-mono bg-white"
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/\D/g, '').slice(0, 12);
+                          setVaultForm({ ...vaultForm, aadhaarNumber: val });
+                        }}
+                        className="w-full px-3 py-1.5 rounded-lg border border-slate-200 font-mono bg-white focus:border-[#D4AF37] outline-none"
                       />
                       <label className="inline-flex items-center gap-1.5 mt-1 text-[10px] text-slate-600 cursor-pointer">
                         <input

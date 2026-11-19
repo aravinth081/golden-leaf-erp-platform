@@ -368,6 +368,8 @@ export const ReportViewPage: React.FC<ReportViewPageProps> = ({ type: propType }
         b.name.toLowerCase().includes(q) ||
         b.city.toLowerCase().includes(q) ||
         b.manager.toLowerCase().includes(q) ||
+        b.totalFDValue.toString().includes(q) ||
+        b.totalCustomers.toString().includes(q) ||
         b.status.toLowerCase().includes(q)
     );
   }, [branchRows, q]);
@@ -677,7 +679,8 @@ export const ReportViewPage: React.FC<ReportViewPageProps> = ({ type: propType }
       case 'branch': {
         const totalCount = branchRows.length;
         const totalStaff = branchRows.reduce((a, b) => a + b.totalEmployees, 0);
-        const branchCustomersCount = getCustomerReport(effectiveBranchId).length;
+        const totalCustomers = branchRows.reduce((a, b) => a + (b.totalCustomers || 0), 0);
+        const totalFDPortfolio = branchRows.reduce((a, b) => a + (b.totalFDValue || 0), 0);
         const currentBranch = activeBranch || (branchRows[0] ? {
           name: branchRows[0].name,
           code: branchRows[0].code,
@@ -695,23 +698,23 @@ export const ReportViewPage: React.FC<ReportViewPageProps> = ({ type: propType }
               color: 'blue',
             },
             {
-              label: 'Total Employees',
+              label: 'Total Staff',
               val: totalStaff.toString(),
               sub: totalStaff > 0 ? 'Stationed workforce' : 'No staff assigned',
               icon: Users,
               color: 'emerald',
             },
             {
-              label: 'Branch Borrowers',
-              val: branchCustomersCount.toString(),
-              sub: 'Registered in this branch',
+              label: 'Total Customers',
+              val: totalCustomers.toString(),
+              sub: 'Registered branch customers',
               icon: UserCheck,
               color: 'amber',
             },
             {
-              label: 'Branch Status',
-              val: currentBranch?.status ? currentBranch.status.charAt(0).toUpperCase() + currentBranch.status.slice(1) : 'Active',
-              sub: 'Full operations verified',
+              label: 'Total FD Portfolio',
+              val: fmt(totalFDPortfolio),
+              sub: 'Active branch deposits',
               icon: ShieldCheck,
               color: 'gold',
             },
@@ -727,22 +730,22 @@ export const ReportViewPage: React.FC<ReportViewPageProps> = ({ type: propType }
             color: 'blue',
           },
           {
-            label: 'Total Employees',
+            label: 'Total Staff',
             val: totalStaff.toString(),
             sub: totalStaff > 0 ? 'Consolidated workforce' : 'No staff assigned',
             icon: Users,
             color: 'emerald',
           },
           {
-            label: 'Total Borrowers',
-            val: branchCustomersCount.toString(),
+            label: 'Total Customers',
+            val: totalCustomers.toString(),
             sub: 'Across registered branches',
             icon: UserCheck,
             color: 'amber',
           },
           {
-            label: 'Operational Status',
-            val: 'Active Network',
+            label: 'Total FD Portfolio',
+            val: fmt(totalFDPortfolio),
             sub: `${totalCount} verified branch locations`,
             icon: ShieldCheck,
             color: 'gold',
@@ -970,16 +973,36 @@ export const ReportViewPage: React.FC<ReportViewPageProps> = ({ type: propType }
         break;
 
       case 'branch': {
-        headers = ['Branch Code', 'Branch Name', 'City', 'Manager', 'Total Employees', 'Status'];
+        headers = [
+          'Branch Code',
+          'Branch Name',
+          'City',
+          'Manager',
+          'Total Staff',
+          'Total Customers',
+          'FD Value',
+          'Status',
+        ];
         rows = branchRows.map((b) => [
           b.code,
           b.name,
           b.city,
           b.manager,
           b.totalEmployees.toString(),
+          (b.totalCustomers || 0).toString(),
+          fmt(b.totalFDValue || 0),
           b.status,
         ]);
-        summaryItems = [{ label: 'Total Branches', value: branchRows.length.toString() }];
+        const totalBranches = branchRows.length;
+        const totalStaff = branchRows.reduce((a, b) => a + b.totalEmployees, 0);
+        const totalCust = branchRows.reduce((a, b) => a + (b.totalCustomers || 0), 0);
+        const totalFD = branchRows.reduce((a, b) => a + (b.totalFDValue || 0), 0);
+        summaryItems = [
+          { label: 'Total Branches', value: totalBranches.toString() },
+          { label: 'Total Staff', value: totalStaff.toString() },
+          { label: 'Total Customers', value: totalCust.toString() },
+          { label: 'Total FD Portfolio', value: fmt(totalFD) },
+        ];
         break;
       }
     }
@@ -1946,12 +1969,14 @@ export const ReportViewPage: React.FC<ReportViewPageProps> = ({ type: propType }
                 <table className="w-full text-left text-xs border-collapse min-w-[1080px] font-sans">
                   <thead>
                     <tr className="border-b border-[#E2E8F0] bg-slate-50/80 text-slate-600 font-bold text-[11px] uppercase tracking-wider select-none">
-                      <th className="py-3.5 px-5 text-left whitespace-nowrap min-w-[140px]">Branch Code</th>
-                      <th className="py-3.5 px-5 text-left whitespace-nowrap min-w-[220px]">Branch Name</th>
-                      <th className="py-3.5 px-4 text-left whitespace-nowrap min-w-[160px]">City</th>
-                      <th className="py-3.5 px-5 text-left whitespace-nowrap min-w-[220px]">Manager</th>
-                      <th className="py-3.5 px-4 text-center whitespace-nowrap min-w-[140px]">Total Staff</th>
-                      <th className="py-3.5 px-4 text-center whitespace-nowrap min-w-[120px]">Status</th>
+                      <th className="py-3.5 px-5 text-left whitespace-nowrap min-w-[130px]">Branch Code</th>
+                      <th className="py-3.5 px-5 text-left whitespace-nowrap min-w-[200px]">Branch Name</th>
+                      <th className="py-3.5 px-4 text-left whitespace-nowrap min-w-[140px]">City</th>
+                      <th className="py-3.5 px-5 text-left whitespace-nowrap min-w-[200px]">Manager</th>
+                      <th className="py-3.5 px-4 text-center whitespace-nowrap min-w-[120px]">Total Staff</th>
+                      <th className="py-3.5 px-4 text-center whitespace-nowrap min-w-[130px]">Total Customers</th>
+                      <th className="py-3.5 px-5 text-right whitespace-nowrap min-w-[150px]">FD Value (Rs.)</th>
+                      <th className="py-3.5 px-4 text-center whitespace-nowrap min-w-[110px]">Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#F1F5F9]">
@@ -1962,30 +1987,40 @@ export const ReportViewPage: React.FC<ReportViewPageProps> = ({ type: propType }
                           idx % 2 === 1 ? 'bg-slate-50/30' : 'bg-white'
                         }`}
                       >
-                        <td className="py-3.5 px-5 text-left whitespace-nowrap min-w-[140px]">
+                        <td className="py-3.5 px-5 text-left whitespace-nowrap min-w-[130px]">
                           <span className="font-mono font-bold text-[#D4AF37] text-xs bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
                             {b.code}
                           </span>
                         </td>
-                        <td className="py-3.5 px-5 text-left whitespace-nowrap min-w-[220px]">
+                        <td className="py-3.5 px-5 text-left whitespace-nowrap min-w-[200px]">
                           <div className="flex items-center gap-2 font-bold text-[#0B1F3A] text-xs">
                             <Building2 size={14} className="text-[#D4AF37]" />
                             <span>{b.name}</span>
                           </div>
                         </td>
-                        <td className="py-3.5 px-4 text-left whitespace-nowrap min-w-[160px]">
+                        <td className="py-3.5 px-4 text-left whitespace-nowrap min-w-[140px]">
                           <span className="font-semibold text-slate-700">{b.city}</span>
                         </td>
-                        <td className="py-3.5 px-5 text-left whitespace-nowrap min-w-[220px]">
+                        <td className="py-3.5 px-5 text-left whitespace-nowrap min-w-[200px]">
                           <div className="flex items-center gap-2.5">
                             <Avatar name={b.manager} size="sm" className="shrink-0 ring-1 ring-slate-200/80 shadow-2xs" />
                             <span className="font-bold text-[#0B1F3A] text-xs">{b.manager}</span>
                           </div>
                         </td>
-                        <td className="py-3.5 px-4 text-center whitespace-nowrap min-w-[140px]">
+                        <td className="py-3.5 px-4 text-center whitespace-nowrap min-w-[120px]">
                           <span className="font-manrope font-bold text-xs text-[#0B1F3A]">{b.totalEmployees}</span>
                         </td>
-                        <td className="py-3.5 px-4 text-center whitespace-nowrap min-w-[120px]">
+                        <td className="py-3.5 px-4 text-center whitespace-nowrap min-w-[130px]">
+                          <span className="font-manrope font-bold text-xs text-[#0B1F3A] bg-blue-50 px-2.5 py-1 rounded-full border border-blue-100">
+                            {b.totalCustomers || 0}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-5 text-right whitespace-nowrap min-w-[150px]">
+                          <span className="font-mono font-bold text-xs text-[#0B1F3A]">
+                            {fmt(b.totalFDValue || 0)}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-center whitespace-nowrap min-w-[110px]">
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 capitalize">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
                             <span>{b.status}</span>

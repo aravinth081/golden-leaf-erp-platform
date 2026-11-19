@@ -44,19 +44,15 @@ export const ResignationApplicationModal: React.FC<ResignationApplicationModalPr
   const designation = designationMap[userRole] || 'Customer Relationship Officer (CRO)';
 
   // Form State
-  const [category, setCategory] = useState<ResignationCategory>('STANDARD_NOTICE');
   const [reason, setReason] = useState('');
-  const [emergencyMedicalRefNo, setEmergencyMedicalRefNo] = useState('');
-  const [emergencyHospitalDetails, setEmergencyHospitalDetails] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Role Notice Requirement
   const noticeDaysRequired = resignationService.getNoticeDaysForRole(userRole);
   const todayStr = new Date().toISOString().slice(0, 10);
   const calculatedLWD = useMemo(() => {
-    if (category === 'IMMEDIATE_EMERGENCY') return todayStr;
     return resignationService.calculateEstimatedLastWorkingDay(todayStr, noticeDaysRequired);
-  }, [category, todayStr, noticeDaysRequired]);
+  }, [todayStr, noticeDaysRequired]);
 
   if (!isOpen) return null;
 
@@ -72,15 +68,6 @@ export const ResignationApplicationModal: React.FC<ResignationApplicationModalPr
       return;
     }
 
-    if (category === 'IMMEDIATE_EMERGENCY' && (!emergencyMedicalRefNo.trim() || !emergencyHospitalDetails.trim())) {
-      addToast({
-        type: 'error',
-        title: 'Emergency Proof Required',
-        message: 'Immediate Relieving requires verified Hospital Discharge Summary details and Medical Reference Number.',
-      });
-      return;
-    }
-
     setIsSubmitting(true);
     try {
       resignationService.submitResignation({
@@ -91,17 +78,14 @@ export const ResignationApplicationModal: React.FC<ResignationApplicationModalPr
         branchId,
         branchName,
         dateOfJoining,
-        category,
+        category: 'STANDARD_NOTICE',
         reason: reason.trim(),
-        emergencyMedicalRefNo: category === 'IMMEDIATE_EMERGENCY' ? emergencyMedicalRefNo.trim() : undefined,
-        emergencyHospitalDetails: category === 'IMMEDIATE_EMERGENCY' ? emergencyHospitalDetails.trim() : undefined,
-        emergencyProofDocUrl: category === 'IMMEDIATE_EMERGENCY' ? `https://docs.goldenleaf.internal/medical/${emergencyMedicalRefNo}.pdf` : undefined,
       });
 
       addToast({
         type: 'success',
         title: 'Resignation Initiated',
-        message: 'Resignation submitted successfully. Forwarded to Branch Manager for Stage 1 Portfolio Reassignment.',
+        message: 'Standard resignation submitted successfully. Forwarded to Branch Manager for Stage 1 Portfolio Reassignment.',
       });
 
       onSuccess();
@@ -164,58 +148,33 @@ export const ResignationApplicationModal: React.FC<ResignationApplicationModalPr
               </div>
             </div>
 
-            {/* Relieving Category Selection */}
+            {/* Relieving Category: Standard Relieving Only */}
             <div className="space-y-1.5">
               <label className="block text-xs font-bold text-slate-700">
-                Relieving Category <span className="text-red-500">*</span>
+                Relieving Category
               </label>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setCategory('STANDARD_NOTICE')}
-                  className={`p-3 rounded-2xl border text-left transition-all flex flex-col justify-between ${
-                    category === 'STANDARD_NOTICE'
-                      ? 'border-[#0B1F3A] bg-blue-50/50 shadow-xs ring-1 ring-[#0B1F3A]'
-                      : 'border-slate-200 bg-white hover:bg-slate-50'
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-bold text-[#0B1F3A] text-xs">Standard Notice</span>
-                    <Clock size={15} className="text-blue-600" />
+              <div className="p-3.5 rounded-2xl border border-[#0B1F3A] bg-blue-50/40 shadow-2xs">
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-[#0B1F3A] text-xs">Standard Relieving</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                      Company Norm
+                    </span>
                   </div>
-                  <div className="text-[11px] text-slate-500 leading-tight">
-                    Serve required <strong>{noticeDaysRequired} Working Days</strong> per role norm.
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setCategory('IMMEDIATE_EMERGENCY')}
-                  className={`p-3 rounded-2xl border text-left transition-all flex flex-col justify-between ${
-                    category === 'IMMEDIATE_EMERGENCY'
-                      ? 'border-rose-600 bg-rose-50/50 shadow-xs ring-1 ring-rose-600'
-                      : 'border-slate-200 bg-white hover:bg-slate-50'
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-bold text-rose-900 text-xs">Immediate Relieving</span>
-                    <HeartPulse size={15} className="text-rose-600" />
-                  </div>
-                  <div className="text-[11px] text-rose-800 leading-tight">
-                    Accident or serious medical issue with verified hospital discharge proof.
-                  </div>
-                </button>
+                  <Clock size={16} className="text-blue-600" />
+                </div>
+                <div className="text-[11px] text-slate-600 leading-relaxed">
+                  Serve required <strong>{noticeDaysRequired} Working Days</strong> per Golden Leaf employment guidelines. Handover schedule and final relieving terms will be verified and coordinated with HR Management.
+                </div>
               </div>
             </div>
 
             {/* Notice Period & Estimated LWD Banner */}
             <div className="p-3.5 rounded-xl bg-amber-50/80 border border-amber-200 flex items-center justify-between text-xs">
               <div>
-                <div className="text-[10px] font-bold uppercase text-amber-900">Notice Requirement</div>
+                <div className="text-[10px] font-bold uppercase text-amber-900">Standard Notice Requirement</div>
                 <div className="font-extrabold text-[#0B1F3A]">
-                  {category === 'IMMEDIATE_EMERGENCY'
-                    ? 'Medical Waiver Requested'
-                    : `${noticeDaysRequired} Working Days (${userRole === 'branch_manager' ? 'BM 90 Days' : userRole === 'credit_manager' ? 'CM 60 Days' : 'CRO 30 Days'})`}
+                  {noticeDaysRequired} Working Days ({userRole === 'branch_manager' ? 'BM 90 Days' : userRole === 'credit_manager' ? 'CM 60 Days' : 'CRO 30 Days'})
                 </div>
               </div>
               <div className="text-right">
@@ -223,49 +182,6 @@ export const ResignationApplicationModal: React.FC<ResignationApplicationModalPr
                 <div className="font-extrabold text-emerald-800 font-mono text-sm">{calculatedLWD}</div>
               </div>
             </div>
-
-            {/* If Immediate Relieving: Medical Proof Fields */}
-            {category === 'IMMEDIATE_EMERGENCY' && (
-              <div className="p-3.5 rounded-2xl bg-rose-50/60 border border-rose-200 space-y-3">
-                <div className="font-bold text-rose-950 flex items-center gap-1.5 text-xs">
-                  <HeartPulse size={15} className="text-rose-600" />
-                  <span>Section 8.5 Medical Reference Details (Mandatory)</span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-bold text-rose-900 mb-1">
-                      Medical Reference No. <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={emergencyMedicalRefNo}
-                      onChange={(e) => setEmergencyMedicalRefNo(e.target.value)}
-                      placeholder="e.g. MED-REF-4091"
-                      className="w-full px-3 py-2 rounded-xl border border-rose-300 text-xs font-mono focus:outline-none focus:border-rose-600"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-rose-900 mb-1">
-                      Hospital / Doctor Details <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={emergencyHospitalDetails}
-                      onChange={(e) => setEmergencyHospitalDetails(e.target.value)}
-                      placeholder="e.g. Apollo Hospital, Ortho Ward #4"
-                      className="w-full px-3 py-2 rounded-xl border border-rose-300 text-xs focus:outline-none focus:border-rose-600"
-                    />
-                  </div>
-                </div>
-
-                <div className="text-[10px] text-rose-700 italic">
-                  Note: Verified Hospital Discharge Summary must be attached for HR Stage 2 approval.
-                </div>
-              </div>
-            )}
 
             {/* Reason for Resignation */}
             <div>

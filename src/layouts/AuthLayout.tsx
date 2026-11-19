@@ -6,7 +6,53 @@
 import React from 'react';
 import { Outlet } from 'react-router-dom';
 import { motion } from 'framer-motion';
-const goldenLeafLogo = '/logo-icon.png';
+import { GOLDEN_LEAF_LOGO_DATA_URL } from '../utils/logoDataUrl';
+const goldenLeafLogo = GOLDEN_LEAF_LOGO_DATA_URL || '/logo-icon.png';
+
+const AuthBrandLogo: React.FC<{ sizeClass: string; isMobile?: boolean }> = ({ sizeClass, isMobile }) => {
+  const [imgSrc, setImgSrc] = React.useState<string>(GOLDEN_LEAF_LOGO_DATA_URL || '/logo-icon.png');
+  const [failed, setFailed] = React.useState(false);
+
+  if (failed) {
+    return (
+      <svg viewBox="0 0 100 100" className={`${sizeClass} object-contain p-1`} fill="none" aria-label="Golden Leaf Logo">
+        <circle cx="50" cy="50" r="46" fill="url(#glf-gold-bg)" stroke="#8C6808" strokeWidth="2.5" />
+        <path d="M50 14 C28 35 24 68 50 84 C76 68 72 35 50 14 Z" fill="url(#glf-leaf-grad)" />
+        <path d="M50 20 L50 80 M50 36 L36 28 M50 48 L64 38 M50 60 L36 50 M50 72 L62 62" stroke="#684A04" strokeWidth="2.5" strokeLinecap="round" />
+        <defs>
+          <linearGradient id="glf-gold-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#FFF9E6" />
+            <stop offset="100%" stopColor="#F5E4B3" />
+          </linearGradient>
+          <linearGradient id="glf-leaf-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#FFF2A3" />
+            <stop offset="40%" stopColor="#E5C158" />
+            <stop offset="80%" stopColor="#D4AF37" />
+            <stop offset="100%" stopColor="#8C6207" />
+          </linearGradient>
+        </defs>
+      </svg>
+    );
+  }
+
+  return (
+    <img
+      src={imgSrc}
+      alt="Golden Leaf Logo"
+      width={isMobile ? 96 : 160}
+      height={isMobile ? 96 : 160}
+      fetchPriority="high"
+      className={`${sizeClass} object-contain rounded-[22px] transform group-hover:scale-105 transition-transform duration-400`}
+      onError={() => {
+        if (imgSrc !== GOLDEN_LEAF_LOGO_DATA_URL && GOLDEN_LEAF_LOGO_DATA_URL) {
+          setImgSrc(GOLDEN_LEAF_LOGO_DATA_URL);
+        } else {
+          setFailed(true);
+        }
+      }}
+    />
+  );
+};
 
 export const AuthLayout: React.FC = () => {
   // Completely lock mobile screen so window cannot be scrolled down to reveal empty space
@@ -128,23 +174,7 @@ export const AuthLayout: React.FC = () => {
               <div className="relative w-full h-full p-[2.5px] rounded-[28px] bg-gradient-to-b from-[#F7E7A9] via-[#D4AF37] to-[#8C6207] shadow-[0_16px_36px_-6px_rgba(180,140,40,0.35)] flex items-center justify-center">
                 {/* Clean Inner Base matching White Carrara Marble */}
                 <div className="w-full h-full rounded-[25px] overflow-hidden bg-white shadow-inner flex items-center justify-center p-1">
-                  <picture>
-                    <source srcSet="/logo-icon-320.webp" type="image/webp" />
-                    <img
-                      src="/logo-icon-320.webp"
-                      alt="Golden Leaf Emblem"
-                      width={160}
-                      height={160}
-                      fetchPriority="high"
-                      className="w-full h-full object-contain rounded-[22px] transform group-hover:scale-105 transition-transform duration-400"
-                      onError={(e) => {
-                        const target = e.currentTarget;
-                        if (!target.src.includes('logo-icon.png')) {
-                          target.src = '/logo-icon.png';
-                        }
-                      }}
-                    />
-                  </picture>
+                  <AuthBrandLogo sizeClass="w-full h-full" />
                 </div>
               </div>
             </motion.div>
@@ -309,23 +339,7 @@ export const AuthLayout: React.FC = () => {
             <div className="relative w-[96px] h-[96px] mb-3 flex items-center justify-center">
               {/* Soft ambient golden glow behind the emblem */}
               <div className="absolute inset-0 bg-[#D4AF37]/25 rounded-[26px] blur-md -z-10" />
-              <picture>
-                <source srcSet="/logo-icon-192.webp" type="image/webp" />
-                <img
-                  src="/logo-icon-192.webp"
-                  alt="Golden Leaf Finance"
-                  width={96}
-                  height={96}
-                  fetchPriority="high"
-                  className="w-full h-full object-contain rounded-[24px] drop-shadow-[0_10px_24px_rgba(212,175,55,0.35)]"
-                  onError={(e) => {
-                    const target = e.currentTarget;
-                    if (!target.src.includes('logo-icon.png')) {
-                      target.src = '/logo-icon.png';
-                    }
-                  }}
-                />
-              </picture>
+              <AuthBrandLogo sizeClass="w-full h-full drop-shadow-[0_10px_24px_rgba(212,175,55,0.35)]" isMobile />
             </div>
             <h1 className="font-serif font-black text-[25px] text-[#0F1F38] uppercase tracking-[0.08em] leading-tight drop-shadow-2xs">
               Golden Leaf

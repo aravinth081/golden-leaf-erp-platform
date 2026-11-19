@@ -83,7 +83,7 @@ export const LeaveODPanel: React.FC = () => {
   // State
   const [records, setRecords] = useState<LeaveODRequest[]>([]);
   const [activeTab, setActiveTab] = useState<'my_requests' | 'approvals'>(
-    isAdmin || isHR ? 'approvals' : 'my_requests'
+    isAdmin ? 'approvals' : 'my_requests'
   );
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
@@ -128,15 +128,16 @@ export const LeaveODPanel: React.FC = () => {
 
   // Current employee identity
   const employeeId = useMemo(() => {
+    if (user?.employeeId) return user.employeeId;
     if (userRole === 'collection_agent') return 'EMP-004';
     if (userRole === 'branch_manager') return 'EMP-002';
     if (userRole === 'credit_manager') return 'EMP-010';
     return user?.uid || 'EMP-001';
-  }, [userRole, user?.uid]);
+  }, [userRole, user?.uid, user?.employeeId]);
 
   const employeeName = useMemo(() => {
     if (user?.displayName && user.displayName.trim().toLowerCase() !== 'agent') {
-      return user.displayName;
+      return user.displayName.trim();
     }
     return user?.email?.split('@')[0] || 'Authorized Staff';
   }, [user?.displayName, user?.email]);
@@ -145,8 +146,10 @@ export const LeaveODPanel: React.FC = () => {
     if (userRole === 'collection_agent') return 'Customer Relationship Officer (CRO)';
     if (userRole === 'branch_manager') return 'Branch Manager';
     if (userRole === 'credit_manager') return 'Credit Manager';
+    if (userRole === 'hr_payroll_manager' || isHR) return 'HR & Payroll Manager';
+    if (userRole === 'admin' || isAdmin) return 'System Admin';
     return 'Staff Official';
-  }, [userRole]);
+  }, [userRole, isHR, isAdmin]);
 
   const branchId = user?.customClaims?.branchId || 'BR-01';
   const branchName = 'Main Branch - Anna Nagar';
@@ -158,52 +161,65 @@ export const LeaveODPanel: React.FC = () => {
   const myRequests = useMemo(() => {
     return records.filter((r) => {
       // Show user's own requests
-      const isOwner = r.employeeId === employeeId || r.employeeName.toLowerCase() === employeeName.toLowerCase();
+      const isOwner =
+        (employeeId && r.employeeId && r.employeeId.toLowerCase() === employeeId.toLowerCase()) ||
+        (employeeName && r.employeeName && r.employeeName.toLowerCase().trim() === employeeName.toLowerCase().trim()) ||
+        (user?.displayName && r.employeeName && r.employeeName.toLowerCase().includes(user.displayName.toLowerCase().trim()));
       if (!isOwner) return false;
       if (statusFilter !== 'all' && r.status !== statusFilter) return false;
       if (categoryFilter !== 'all' && r.category !== categoryFilter) return false;
       return true;
     });
-  }, [records, employeeId, employeeName, statusFilter, categoryFilter]);
+  }, [records, employeeId, employeeName, user?.displayName, statusFilter, categoryFilter]);
 
   // Filtered "Pending Approvals" for Managers & Admin & HR
   const pendingApprovals = useMemo(() => {
     return records.filter((r) => {
-      if (isAdmin || isHR) {
-        // Admin and HR & Payroll Manager can approve all requests company-wide
+      // 1. STRICT ANTI SELF-APPROVAL: An applicant can NEVER approve their own application!
+      const isSelf =
+        (employeeId && r.employeeId && r.employeeId.toLowerCase() === employeeId.toLowerCase()) ||
+        (employeeName && r.employeeName && r.employeeName.toLowerCase().trim() === employeeName.toLowerCase().trim()) ||
+        (user?.displayName && r.employeeName && r.employeeName.toLowerCase().includes(user.displayName.toLowerCase().trim()));
+      if (isSelf) return false;
+
+      // 2. Admin can review & approve ALL requests company-wide (Branch Manager, HR, and Staff)
+      if (isAdmin) {
         if (statusFilter === 'all') return r.status === 'PENDING_ADMIN' || r.status === 'PENDING_BRANCH_MANAGER';
         return r.status === statusFilter;
       }
+
+      // 3. HR can only approve subordinate branch staff (CRO, Credit Manager, etc.)
+      // HR CANNOT approve their own requests, other HR, or Branch Manager (which require Admin!)
+      if (isHR) {
+        if (r.status !== 'PENDING_BRANCH_MANAGER') return false;
+        if (r.role === 'branch_manager' || r.role === 'hr_payroll_manager' || r.role === 'admin') return false;
+        if (statusFilter !== 'all' && r.status !== statusFilter) return false;
+        if (categoryFilter !== 'all' && r.category !== categoryFilter) return false;
+        return true;
+      }
+
+      // 4. Branch Manager can only approve CRO & Credit Manager in their branch
       if (isBranchManager) {
-        // Branch Manager approves CRO & Credit Manager requests in their branch
+        if (r.status !== 'PENDING_BRANCH_MANAGER') return false;
         const isEligibleRole = r.role === 'collection_agent' || r.role === 'credit_manager';
         if (!isEligibleRole) return false;
         // Check branch match
-        const isSameBranch = r.branchId === branchId || r.branchName.includes('Anna Nagar');
+        const isSameBranch =
+          r.branchId === branchId ||
+          r.branchName.toLowerCase().includes(branchName.toLowerCase()) ||
+          branchName.toLowerCase().includes(r.branchName.toLowerCase());
         if (!isSameBranch) return false;
-        if (statusFilter === 'all') return r.status === 'PENDING_BRANCH_MANAGER';
-        return r.status === statusFilter;
+        if (statusFilter !== 'all' && r.status !== statusFilter) return false;
+        if (categoryFilter !== 'all' && r.category !== categoryFilter) return false;
+        return true;
       }
+
       return false;
     });
-  }, [records, isAdmin, isHR, isBranchManager, branchId, statusFilter]);
+  }, [records, isAdmin, isHR, isBranchManager, branchId, branchName, employeeId, employeeName, user?.displayName, statusFilter, categoryFilter]);
 
-  // Pending count badge
-  const pendingCount = useMemo(() => {
-    if (isAdmin || isHR) {
-      return records.filter(
-        (r) => r.status === 'PENDING_ADMIN' || r.status === 'PENDING_BRANCH_MANAGER'
-      ).length;
-    }
-    if (isBranchManager) {
-      return records.filter(
-        (r) =>
-          (r.role === 'collection_agent' || r.role === 'credit_manager') &&
-          r.status === 'PENDING_BRANCH_MANAGER'
-      ).length;
-    }
-    return 0;
-  }, [records, isAdmin, isHR, isBranchManager]);
+  // Pending count badge (strictly reflects eligible requests minus self)
+  const pendingCount = useMemo(() => pendingApprovals.length, [pendingApprovals]);
 
   // Duration calculation
   const calculatedDuration = useMemo(() => {
@@ -280,11 +296,23 @@ export const LeaveODPanel: React.FC = () => {
         emergencyContact: emergencyContact.trim() || undefined,
       });
 
+      const isRequiresAdminApproval =
+        userRole === 'branch_manager' ||
+        userRole === 'hr_payroll_manager' ||
+        isHR ||
+        isBranchManager ||
+        (roleTitle && (
+          roleTitle.toLowerCase().includes('manager') ||
+          roleTitle.toLowerCase().includes('hr') ||
+          roleTitle.toLowerCase().includes('head')
+        )) ||
+        (employeeName && employeeName.toLowerCase().includes('vinayagam'));
+
       addToast({
         type: 'success',
         title: `${category === 'LEAVE' ? 'Leave' : 'On-Duty'} Application Submitted`,
-        message: isBranchManager
-          ? 'Application forwarded to Head Office Admin for permission.'
+        message: isRequiresAdminApproval
+          ? 'Application forwarded to Head Office Admin for authorization.'
           : 'Application forwarded to Branch Manager for confirmation.',
       });
 
@@ -319,43 +347,52 @@ export const LeaveODPanel: React.FC = () => {
     if (!actionModal.request) return;
 
     const approverName = employeeName;
-    const approverRoleTitle = roleTitle;
+    const approverRoleTitle = isAdmin ? 'Admin' : isHR ? 'HR Manager' : 'Branch Manager';
 
-    if (actionModal.type === 'APPROVE') {
-      approveLeaveODRequest(
-        actionModal.request.id,
-        approverName,
-        approverRoleTitle,
-        actionModal.remarks.trim() || 'Approved and authorized for duty schedule.'
-      );
-      addToast({
-        type: 'success',
-        title: 'Application Approved',
-        message: `${actionModal.request.employeeName}'s ${actionModal.request.category} request has been confirmed.`,
-      });
-    } else {
-      if (!actionModal.remarks.trim()) {
+    try {
+      if (actionModal.type === 'APPROVE') {
+        approveLeaveODRequest(
+          actionModal.request.id,
+          approverName,
+          approverRoleTitle,
+          actionModal.remarks.trim() || 'Approved and authorized for duty schedule.'
+        );
         addToast({
-          type: 'warning',
-          title: 'Rejection Reason Required',
-          message: 'Please provide comments stating why the request is rejected.',
+          type: 'success',
+          title: 'Application Approved',
+          message: `${actionModal.request.employeeName}'s ${actionModal.request.category} request has been confirmed.`,
         });
-        return;
+      } else {
+        if (!actionModal.remarks.trim()) {
+          addToast({
+            type: 'warning',
+            title: 'Rejection Reason Required',
+            message: 'Please provide comments stating why the request is rejected.',
+          });
+          return;
+        }
+        rejectLeaveODRequest(
+          actionModal.request.id,
+          approverName,
+          approverRoleTitle,
+          actionModal.remarks.trim()
+        );
+        addToast({
+          type: 'info',
+          title: 'Application Rejected',
+          message: `${actionModal.request.employeeName}'s ${actionModal.request.category} request was rejected.`,
+        });
       }
-      rejectLeaveODRequest(
-        actionModal.request.id,
-        approverName,
-        approverRoleTitle,
-        actionModal.remarks.trim()
-      );
+
+      setActionModal({ isOpen: false, type: 'APPROVE', request: null, remarks: '' });
+      loadData();
+    } catch (err: any) {
       addToast({
-        type: 'info',
-        title: 'Application Rejected',
-        message: `${actionModal.request.employeeName}'s ${actionModal.request.category} request was rejected.`,
+        type: 'error',
+        title: 'Action Prohibited',
+        message: err.message || 'Could not process approval.',
       });
     }
-
-    setActionModal({ isOpen: false, type: 'APPROVE', request: null, remarks: '' });
   };
 
   const handleCancelMyRequest = (requestId: string) => {
@@ -570,7 +607,7 @@ export const LeaveODPanel: React.FC = () => {
               </button>
             )}
 
-            {(isBranchManager || isAdmin) && (
+            {(isAdmin || isHR || isBranchManager) && (
               <button
                 onClick={() => setActiveTab('approvals')}
                 className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer relative ${
@@ -581,7 +618,11 @@ export const LeaveODPanel: React.FC = () => {
               >
                 <UserCheck size={14} />
                 <span>
-                  {isAdmin ? 'Branch Manager Approvals' : 'Branch Staff Approvals'}
+                  {isAdmin
+                    ? 'All Leave & OD Approvals'
+                    : isHR
+                    ? 'Staff Leave & OD Approvals'
+                    : 'Branch Staff Approvals'}
                 </span>
                 {pendingCount > 0 && (
                   <span className="px-2 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-extrabold animate-pulse">
@@ -863,20 +904,32 @@ export const LeaveODPanel: React.FC = () => {
                           {/* Approval Actions bar */}
                           {(req.status === 'PENDING_BRANCH_MANAGER' || req.status === 'PENDING_ADMIN') && (
                             <div className="pt-4 mt-3 border-t border-amber-200/60 flex flex-wrap sm:flex-nowrap items-center justify-end gap-2.5">
-                              <button
-                                onClick={() => handleOpenActionModal(req, 'REJECT')}
-                                className="w-full sm:w-auto px-4 py-2.5 min-h-[40px] rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-[0.98]"
-                              >
-                                <XCircle size={14} />
-                                <span>Reject Request</span>
-                              </button>
-                              <button
-                                onClick={() => handleOpenActionModal(req, 'APPROVE')}
-                                className="w-full sm:w-auto px-5 py-2.5 min-h-[40px] rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5 active:scale-[0.98]"
-                              >
-                                <Check size={14} strokeWidth={2.8} />
-                                <span>Approve &amp; Confirm</span>
-                              </button>
+                              {/* Strict safety guard: never render approval buttons on own application */}
+                              {((employeeId && req.employeeId && req.employeeId.toLowerCase() === employeeId.toLowerCase()) ||
+                                (employeeName && req.employeeName && req.employeeName.toLowerCase().trim() === employeeName.toLowerCase().trim()) ||
+                                (user?.displayName && req.employeeName && req.employeeName.toLowerCase().includes(user.displayName.toLowerCase().trim()))) ? (
+                                <span className="text-[11px] font-bold text-amber-800 bg-amber-100/90 px-3 py-1.5 rounded-xl border border-amber-300 flex items-center gap-1.5 shadow-2xs">
+                                  <Clock size={13} className="text-amber-700 animate-pulse" />
+                                  <span>Pending Admin Authorization (Self-Approval Restricted)</span>
+                                </span>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() => handleOpenActionModal(req, 'REJECT')}
+                                    className="w-full sm:w-auto px-4 py-2.5 min-h-[40px] rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-[0.98]"
+                                  >
+                                    <XCircle size={14} />
+                                    <span>Reject Request</span>
+                                  </button>
+                                  <button
+                                    onClick={() => handleOpenActionModal(req, 'APPROVE')}
+                                    className="w-full sm:w-auto px-5 py-2.5 min-h-[40px] rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5 active:scale-[0.98]"
+                                  >
+                                    <Check size={14} strokeWidth={2.8} />
+                                    <span>Approve &amp; Confirm</span>
+                                  </button>
+                                </>
+                              )}
                             </div>
                           )}
                         </div>

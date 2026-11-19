@@ -5,21 +5,34 @@
 
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Printer, ShieldCheck, Award, FileText } from 'lucide-react';
+import { X, Printer, ShieldCheck, Award, FileText, Sparkles } from 'lucide-react';
 import { type GoldLoanRecord } from '../../../../types/goldLoan.types';
 
 interface GoldLoanPawnTicketModalProps {
   isOpen: boolean;
   onClose: () => void;
   loan: GoldLoanRecord | null;
+  onProceedToDisburse?: (loan: GoldLoanRecord) => void;
 }
 
 export const GoldLoanPawnTicketModal: React.FC<GoldLoanPawnTicketModalProps> = ({
   isOpen,
   onClose,
   loan,
+  onProceedToDisburse,
 }) => {
   if (!isOpen || !loan) return null;
+
+  const safeLocation = loan.safeVaultLocation || {
+    safeNumber: 'SAFE-01',
+    rackCabinet: 'RACK-A',
+    traySlot: 'TRAY-01',
+  };
+  const dualSign = loan.dualCustodySignoff || {
+    isCreditManagerAppraised: false,
+    isBranchManagerVaultLocked: false,
+  };
+  const items = Array.isArray(loan.items) ? loan.items : [];
 
   const handlePrint = () => {
     window.print();
@@ -50,7 +63,20 @@ export const GoldLoanPawnTicketModal: React.FC<GoldLoanPawnTicketModalProps> = (
               </div>
             </div>
 
-            <div className="flex items-center gap-2 self-start sm:self-auto">
+            <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+              {onProceedToDisburse && (loan.status === 'VAULT_LOCKED_PENDING_UTR' || loan.status === 'APPRAISED_AWAITING_VAULT') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onProceedToDisburse(loan);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs transition-all min-h-[38px]"
+                >
+                  <Sparkles size={14} />
+                  <span>Move to Next Stage (Disburse)</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={handlePrint}
@@ -82,10 +108,10 @@ export const GoldLoanPawnTicketModal: React.FC<GoldLoanPawnTicketModalProps> = (
                     </h1>
                   </div>
                   <p className="text-[10px] font-bold text-gray-600 mt-0.5">
-                    Branch Office: {loan.branchName} | Official Gold Loan Pawn Ticket & Ornament Pledge Receipt
+                    Branch Office: {loan.branchName || 'Main Branch'} | Official Gold Loan Pawn Ticket & Ornament Pledge Receipt
                   </p>
                   <p className="text-[10px] text-gray-500">
-                    Reg. Office: Anna Nagar, Chennai | Custodian Vault Safe No: <strong>{loan.safeVaultLocation.safeNumber}</strong>
+                    Reg. Office: Anna Nagar, Chennai | Custodian Vault Safe No: <strong>{safeLocation.safeNumber}</strong>
                   </p>
                 </div>
                 <div className="text-right shrink-0 bg-amber-50 border border-amber-200 rounded-xl p-2.5">
@@ -119,7 +145,7 @@ export const GoldLoanPawnTicketModal: React.FC<GoldLoanPawnTicketModalProps> = (
               <div>
                 <span className="text-gray-500 block text-[9px] uppercase font-bold">Vault Slot Location</span>
                 <strong className="text-[#0B1F3A] font-mono">
-                  {loan.safeVaultLocation.safeNumber} / {loan.safeVaultLocation.rackCabinet} / {loan.safeVaultLocation.traySlot}
+                  {safeLocation.safeNumber} / {safeLocation.rackCabinet} / {safeLocation.traySlot}
                 </strong>
               </div>
             </div>
@@ -140,7 +166,7 @@ export const GoldLoanPawnTicketModal: React.FC<GoldLoanPawnTicketModalProps> = (
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {loan.items.map((item, idx) => (
+                  {items.map((item, idx) => (
                     <tr key={item.id} className="hover:bg-gray-50/50">
                       <td className="p-2.5 font-bold font-mono text-gray-500">{idx + 1}</td>
                       <td className="p-2.5 font-bold text-gray-900">
@@ -150,12 +176,12 @@ export const GoldLoanPawnTicketModal: React.FC<GoldLoanPawnTicketModalProps> = (
                         )}
                       </td>
                       <td className="p-2.5 text-center font-bold">{item.quantity}</td>
-                      <td className="p-2.5 text-right font-mono">{item.grossWeightGrams.toFixed(3)}g</td>
-                      <td className="p-2.5 text-right font-mono text-red-700">-{item.stoneDeductionGrams.toFixed(3)}g</td>
-                      <td className="p-2.5 text-right font-mono font-bold text-emerald-800">{item.netWeightGrams.toFixed(3)}g</td>
+                      <td className="p-2.5 text-right font-mono">{Number(item.grossWeightGrams || 0).toFixed(3)}g</td>
+                      <td className="p-2.5 text-right font-mono text-red-700">-{Number(item.stoneDeductionGrams || 0).toFixed(3)}g</td>
+                      <td className="p-2.5 text-right font-mono font-bold text-emerald-800">{Number(item.netWeightGrams || 0).toFixed(3)}g</td>
                       <td className="p-2.5 text-center font-bold">{item.caratPurity}</td>
                       <td className="p-2.5 text-right font-mono font-bold text-[#0B1F3A]">
-                        ₹{item.eligibleMarketValue.toLocaleString('en-IN')}.00
+                        ₹{Number(item.eligibleMarketValue || 0).toLocaleString('en-IN')}.00
                       </td>
                     </tr>
                   ))}
@@ -166,14 +192,14 @@ export const GoldLoanPawnTicketModal: React.FC<GoldLoanPawnTicketModalProps> = (
                       TOTAL ORNAMENTS IN SEALED PACKET:
                     </td>
                     <td className="p-2.5 text-center font-mono">{loan.totalQuantity} Pcs</td>
-                    <td className="p-2.5 text-right font-mono">{loan.totalGrossWeightGrams.toFixed(3)}g</td>
-                    <td className="p-2.5 text-right font-mono text-red-700">-{loan.totalStoneDeductionGrams.toFixed(3)}g</td>
+                    <td className="p-2.5 text-right font-mono">{Number(loan.totalGrossWeightGrams || 0).toFixed(3)}g</td>
+                    <td className="p-2.5 text-right font-mono text-red-700">-{Number(loan.totalStoneDeductionGrams || 0).toFixed(3)}g</td>
                     <td className="p-2.5 text-right font-mono text-emerald-900 text-sm">
-                      {loan.totalNetWeightGrams.toFixed(3)}g
+                      {Number(loan.totalNetWeightGrams || 0).toFixed(3)}g
                     </td>
                     <td className="p-2.5 text-center font-bold text-gray-600">LTV 75%</td>
                     <td className="p-2.5 text-right font-mono font-black text-emerald-950 text-sm">
-                      ₹{loan.totalAppraisedEligibleValue.toLocaleString('en-IN')}.00
+                      ₹{Number(loan.totalAppraisedEligibleValue || 0).toLocaleString('en-IN')}.00
                     </td>
                   </tr>
                 </tbody>
@@ -185,22 +211,22 @@ export const GoldLoanPawnTicketModal: React.FC<GoldLoanPawnTicketModalProps> = (
               <div>
                 <span className="text-[10px] uppercase font-bold text-gray-500 block">Sanctioned Loan Amount</span>
                 <strong className="text-emerald-900 text-sm font-black font-mono">
-                  ₹{loan.sanctionedLoanAmount.toLocaleString('en-IN')}.00
+                  ₹{Number(loan.sanctionedLoanAmount || 0).toLocaleString('en-IN')}.00
                 </strong>
               </div>
               <div>
                 <span className="text-[10px] uppercase font-bold text-gray-500 block">Repayment Scheme</span>
-                <strong className="text-[#0B1F3A] font-bold">{loan.repaymentScheme}</strong>
+                <strong className="text-[#0B1F3A] font-bold">{loan.repaymentScheme || 'Monthly Interest Servicing'}</strong>
               </div>
               <div>
                 <span className="text-[10px] uppercase font-bold text-gray-500 block">Interest Rate & Monthly Dues</span>
                 <strong className="text-blue-900 font-bold">
-                  {loan.interestRateAnnual}% p.a. (₹{loan.monthlyInterestAmount.toLocaleString('en-IN')}/mo)
+                  {Number(loan.interestRateAnnual || 12)}% p.a. (₹{Number(loan.monthlyInterestAmount || 0).toLocaleString('en-IN')}/mo)
                 </strong>
               </div>
               <div>
                 <span className="text-[10px] uppercase font-bold text-gray-500 block">Maturity Due Date</span>
-                <strong className="text-red-700 font-bold">{loan.maturityDate}</strong>
+                <strong className="text-red-700 font-bold">{loan.maturityDate || '-'}</strong>
               </div>
             </div>
 
@@ -270,7 +296,7 @@ export const GoldLoanPawnTicketModal: React.FC<GoldLoanPawnTicketModalProps> = (
                     PURITY VERIFIED
                   </span>
                 </div>
-                <strong className="text-blue-950 truncate">{loan.dualCustodySignoff.creditManagerName || 'Credit Manager'}</strong>
+                <strong className="text-blue-950 truncate">{dualSign.creditManagerName || 'Credit Manager'}</strong>
               </div>
 
               <div className="border-2 border-[#0B1F3A] rounded-xl p-3 h-28 flex flex-col justify-between bg-amber-50/40">
@@ -280,7 +306,7 @@ export const GoldLoanPawnTicketModal: React.FC<GoldLoanPawnTicketModalProps> = (
                     SEALED & VAULT LOCKED
                   </span>
                 </div>
-                <strong className="text-[#0B1F3A] truncate">{loan.dualCustodySignoff.branchManagerName || 'Branch Manager'}</strong>
+                <strong className="text-[#0B1F3A] truncate">{dualSign.branchManagerName || 'Branch Manager'}</strong>
               </div>
             </div>
           </div>

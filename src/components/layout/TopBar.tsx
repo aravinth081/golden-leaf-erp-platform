@@ -10,6 +10,7 @@ import {
   Building2, Clock, UserCog, Calendar
 } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
+import { GOLDEN_LEAF_LOGO_DATA_URL } from '../../utils/logoDataUrl';
 import { useAuthStore, useUIStore } from '../../store';
 import { Avatar } from '../ui/Avatar';
 import { ROLE_LABELS } from '../../types';
@@ -123,9 +124,15 @@ export const TopBar: React.FC = () => {
             <div className="w-[36px] h-[36px] p-[1.5px] rounded-[10px] bg-gradient-to-b from-[#F5D061] via-[#D4AF37] to-[#8C6808] flex-shrink-0 shadow-sm flex items-center justify-center">
               <div className="w-full h-full bg-white rounded-[8px] overflow-hidden flex items-center justify-center">
                 <img
-                  src="/logo-icon.png"
+                  src={GOLDEN_LEAF_LOGO_DATA_URL || '/logo-icon.png'}
                   alt="Golden Leaf"
                   className="w-full h-full object-cover"
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    if (target.src !== GOLDEN_LEAF_LOGO_DATA_URL && GOLDEN_LEAF_LOGO_DATA_URL) {
+                      target.src = GOLDEN_LEAF_LOGO_DATA_URL;
+                    }
+                  }}
                 />
               </div>
             </div>

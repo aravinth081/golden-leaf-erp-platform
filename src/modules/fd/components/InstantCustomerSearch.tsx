@@ -4,7 +4,7 @@
 // ──────────────────────────────────────────────────
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, UserCheck, ShieldCheck, ArrowRight, PlusCircle, X, Phone, Building } from 'lucide-react';
+import { Search, UserCheck, ShieldCheck, ArrowRight, PlusCircle, X, Phone, Building, UserPlus } from 'lucide-react';
 import type { Investor } from '../../../types/investor.types';
 import { searchInvestorsLocally } from '../../../services/investorService';
 import { formatINR } from '../../../utils/fdCalculations';
@@ -183,13 +183,27 @@ export const InstantCustomerSearch: React.FC<InstantCustomerSearchProps> = ({
               ))}
             </div>
           ) : (
-            <div className="py-8 text-center">
+            <div className="py-8 px-4 text-center">
               <p className="text-sm font-semibold text-[#64748B]">
                 No customer matching "<span className="text-[#0B1F3A]">{query}</span>"
               </p>
-              <p className="text-xs text-[#94A3B8] mt-1">
-                Please verify the 10-digit mobile number or customer name spelling.
+              <p className="text-xs text-[#94A3B8] mt-1 mb-3">
+                No need to register in the investor section! Create customer directly in FD.
               </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsOpen(false);
+                  onBookNewFD?.({
+                    id: 'new',
+                    fullName: isNaN(Number(query)) ? query : '',
+                    primaryMobile: !isNaN(Number(query)) ? query : '',
+                  } as any);
+                }}
+                className="px-4 py-2 rounded-xl bg-[#D4AF37] hover:bg-[#C9A227] text-white font-bold text-xs shadow-md transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                <UserPlus size={14} /> + Register New FD Customer Directly
+              </button>
             </div>
           )}
         </div>

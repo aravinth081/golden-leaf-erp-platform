@@ -46,7 +46,45 @@ class GoldLoanService {
       this.rateMaster = storedRate ? JSON.parse(storedRate) : DEFAULT_GOLD_RATE;
 
       const storedLoans = localStorage.getItem(LOANS_STORAGE_KEY);
-      this.loans = storedLoans ? JSON.parse(storedLoans) : [];
+      const rawLoans = storedLoans ? JSON.parse(storedLoans) : [];
+      this.loans = Array.isArray(rawLoans)
+        ? rawLoans.map((l: any) => {
+            const bothSigned =
+              Boolean(l.dualCustodySignoff?.isCreditManagerAppraised) &&
+              Boolean(l.dualCustodySignoff?.isBranchManagerVaultLocked);
+            const status = (l.status === 'APPRAISED_AWAITING_VAULT' && bothSigned)
+              ? 'VAULT_LOCKED_PENDING_UTR'
+              : l.status;
+
+            return {
+              ...l,
+              status,
+              totalQuantity: Number(l.totalQuantity) || 0,
+              totalGrossWeightGrams: Number(l.totalGrossWeightGrams) || 0,
+              totalStoneDeductionGrams: Number(l.totalStoneDeductionGrams) || 0,
+              totalNetWeightGrams: Number(l.totalNetWeightGrams) || 0,
+              totalAppraisedEligibleValue: Number(l.totalAppraisedEligibleValue) || 0,
+              maxEligibleLoanAmount: Number(l.maxEligibleLoanAmount) || 0,
+              sanctionedLoanAmount: Number(l.sanctionedLoanAmount) || 0,
+              items: Array.isArray(l.items)
+                ? l.items.map((i: any) => ({
+                    ...i,
+                    quantity: Number(i.quantity) || 1,
+                    grossWeightGrams: Number(i.grossWeightGrams) || 0,
+                    stoneDeductionGrams: Number(i.stoneDeductionGrams) || 0,
+                    netWeightGrams: Number(i.netWeightGrams) || 0,
+                    ratePerGram: Number(i.ratePerGram) || 0,
+                    eligibleMarketValue: Number(i.eligibleMarketValue) || 0,
+                  }))
+                : [],
+            };
+          })
+        : [];
+
+      // Heal corrupt localStorage entries immediately
+      if (storedLoans) {
+        localStorage.setItem(LOANS_STORAGE_KEY, JSON.stringify(this.loans));
+      }
 
       const storedRefs = localStorage.getItem(REFERRALS_STORAGE_KEY);
       this.referrals = storedRefs ? JSON.parse(storedRefs) : [];
@@ -140,6 +178,7 @@ class GoldLoanService {
   // Automatic Carat Rate Formula
   public getRateForPurity(purity: GoldCaratPurity): number {
     const rate22 = this.rateMaster.daily22KRatePerGram;
+    if (purity === '24K') return Math.round(rate22 * (24 / 22));
     if (purity === '22K') return rate22;
     if (purity === '20K') return Math.round(rate22 * (20 / 22));
     if (purity === '18K') return Math.round(rate22 * (18 / 22));
@@ -209,11 +248,17 @@ class GoldLoanService {
     const newId = `GLF-GL-${year}-${count.toString().padStart(4, '0')}`;
     const pktNo = data.tamperProofPacketSerialNo || `GLF-PKT-${year}-${(count + 400).toString().padStart(4, '0')}`;
 
+    const bothSigned =
+      Boolean(data.dualCustodySignoff?.isCreditManagerAppraised) &&
+      Boolean(data.dualCustodySignoff?.isBranchManagerVaultLocked);
+    const initialStatus: GoldLoanStatus =
+      data.status || (bothSigned ? 'VAULT_LOCKED_PENDING_UTR' : 'APPRAISED_AWAITING_VAULT');
+
     const newRecord: GoldLoanRecord = {
       id: newId,
       branchId: data.branchId || 'BR-01',
       branchName: data.branchName || 'Main Branch',
-      status: 'APPRAISED_AWAITING_VAULT',
+      status: initialStatus,
       createdAt: new Date().toLocaleString('en-IN'),
       updatedAt: new Date().toLocaleString('en-IN'),
 
@@ -229,18 +274,32 @@ class GoldLoanService {
       nomineeRelationship: data.nomineeRelationship || 'Spouse',
       legalOwnershipDeclared: data.legalOwnershipDeclared ?? true,
 
-      items: data.items || [],
-      totalQuantity: data.totalQuantity || 0,
-      totalGrossWeightGrams: data.totalGrossWeightGrams || 0,
-      totalStoneDeductionGrams: data.totalStoneDeductionGrams || 0,
-      totalNetWeightGrams: data.totalNetWeightGrams || 0,
-      totalAppraisedEligibleValue: data.totalAppraisedEligibleValue || 0,
+      items: (data.items || []).map((item) => {
+        const gross = Number(item.grossWeightGrams) || 0;
+        const stone = Number(item.stoneDeductionGrams) || 0;
+        const net = Math.max(0, Math.round((gross - stone) * 1000) / 1000);
+        const rate = Number(item.ratePerGram) || 0;
+        return {
+          ...item,
+          quantity: Number(item.quantity) || 1,
+          grossWeightGrams: gross,
+          stoneDeductionGrams: stone,
+          netWeightGrams: Number(item.netWeightGrams) || net,
+          ratePerGram: rate,
+          eligibleMarketValue: Number(item.eligibleMarketValue) || Math.round(net * rate),
+        };
+      }),
+      totalQuantity: Number(data.totalQuantity) || 0,
+      totalGrossWeightGrams: Number(data.totalGrossWeightGrams) || 0,
+      totalStoneDeductionGrams: Number(data.totalStoneDeductionGrams) || 0,
+      totalNetWeightGrams: Number(data.totalNetWeightGrams) || 0,
+      totalAppraisedEligibleValue: Number(data.totalAppraisedEligibleValue) || 0,
 
       liveOrnamentTrayPhotoUrl: data.liveOrnamentTrayPhotoUrl,
       liveCustomerCounterPhotoUrl: data.liveCustomerCounterPhotoUrl,
 
-      maxEligibleLoanAmount: data.maxEligibleLoanAmount || 0,
-      sanctionedLoanAmount: data.sanctionedLoanAmount || 0,
+      maxEligibleLoanAmount: Number(data.maxEligibleLoanAmount) || 0,
+      sanctionedLoanAmount: Number(data.sanctionedLoanAmount) || 0,
       repaymentScheme: data.repaymentScheme || 'Monthly Interest Servicing',
       tenureMonths: data.tenureMonths || 12,
       interestRateAnnual: data.interestRateAnnual || 12.0,

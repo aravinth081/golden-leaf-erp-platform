@@ -7,7 +7,7 @@ import React, { useState } from 'react';
 import {
   X, PieChart, FileText, Landmark, ShieldAlert,
   Download, Printer, CheckCircle, Clock,
-  Smartphone, Bell, AlertCircle, ArrowUpRight, Lock
+  Smartphone, Bell, AlertCircle, ArrowUpRight, Lock, Award
 } from 'lucide-react';
 import type { Investor } from '../../../types/investor.types';
 import type { FixedDeposit } from '../../../types/fd.types';
@@ -19,6 +19,7 @@ interface Investor360DrawerProps {
   fds: FixedDeposit[];
   onClose: () => void;
   onViewBond?: (fd: FixedDeposit) => void;
+  onViewInvestorBond?: (investor: Investor) => void;
 }
 
 export const Investor360Drawer: React.FC<Investor360DrawerProps> = ({
@@ -26,12 +27,13 @@ export const Investor360Drawer: React.FC<Investor360DrawerProps> = ({
   fds,
   onClose,
   onViewBond,
+  onViewInvestorBond,
 }) => {
   const [activeTab, setActiveTab] = useState<'summary' | 'bonds' | 'ledger' | 'tax'>('summary');
   const [notificationSent, setNotificationSent] = useState<string | null>(null);
 
-  const activeFDs = fds.filter((f) => f.status === 'Active' || f.status === 'Lien Marked');
-  const totalPrincipal = activeFDs.reduce((sum, f) => sum + f.principal, 0);
+  const activeFDs = fds.filter((f) => f.status === 'Active' || f.status === 'Lien Marked' || f.status === 'Maturing Soon');
+  const totalPrincipal = activeFDs.reduce((sum, f) => sum + f.principal, 0) || investor.totalPrincipal || investor.investmentAmount || 0;
 
   // Compute weighted average rate
   const weightedRate =
@@ -170,7 +172,7 @@ Authorized Signatory: Golden Leaf Finance Corporate Audit Cell
           </div>
 
           {/* Quick Action Ribbon */}
-          <div className="flex items-center justify-between gap-2.5 mt-4 sm:mt-5 pt-3 sm:pt-4 border-t border-white/10">
+          <div className="flex items-center justify-between gap-2.5 mt-4 sm:mt-5 pt-3 sm:pt-4 border-t border-white/10 flex-wrap">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-[#10B981]/20 text-[#34D399] border border-[#10B981]/40 flex items-center gap-1">
                 <CheckCircle size={12} /> KYC {investor.kycStatus}
@@ -181,6 +183,16 @@ Authorized Signatory: Golden Leaf Finance Corporate Audit Cell
                 </span>
               )}
             </div>
+
+            {onViewInvestorBond && (
+              <button
+                onClick={() => onViewInvestorBond(investor)}
+                className="px-3 py-1.5 rounded-xl bg-[#D4AF37] hover:bg-[#C9A227] text-[#0B1F3A] font-bold text-xs transition-colors flex items-center gap-1.5 shadow-md cursor-pointer ml-auto"
+                title="Print & Download Official Capital Contributor Bond"
+              >
+                <Award size={14} className="text-[#0B1F3A]" /> Official Investor Bond
+              </button>
+            )}
           </div>
         </div>
 

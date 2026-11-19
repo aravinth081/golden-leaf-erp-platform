@@ -70,6 +70,19 @@ export const FDBondCertificateModal: React.FC<FDBondCertificateModalProps> = ({
               white-space: nowrap;
               pointer-events: none;
             }
+            .cert-meta {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              font-family: Arial, sans-serif;
+              font-size: 11px;
+              margin-bottom: 12px;
+              padding-bottom: 8px;
+              border-bottom: 1px solid #E2E8F0;
+            }
+            .cert-meta-left { text-align: left; flex: 1; }
+            .cert-meta-center { text-align: center; flex: 1; }
+            .cert-meta-right { text-align: right; flex: 1; }
             .cert-table {
               width: 100%;
               border-collapse: collapse;
@@ -80,7 +93,6 @@ export const FDBondCertificateModal: React.FC<FDBondCertificateModalProps> = ({
               background-color: #F8F3E6;
               border: 1px solid #C4A247;
               padding: 6px 10px;
-              text-align: left;
               font-weight: bold;
               color: #5C4305;
             }
@@ -88,6 +100,10 @@ export const FDBondCertificateModal: React.FC<FDBondCertificateModalProps> = ({
               border: 1px solid #C4A247;
               padding: 6px 10px;
             }
+            .text-left { text-align: left !important; }
+            .text-right { text-align: right !important; }
+            .text-center { text-align: center !important; }
+            .font-mono { font-family: 'Courier New', Courier, monospace !important; }
             .sig-row {
               display: flex;
               justify-content: space-between;
@@ -190,18 +206,22 @@ export const FDBondCertificateModal: React.FC<FDBondCertificateModalProps> = ({
             </div>
 
             {/* Meta Row */}
-            <div className="flex flex-wrap items-center justify-between text-xs font-sans mb-3 pb-2 border-b border-[#E2E8F0] gap-2">
-              <div>
-                <strong>FD Bond / Receipt No:</strong>{' '}
+            <div className="cert-meta grid grid-cols-3 items-center text-xs font-sans mb-3 pb-2 border-b border-[#E2E8F0]">
+              <div className="cert-meta-left text-left">
+                <strong className="text-[#475569]">FD Bond / Receipt No:</strong>{' '}
                 <span className="font-mono font-bold text-[#8C6808]">{fd.fdNumber}</span>
               </div>
-              <div>
-                <strong>Investor ID:</strong>{' '}
-                <span className="font-mono font-bold">{fd.investorId}</span>
+              <div className="cert-meta-center text-center">
+                <strong className="text-[#475569]">Customer ID:</strong>{' '}
+                <span className="font-mono font-bold text-[#0B1F3A]">
+                  {fd.investorId ? fd.investorId.replace('GLF-INV-', 'GLF-CUST-') : 'GLF-CUST-0001'}
+                </span>
               </div>
-              <div>
-                <strong>Issue Date:</strong>{' '}
-                <span>{new Date(fd.bondIssuedAt || fd.createdAt).toLocaleDateString('en-IN')}</span>
+              <div className="cert-meta-right text-right">
+                <strong className="text-[#475569]">Issue Date:</strong>{' '}
+                <span className="font-mono font-semibold text-[#0B1F3A]">
+                  {new Date(fd.bondIssuedAt || fd.createdAt).toLocaleDateString('en-IN')}
+                </span>
               </div>
             </div>
 
@@ -211,9 +231,9 @@ export const FDBondCertificateModal: React.FC<FDBondCertificateModalProps> = ({
                 <strong>THIS IS TO CERTIFY THAT</strong> Goldenleaf Finance has received from{' '}
                 <strong className="text-[#0B1F3A] uppercase">{fd.investorName}</strong> (PAN:{' '}
                 <strong className="font-mono">{fd.investorPan}</strong>, Mobile:{' '}
-                <strong>{fd.investorMobile}</strong>, Residing at:{' '}
+                <strong className="font-mono">{fd.investorMobile}</strong>, Residing at:{' '}
                 <span>{fullAddress}</span>) a sum of{' '}
-                <strong className="text-[#8C6808]">Rs. {fd.principal.toLocaleString('en-IN')}/-</strong>{' '}
+                <strong className="text-[#8C6808] font-mono">Rs. {fd.principal.toLocaleString('en-IN')}/-</strong>{' '}
                 (<em>Rupees {numberToWords(fd.principal)} Only</em>) as a Fixed Deposit under the terms, tenure, and interest rate specified below, payable upon maturity or as per the registered standing instructions:
               </p>
             </div>
@@ -223,10 +243,10 @@ export const FDBondCertificateModal: React.FC<FDBondCertificateModalProps> = ({
               <table className="cert-table w-full border-collapse border border-[#C4A247] text-xs min-w-[620px]">
                 <thead>
                   <tr className="bg-[#F8F3E6] text-[#5C4305]">
-                    <th className="border border-[#C4A247] p-2 text-left font-bold w-1/4">DEPOSIT PARTICULARS</th>
-                    <th className="border border-[#C4A247] p-2 text-left font-bold w-1/4">VERIFIED BOND TERMS</th>
-                    <th className="border border-[#C4A247] p-2 text-left font-bold w-1/4">FINANCIAL SUMMARY</th>
-                    <th className="border border-[#C4A247] p-2 text-left font-bold w-1/4">VERIFIED FIGURES</th>
+                    <th className="border border-[#C4A247] p-2 text-left font-bold w-[26%]">DEPOSIT PARTICULARS</th>
+                    <th className="border border-[#C4A247] p-2 text-left font-bold w-[24%]">VERIFIED BOND TERMS</th>
+                    <th className="border border-[#C4A247] p-2 text-left font-bold w-[26%]">FINANCIAL SUMMARY</th>
+                    <th className="border border-[#C4A247] p-2 text-right font-bold w-[24%]">VERIFIED FIGURES</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -236,7 +256,7 @@ export const FDBondCertificateModal: React.FC<FDBondCertificateModalProps> = ({
                       {fd.scheme === 'cumulative' ? 'Cumulative (Re-Investment)' : `Non-Cumulative (${fd.payoutFrequency})`}
                     </td>
                     <td className="border border-[#C4A247] p-2 font-semibold bg-[#FFFDF7]">Principal Deposit Amount</td>
-                    <td className="border border-[#C4A247] p-2 font-bold font-mono">
+                    <td className="border border-[#C4A247] p-2 text-right font-bold font-mono">
                       Rs. {fd.principal.toLocaleString('en-IN')}
                     </td>
                   </tr>
@@ -244,35 +264,35 @@ export const FDBondCertificateModal: React.FC<FDBondCertificateModalProps> = ({
                     <td className="border border-[#C4A247] p-2 font-semibold bg-[#FFFDF7]">Holding Pattern</td>
                     <td className="border border-[#C4A247] p-2">{fd.holdingPattern}</td>
                     <td className="border border-[#C4A247] p-2 font-semibold bg-[#FFFDF7]">Effective Interest Rate</td>
-                    <td className="border border-[#C4A247] p-2 font-bold text-[#059669]">
+                    <td className="border border-[#C4A247] p-2 text-right font-bold font-mono text-[#059669]">
                       {fd.effectiveRate.toFixed(2)}% per annum
                     </td>
                   </tr>
                   <tr>
                     <td className="border border-[#C4A247] p-2 font-semibold bg-[#FFFDF7]">Value Date (Start Date)</td>
-                    <td className="border border-[#C4A247] p-2">{new Date(fd.valueDate).toLocaleDateString('en-IN')}</td>
+                    <td className="border border-[#C4A247] p-2 font-mono">{new Date(fd.valueDate).toLocaleDateString('en-IN')}</td>
                     <td className="border border-[#C4A247] p-2 font-semibold bg-[#FFFDF7]">Periodic Interest Payout</td>
-                    <td className="border border-[#C4A247] p-2">
+                    <td className="border border-[#C4A247] p-2 text-right font-mono">
                       {fd.periodicPayoutAmount > 0 ? `Rs. ${fd.periodicPayoutAmount.toLocaleString('en-IN')}` : 'N.A. (At Maturity)'}
                     </td>
                   </tr>
                   <tr>
                     <td className="border border-[#C4A247] p-2 font-semibold bg-[#FFFDF7]">Deposit Tenure</td>
-                    <td className="border border-[#C4A247] p-2">
+                    <td className="border border-[#C4A247] p-2 font-mono">
                       {fd.tenureYears > 0 ? `${fd.tenureYears} Year(s) ` : ''}
                       {fd.tenureMonths > 0 ? `${fd.tenureMonths} Month(s) ` : ''}
                       ({fd.totalDays} Days)
                     </td>
                     <td className="border border-[#C4A247] p-2 font-semibold bg-[#FFFDF7]">Total Interest Payable</td>
-                    <td className="border border-[#C4A247] p-2 font-bold font-mono">
+                    <td className="border border-[#C4A247] p-2 text-right font-bold font-mono">
                       Rs. {fd.totalGrossInterest.toLocaleString('en-IN')}
                     </td>
                   </tr>
                   <tr>
                     <td className="border border-[#C4A247] p-2 font-semibold bg-[#FFFDF7]">Exact Maturity Date</td>
-                    <td className="border border-[#C4A247] p-2 font-semibold">{new Date(fd.maturityDate).toLocaleDateString('en-IN')}</td>
+                    <td className="border border-[#C4A247] p-2 font-semibold font-mono">{new Date(fd.maturityDate).toLocaleDateString('en-IN')}</td>
                     <td className="border border-[#C4A247] p-2 font-semibold bg-[#FFFDF7]">TDS Status (15G / 15H)</td>
-                    <td className="border border-[#C4A247] p-2">
+                    <td className="border border-[#C4A247] p-2 text-right font-mono text-[11px]">
                       {fd.tdsStatus === 'Standard TDS' ? 'Standard 10% TDS' : `${fd.tdsStatus} Uploaded (0% TDS)`}
                     </td>
                   </tr>
@@ -282,7 +302,7 @@ export const FDBondCertificateModal: React.FC<FDBondCertificateModalProps> = ({
                       {fd.nominee.fullName} ({fd.nominee.relationship})
                     </td>
                     <td className="border border-[#C4A247] p-2 font-semibold bg-[#FFFDF7]">Final Maturity Value</td>
-                    <td className="border border-[#C4A247] p-2 font-bold font-mono text-[#8C6808] text-sm">
+                    <td className="border border-[#C4A247] p-2 text-right font-bold font-mono text-[#8C6808] text-sm bg-[#FAF6ED]">
                       Rs. {fd.netMaturityValue.toLocaleString('en-IN')}
                     </td>
                   </tr>
@@ -292,7 +312,7 @@ export const FDBondCertificateModal: React.FC<FDBondCertificateModalProps> = ({
                       {fd.fundingMode} - {fd.utrNumber}
                     </td>
                     <td className="border border-[#C4A247] p-2 font-semibold bg-[#FFFDF7]">Maturity Instruction (SI)</td>
-                    <td className="border border-[#C4A247] p-2">{fd.maturityInstruction}</td>
+                    <td className="border border-[#C4A247] p-2 text-right text-[11px]">{fd.maturityInstruction}</td>
                   </tr>
                 </tbody>
               </table>
@@ -301,7 +321,7 @@ export const FDBondCertificateModal: React.FC<FDBondCertificateModalProps> = ({
             {/* Three Signatures */}
             <div className="sig-row flex items-end justify-between mt-10 pt-4 text-center text-xs font-sans">
               <div className="sig-box w-[28%] border-t border-[#475569] pt-1.5">
-                <p className="font-semibold text-[#0B1F3A]">Depositor / Investor</p>
+                <p className="font-semibold text-[#0B1F3A]">Depositor / Customer</p>
                 <p className="text-[10px] text-[#64748B]">{fd.investorName}</p>
               </div>
 

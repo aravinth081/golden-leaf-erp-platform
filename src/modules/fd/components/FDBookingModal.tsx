@@ -6,9 +6,10 @@
 import React, { useState, useEffect } from 'react';
 import {
   X, Calculator, CheckCircle2, DollarSign, Calendar,
-  Shield, User, Upload, ArrowRight, ArrowLeft
+  Shield, User, Upload, ArrowRight, ArrowLeft,
+  UserPlus, Search, Phone, Mail, MapPin, Landmark, CheckCircle
 } from 'lucide-react';
-import type { Investor } from '../../../types/investor.types';
+import type { Investor, TaxDeclaration } from '../../../types/investor.types';
 import type { FixedDeposit, FDHoldingPattern, FDSchemeType, FDPayoutFrequency, FDPayoutDate, FDFundingMode, FDMaturityInstruction } from '../../../types/fd.types';
 import {
   computeFDReturns,
@@ -17,8 +18,11 @@ import {
   numberToWords,
   addTenureToDate,
   isSeniorCitizen,
+  calculateAge,
 } from '../../../utils/fdCalculations';
 import { bookFixedDeposit, getRateSlabs } from '../../../services/fdService';
+import { lookupPincode } from '../../../services/pincodeService';
+import { getLocalInvestors, saveLocalInvestors } from '../../../services/investorService';
 import { InstantCustomerSearch } from './InstantCustomerSearch';
 import { useAuthStore } from '../../../store';
 
@@ -39,7 +43,50 @@ export const FDBookingModal: React.FC<FDBookingModalProps> = ({
 
   const [activeStep, setActiveStep] = useState<1 | 2 | 3 | 4>(1);
   const [selectedInvestor, setSelectedInvestor] = useState<Investor | null>(initialInvestor || null);
+  const [customerMode, setCustomerMode] = useState<'new' | 'search'>(initialInvestor ? 'search' : 'new');
   const [loading, setLoading] = useState(false);
+
+  // Direct FD Customer Inputs (Separate from Investor)
+  const [custFullName, setCustFullName] = useState(initialInvestor?.fullName || '');
+  const [custFatherSpouse, setCustFatherSpouse] = useState(initialInvestor?.fatherSpouseName || '');
+  const [custDob, setCustDob] = useState(initialInvestor?.dob || '1980-01-01');
+  const [custGender, setCustGender] = useState<'Male' | 'Female' | 'Other'>(initialInvestor?.gender || 'Male');
+  const [custCategory, setCustCategory] = useState<'Individual' | 'Senior Citizen'>('Individual');
+  const [custMobile, setCustMobile] = useState(initialInvestor?.primaryMobile || '');
+  const [custEmail, setCustEmail] = useState(initialInvestor?.email || '');
+  const [custDoorNo, setCustDoorNo] = useState(initialInvestor?.address?.doorNo || '');
+  const [custStreet, setCustStreet] = useState(initialInvestor?.address?.street || '');
+  const [custTown, setCustTown] = useState(initialInvestor?.address?.town || '');
+  const [custDistrict, setCustDistrict] = useState(initialInvestor?.address?.district || '');
+  const [custState, setCustState] = useState(initialInvestor?.address?.state || 'Tamil Nadu');
+  const [custPinCode, setCustPinCode] = useState(initialInvestor?.address?.pinCode || '');
+  const [custPan, setCustPan] = useState(initialInvestor?.pan || '');
+  const [custAadhaar, setCustAadhaar] = useState(initialInvestor?.aadhaar || '');
+  const [custTaxDeclaration, setCustTaxDeclaration] = useState<TaxDeclaration>(initialInvestor?.taxDeclaration || 'Standard TDS');
+  const [custBankHolder, setCustBankHolder] = useState(initialInvestor?.bankAccount?.holderName || '');
+  const [custBankName, setCustBankName] = useState(initialInvestor?.bankAccount?.bankName || 'State Bank of India');
+  const [custBankBranch, setCustBankBranch] = useState(initialInvestor?.bankAccount?.branchName || 'Main Branch');
+  const [custBankAcc, setCustBankAcc] = useState(initialInvestor?.bankAccount?.accountNumber || '');
+  const [custBankAccConfirm, setCustBankAccConfirm] = useState(initialInvestor?.bankAccount?.accountNumber || '');
+  const [custIfsc, setCustIfsc] = useState(initialInvestor?.bankAccount?.ifsc || '');
+  const [custAccountType, setCustAccountType] = useState<'Savings' | 'Current'>('Savings');
+  const [custPayoutMode, setCustPayoutMode] = useState<'NEFT' | 'RTGS' | 'IMPS' | 'UPI'>('NEFT');
+
+  const custAge = calculateAge(custDob);
+  const custIsSenior = isSeniorCitizen(custDob);
+
+  const handleCustPincodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const pin = e.target.value.replace(/\D/g, '').slice(0, 6);
+    setCustPinCode(pin);
+    if (pin.length === 6) {
+      const match = lookupPincode(pin);
+      if (match) {
+        setCustTown(match.city);
+        setCustDistrict(match.district || match.city);
+        setCustState(match.state);
+      }
+    }
+  };
 
   // Sec 1
   const [holdingPattern, setHoldingPattern] = useState<FDHoldingPattern>('Single Holder');
@@ -52,6 +99,7 @@ export const FDBookingModal: React.FC<FDBookingModalProps> = ({
   const [payoutFrequency, setPayoutFrequency] = useState<FDPayoutFrequency>('Monthly');
   const [payoutDate, setPayoutDate] = useState<FDPayoutDate>('1st');
   const [principal, setPrincipal] = useState<number>(100000);
+  const [principalDisplay, setPrincipalDisplay] = useState<string>((100000).toLocaleString('en-IN'));
   const [tenureYears, setTenureYears] = useState<number>(1);
   const [tenureMonths, setTenureMonths] = useState<number>(0);
   const [tenureDays, setTenureDays] = useState<number>(0);
@@ -75,23 +123,29 @@ export const FDBookingModal: React.FC<FDBookingModalProps> = ({
     'Auto-Renew Principal + Interest'
   );
 
-  // Sync auto senior booster if investor changes
+  // Sync auto senior booster if investor changes or DOB changes
   useEffect(() => {
-    if (selectedInvestor) {
+    if (customerMode === 'new') {
+      if (custIsSenior) {
+        setSeniorBooster(true);
+      }
+    } else if (selectedInvestor) {
       setSeniorBooster(isSeniorCitizen(selectedInvestor.dob));
     }
-  }, [selectedInvestor]);
+  }, [customerMode, custIsSenior, selectedInvestor]);
 
   // Calculations
-  const totalDays = tenureYears * 365 + tenureMonths * 30 + tenureDays;
+  const effectiveYears = tenureYears > 30 ? 0 : tenureYears;
+  const effectiveDays = tenureYears > 30 && tenureDays === 0 ? tenureYears : tenureDays;
+  const totalDays = effectiveYears * 365 + tenureMonths * 30 + effectiveDays;
   const rateSlabs = getRateSlabs();
   const baseRate = getBaseRateForDays(totalDays, rateSlabs);
 
   const calc = computeFDReturns({
     principal,
-    tenureYears,
+    tenureYears: effectiveYears,
     tenureMonths,
-    tenureDays,
+    tenureDays: effectiveDays,
     scheme,
     payoutFrequency,
     baseRate,
@@ -102,7 +156,7 @@ export const FDBookingModal: React.FC<FDBookingModalProps> = ({
     hasPAN: Boolean(selectedInvestor?.pan),
   });
 
-  const maturityDate = addTenureToDate(valueDate, tenureYears, tenureMonths, tenureDays);
+  const maturityDate = addTenureToDate(valueDate, effectiveYears, tenureMonths, effectiveDays);
 
   const applyQuickTenure = (years: number, months: number, days: number) => {
     setTenureYears(years);
@@ -112,8 +166,59 @@ export const FDBookingModal: React.FC<FDBookingModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedInvestor) {
-      alert('Please link or select an investor customer.');
+    let currentCust = selectedInvestor;
+    if (!currentCust && customerMode === 'new' && custFullName.trim()) {
+      const existingList = getLocalInvestors();
+      const nextSeq = existingList.length + 1;
+      const customerId = `GLF-CUST-${String(nextSeq).padStart(4, '0')}`;
+      currentCust = {
+        id: `cust_${Date.now()}`,
+        investorId: customerId,
+        companyId: 'company_main',
+        branchId: branchCode || 'BR-01',
+        branchName: branchName || 'Chennai Main Branch',
+        category: custIsSenior ? 'Senior Citizen' : custCategory,
+        fullName: custFullName.trim(),
+        fatherSpouseName: custFatherSpouse.trim(),
+        dob: custDob,
+        age: custAge,
+        gender: custGender,
+        primaryMobile: custMobile.trim(),
+        email: custEmail.trim() || undefined,
+        address: {
+          doorNo: custDoorNo.trim(),
+          street: custStreet.trim(),
+          town: custTown.trim(),
+          district: custDistrict.trim(),
+          state: custState.trim(),
+          pinCode: custPinCode.trim(),
+        },
+        pan: custPan.trim().toUpperCase(),
+        aadhaar: custAadhaar.trim(),
+        taxDeclaration: custTaxDeclaration,
+        kycStatus: custPan && custAadhaar ? 'Verified' : 'Pending',
+        documents: {},
+        bankAccount: {
+          holderName: custBankHolder.trim() || custFullName.trim(),
+          bankName: custBankName.trim(),
+          branchName: custBankBranch.trim(),
+          accountNumber: custBankAcc.trim(),
+          ifsc: custIfsc.trim().toUpperCase(),
+          accountType: custAccountType,
+          payoutMode: custPayoutMode,
+        },
+        activeFDsCount: 0,
+        totalPrincipal: 0,
+        monthlyInterest: 0,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      saveLocalInvestors([currentCust, ...existingList]);
+      setSelectedInvestor(currentCust);
+    }
+
+    if (!currentCust) {
+      alert('Please link or register an FD customer.');
       setActiveStep(1);
       return;
     }
@@ -133,13 +238,13 @@ export const FDBookingModal: React.FC<FDBookingModalProps> = ({
       const newFD = await bookFixedDeposit(
         {
           companyId: 'company_main',
-          branchId: selectedInvestor.branchId || 'branch_chennai',
-          branchName: selectedInvestor.branchName || branchName,
+          branchId: currentCust.branchId || 'branch_chennai',
+          branchName: currentCust.branchName || branchName,
           branchCode,
-          investorId: selectedInvestor.investorId,
-          investorName: selectedInvestor.fullName,
-          investorMobile: selectedInvestor.primaryMobile,
-          investorPan: selectedInvestor.pan,
+          investorId: currentCust.investorId,
+          investorName: currentCust.fullName,
+          investorMobile: currentCust.primaryMobile,
+          investorPan: currentCust.pan,
           holdingPattern,
           jointApplicant:
             holdingPattern !== 'Single Holder'
@@ -149,9 +254,9 @@ export const FDBookingModal: React.FC<FDBookingModalProps> = ({
           payoutFrequency,
           payoutDate,
           principal,
-          tenureYears,
+          tenureYears: effectiveYears,
           tenureMonths,
-          tenureDays,
+          tenureDays: effectiveDays,
           totalDays: calc.totalDays,
           baseRate,
           boosterRate: calc.boosterRate,
@@ -163,7 +268,7 @@ export const FDBookingModal: React.FC<FDBookingModalProps> = ({
           maturityDate,
           periodicPayoutAmount: calc.periodicPayoutAmount,
           totalGrossInterest: calc.totalGrossInterest,
-          tdsStatus: selectedInvestor.taxDeclaration,
+          tdsStatus: currentCust.taxDeclaration,
           estimatedTDS: calc.estimatedTDS,
           netMaturityValue: calc.netMaturityValue,
           fundingMode,
@@ -248,67 +353,463 @@ export const FDBookingModal: React.FC<FDBookingModalProps> = ({
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6 custom-scrollbar">
-          {/* STEP 1: Customer Linking & Holding Pattern */}
+          {/* STEP 1: Customer Linking / Direct Registration & Holding Pattern */}
           {activeStep === 1 && (
-            <div className="space-y-5">
+            <div className="space-y-4">
               <div className="flex items-center justify-between pb-2 border-b border-[#F1F5F9]">
-                <h3 className="font-display font-bold text-sm text-[#0B1F3A] uppercase tracking-wider">
-                  Sec 1: Customer Linking & Holding Pattern
-                </h3>
+                <div>
+                  <h3 className="font-display font-bold text-sm text-[#0B1F3A] uppercase tracking-wider flex items-center gap-1.5">
+                    <UserPlus size={16} className="text-[#D4AF37]" />
+                    Sec 1: Customer Details & Holding Pattern
+                  </h3>
+                  <p className="text-xs text-[#64748B] mt-0.5">
+                    Directly enter depositor details for this FD or search an existing customer
+                  </p>
+                </div>
                 <span className="text-xs font-semibold text-[#8C6808] bg-[#FAF7F0] px-2.5 py-1 rounded-full border border-[#D4AF37]/30">
                   Auto Bond ID Allocated
                 </span>
               </div>
 
-              {/* Instant Search Bar */}
-              <div>
-                <label className="block text-xs font-bold text-[#475569] mb-1.5 uppercase tracking-wider">
-                  Quick Search Customer (Mobile or Name) <span className="text-red-500">*</span>
-                </label>
-                <InstantCustomerSearch
-                  onSelectInvestor={(inv) => setSelectedInvestor(inv)}
-                  onBookNewFD={(inv) => setSelectedInvestor(inv)}
-                />
+              {/* Mode Toggle Pills: 1. Direct New Customer Entry | 2. Search Existing */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-1 bg-[#F1F5F9] rounded-2xl">
+                <button
+                  type="button"
+                  onClick={() => setCustomerMode('new')}
+                  className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                    customerMode === 'new'
+                      ? 'bg-white text-[#0B1F3A] shadow-sm'
+                      : 'text-[#64748B] hover:text-[#0B1F3A]'
+                  }`}
+                >
+                  <UserPlus size={14} className={customerMode === 'new' ? 'text-[#D4AF37]' : 'text-[#94A3B8]'} />
+                  1. Register New FD Customer (Direct Entry)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCustomerMode('search')}
+                  className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                    customerMode === 'search'
+                      ? 'bg-white text-[#0B1F3A] shadow-sm'
+                      : 'text-[#64748B] hover:text-[#0B1F3A]'
+                  }`}
+                >
+                  <Search size={14} className={customerMode === 'search' ? 'text-[#D4AF37]' : 'text-[#94A3B8]'} />
+                  2. Quick Search Existing Customer
+                </button>
               </div>
 
-              {/* Linked Customer Summary Card */}
-              {selectedInvestor ? (
-                <div className="p-4 rounded-2xl bg-[#FFFDF7] border-2 border-[#D4AF37]/50 shadow-sm flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-display font-bold text-base text-[#0B1F3A]">
-                        {selectedInvestor.fullName}
-                      </h4>
-                      <span className="font-mono text-xs font-bold bg-[#FAF7F0] text-[#8C6808] px-2 py-0.5 rounded border border-[#D4AF37]/40">
-                        {selectedInvestor.investorId}
+              {/* MODE A: Direct New Customer Registration Inputs */}
+              {customerMode === 'new' && (
+                <div className="space-y-4 animate-fade-in">
+                  {/* Basic Identity Sub-Section */}
+                  <div className="p-4 rounded-2xl bg-[#FFFDF7] border border-[#D4AF37]/30 space-y-3">
+                    <div className="flex items-center justify-between pb-1 border-b border-[#D4AF37]/20">
+                      <span className="text-xs font-bold text-[#8C6808] uppercase tracking-wider flex items-center gap-1.5">
+                        <User size={13} /> 1A. Depositor Identity & Category
                       </span>
-                      <span className="text-[10px] font-bold text-[#059669] bg-[#ECFDF5] px-2 py-0.5 rounded">
-                        KYC VERIFIED
-                      </span>
+                      <span className="text-[10px] text-[#64748B] font-semibold">Separate FD Customer Registry</span>
                     </div>
-                    <p className="text-xs text-[#64748B] mt-1">
-                      Mobile: <strong>{selectedInvestor.primaryMobile}</strong> · PAN: <strong className="font-mono">{selectedInvestor.pan}</strong> · {selectedInvestor.category}
-                    </p>
-                    <p className="text-[11px] text-[#8C6808] mt-0.5 font-medium">
-                      🏦 Bank: {selectedInvestor.bankAccount.bankName} (A/C: {selectedInvestor.bankAccount.accountNumber}) · Form: {selectedInvestor.taxDeclaration}
-                    </p>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-[#475569] mb-1 uppercase tracking-wider">
+                          Customer Full Name (as per PAN Card) <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={custFullName}
+                          onChange={(e) => setCustFullName(e.target.value)}
+                          placeholder="e.g. VENKATESWARA RAO"
+                          className="w-full px-3.5 py-2 rounded-xl border border-[#CBD5E1] text-xs font-bold text-[#0B1F3A] outline-none focus:border-[#D4AF37]"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-[#475569] mb-1 uppercase tracking-wider">
+                          Father's / Spouse's Name <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={custFatherSpouse}
+                          onChange={(e) => setCustFatherSpouse(e.target.value)}
+                          placeholder="Father or spouse name"
+                          className="w-full px-3.5 py-2 rounded-xl border border-[#CBD5E1] text-xs font-medium text-[#0B1F3A] outline-none focus:border-[#D4AF37]"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-[#475569] mb-1 uppercase tracking-wider">
+                          Date of Birth (DOB) <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          value={custDob}
+                          onChange={(e) => setCustDob(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] text-xs font-semibold text-[#0B1F3A] outline-none"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-[#475569] mb-1 uppercase tracking-wider">
+                          Gender <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          value={custGender}
+                          onChange={(e) => setCustGender(e.target.value as any)}
+                          className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] text-xs font-semibold text-[#0B1F3A] bg-white outline-none"
+                        >
+                          <option value="Male">Male</option>
+                          <option value="Female">Female</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </div>
+
+                      <div className="flex flex-col justify-end">
+                        <div className="p-2 rounded-xl bg-white border border-[#CBD5E1] text-xs flex items-center justify-between">
+                          <span className="text-[#64748B]">Age: <strong className="text-[#0B1F3A]">{custAge} Yrs</strong></span>
+                          {custIsSenior && (
+                            <span className="text-[10px] font-bold text-[#059669] bg-[#ECFDF5] px-1.5 py-0.5 rounded border border-[#A7F3D0]">
+                              👴 Senior (+1.00%)
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedInvestor(null)}
-                    className="text-xs font-semibold text-red-600 hover:text-red-700 underline"
-                  >
-                    Change
-                  </button>
+
+                  {/* Contact & Address Sub-Section */}
+                  <div className="p-4 rounded-2xl bg-white border border-[#CBD5E1] space-y-3">
+                    <span className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wider flex items-center gap-1.5 pb-1 border-b border-[#F1F5F9]">
+                      <MapPin size={13} className="text-[#1E40AF]" /> 1B. Contact & Address Details
+                    </span>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-[#475569] mb-1 uppercase tracking-wider">
+                          Mobile Number (10 Digits) <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="tel"
+                          maxLength={10}
+                          value={custMobile}
+                          onChange={(e) => setCustMobile(e.target.value.replace(/\D/g, ''))}
+                          placeholder="10-digit mobile number"
+                          className="w-full px-3.5 py-2 rounded-xl border border-[#CBD5E1] font-mono text-xs font-bold text-[#0B1F3A] outline-none focus:border-[#D4AF37]"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-[#475569] mb-1 uppercase tracking-wider">
+                          Email Address (Optional)
+                        </label>
+                        <input
+                          type="email"
+                          value={custEmail}
+                          onChange={(e) => setCustEmail(e.target.value)}
+                          placeholder="depositor@domain.com"
+                          className="w-full px-3.5 py-2 rounded-xl border border-[#CBD5E1] text-xs font-medium text-[#0B1F3A] outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-[11px] text-[#64748B] mb-1">Door / Flat No *</label>
+                        <input
+                          type="text"
+                          value={custDoorNo}
+                          onChange={(e) => setCustDoorNo(e.target.value)}
+                          placeholder="e.g. 10/A"
+                          className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] text-xs text-[#0B1F3A] outline-none"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-[11px] text-[#64748B] mb-1">Street / Area *</label>
+                        <input
+                          type="text"
+                          value={custStreet}
+                          onChange={(e) => setCustStreet(e.target.value)}
+                          placeholder="Street name & area"
+                          className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] text-xs text-[#0B1F3A] outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div>
+                        <label className="block text-[11px] text-[#64748B] mb-1">PIN Code *</label>
+                        <input
+                          type="text"
+                          maxLength={6}
+                          value={custPinCode}
+                          onChange={handleCustPincodeChange}
+                          placeholder="6 digits"
+                          className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] font-mono text-xs font-bold text-[#0B1F3A] outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-[#64748B] mb-1">City / Town *</label>
+                        <input
+                          type="text"
+                          value={custTown}
+                          onChange={(e) => setCustTown(e.target.value)}
+                          placeholder="City"
+                          className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] text-xs text-[#0B1F3A] outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-[#64748B] mb-1">District *</label>
+                        <input
+                          type="text"
+                          value={custDistrict}
+                          onChange={(e) => setCustDistrict(e.target.value)}
+                          placeholder="District"
+                          className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] text-xs text-[#0B1F3A] outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-[#64748B] mb-1">State *</label>
+                        <input
+                          type="text"
+                          value={custState}
+                          onChange={(e) => setCustState(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] text-xs text-[#0B1F3A] outline-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* KYC & Tax Sub-Section */}
+                  <div className="p-4 rounded-2xl bg-white border border-[#CBD5E1] space-y-3">
+                    <span className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wider flex items-center gap-1.5 pb-1 border-b border-[#F1F5F9]">
+                      <Shield size={13} className="text-[#059669]" /> 1C. Mandatory KYC & Tax Compliance
+                    </span>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-[#475569] mb-1 uppercase tracking-wider">
+                          PAN Card Number <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          maxLength={10}
+                          value={custPan}
+                          onChange={(e) => setCustPan(e.target.value.toUpperCase())}
+                          placeholder="e.g. ABCDE1234F"
+                          className="w-full px-3.5 py-2 rounded-xl border border-[#CBD5E1] font-mono text-xs font-bold text-[#0B1F3A] outline-none focus:border-[#D4AF37]"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-[#475569] mb-1 uppercase tracking-wider">
+                          Aadhaar Number <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          maxLength={12}
+                          value={custAadhaar}
+                          onChange={(e) => setCustAadhaar(e.target.value.replace(/\D/g, ''))}
+                          placeholder="12-digit Aadhaar"
+                          className="w-full px-3.5 py-2 rounded-xl border border-[#CBD5E1] font-mono text-xs font-bold text-[#0B1F3A] outline-none"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-[#475569] mb-1 uppercase tracking-wider">
+                          Tax Exemption (TDS) <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          value={custTaxDeclaration}
+                          onChange={(e) => setCustTaxDeclaration(e.target.value as any)}
+                          className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] text-xs font-semibold text-[#0B1F3A] bg-white outline-none"
+                        >
+                          <option value="Standard TDS">Standard TDS (10%)</option>
+                          <option value="15G">Form 15G (Below 60 Yrs - NIL TDS)</option>
+                          <option value="15H">Form 15H (Senior Citizen - NIL TDS)</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Payout Bank Account Sub-Section */}
+                  <div className="p-4 rounded-2xl bg-white border border-[#CBD5E1] space-y-3">
+                    <span className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wider flex items-center gap-1.5 pb-1 border-b border-[#F1F5F9]">
+                      <Landmark size={13} className="text-[#8C6808]" /> 1D. Payout Bank Account Details (Interest & Maturity)
+                    </span>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-[#475569] mb-1 uppercase tracking-wider">
+                          Account Holder Name <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={custBankHolder || custFullName}
+                          onChange={(e) => setCustBankHolder(e.target.value)}
+                          placeholder="Name as on passbook"
+                          className="w-full px-3.5 py-2 rounded-xl border border-[#CBD5E1] text-xs font-bold text-[#0B1F3A] outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-[#475569] mb-1 uppercase tracking-wider">
+                          Bank Name & Branch <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={custBankName}
+                          onChange={(e) => setCustBankName(e.target.value)}
+                          placeholder="e.g. State Bank of India, Main Branch"
+                          className="w-full px-3.5 py-2 rounded-xl border border-[#CBD5E1] text-xs font-medium text-[#0B1F3A] outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-[#475569] mb-1 uppercase tracking-wider">
+                          Bank Account Number <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="password"
+                          value={custBankAcc}
+                          onChange={(e) => setCustBankAcc(e.target.value.replace(/\D/g, ''))}
+                          placeholder="Enter account number"
+                          className="w-full px-3.5 py-2 rounded-xl border border-[#CBD5E1] font-mono text-xs font-bold text-[#0B1F3A] outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-[#475569] mb-1 uppercase tracking-wider">
+                          Confirm Account Number <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={custBankAccConfirm}
+                          onChange={(e) => setCustBankAccConfirm(e.target.value.replace(/\D/g, ''))}
+                          placeholder="Re-enter account number"
+                          className="w-full px-3.5 py-2 rounded-xl border border-[#CBD5E1] font-mono text-xs font-bold text-[#0B1F3A] outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-[#475569] mb-1 uppercase tracking-wider">
+                          IFSC Code <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          maxLength={11}
+                          value={custIfsc}
+                          onChange={(e) => setCustIfsc(e.target.value.toUpperCase())}
+                          placeholder="e.g. SBIN0001234"
+                          className="w-full px-3.5 py-2 rounded-xl border border-[#CBD5E1] font-mono text-xs font-bold text-[#0B1F3A] outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-[#475569] mb-1 uppercase tracking-wider">
+                          Account Type
+                        </label>
+                        <select
+                          value={custAccountType}
+                          onChange={(e) => setCustAccountType(e.target.value as any)}
+                          className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] text-xs font-semibold text-[#0B1F3A] bg-white outline-none"
+                        >
+                          <option value="Savings">Savings Account</option>
+                          <option value="Current">Current Account</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-[#475569] mb-1 uppercase tracking-wider">
+                          Payout Mode
+                        </label>
+                        <select
+                          value={custPayoutMode}
+                          onChange={(e) => setCustPayoutMode(e.target.value as any)}
+                          className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] text-xs font-semibold text-[#0B1F3A] bg-white outline-none"
+                        >
+                          <option value="NEFT">NEFT (Direct Bank Transfer)</option>
+                          <option value="RTGS">RTGS (High Value ₹2L+)</option>
+                          <option value="IMPS">IMPS (Instant 24x7)</option>
+                          <option value="UPI">UPI</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              ) : (
-                <div className="p-4 rounded-2xl bg-[#FFFBEB] border border-[#FDE68A] text-xs text-[#92400E]">
-                  ⚠️ Please select or search an existing Customer/Investor to auto-fill PAN, KYC, and Bank Account details.
+              )}
+
+              {/* MODE B: Search Existing Customer */}
+              {customerMode === 'search' && (
+                <div className="space-y-4 animate-fade-in">
+                  <div>
+                    <label className="block text-xs font-bold text-[#475569] mb-1.5 uppercase tracking-wider">
+                      Quick Search Customer (Mobile or Name) <span className="text-red-500">*</span>
+                    </label>
+                    <InstantCustomerSearch
+                      onSelectInvestor={(inv) => setSelectedInvestor(inv)}
+                      onBookNewFD={(inv) => setSelectedInvestor(inv)}
+                    />
+                  </div>
+
+                  {selectedInvestor ? (
+                    <div className="p-4 rounded-2xl bg-[#FFFDF7] border-2 border-[#D4AF37]/50 shadow-sm flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-display font-bold text-base text-[#0B1F3A]">
+                            {selectedInvestor.fullName}
+                          </h4>
+                          <span className="font-mono text-xs font-bold bg-[#FAF7F0] text-[#8C6808] px-2 py-0.5 rounded border border-[#D4AF37]/40">
+                            {selectedInvestor.investorId}
+                          </span>
+                          <span className="text-[10px] font-bold text-[#059669] bg-[#ECFDF5] px-2 py-0.5 rounded">
+                            KYC VERIFIED
+                          </span>
+                        </div>
+                        <p className="text-xs text-[#64748B] mt-1">
+                          Mobile: <strong>{selectedInvestor.primaryMobile}</strong> · PAN: <strong className="font-mono">{selectedInvestor.pan}</strong> · {selectedInvestor.category}
+                        </p>
+                        <p className="text-[11px] text-[#8C6808] mt-0.5 font-medium">
+                          🏦 Bank: {selectedInvestor.bankAccount.bankName} (A/C: {selectedInvestor.bankAccount.accountNumber}) · Form: {selectedInvestor.taxDeclaration}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedInvestor(null)}
+                        className="text-xs font-semibold text-red-600 hover:text-red-700 underline cursor-pointer"
+                      >
+                        Change
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="p-4 rounded-2xl bg-[#FFFBEB] border border-[#FDE68A] text-xs text-[#92400E] flex items-center justify-between">
+                      <span>⚠️ Please search and select an existing customer, or switch to "Register New FD Customer".</span>
+                      <button
+                        type="button"
+                        onClick={() => setCustomerMode('new')}
+                        className="px-2.5 py-1 bg-[#D4AF37] text-white rounded-lg font-bold text-xs hover:bg-[#C9A227] transition-colors cursor-pointer"
+                      >
+                        + Switch to Direct Entry
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
               {/* Holding Pattern Selection */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-[#F1F5F9]">
                 <div>
                   <label className="block text-xs font-bold text-[#475569] mb-1.5 uppercase tracking-wider">
                     Holding Pattern <span className="text-red-500">*</span>
@@ -440,18 +941,51 @@ export const FDBookingModal: React.FC<FDBookingModalProps> = ({
                 <div className="relative flex items-center">
                   <span className="absolute left-4 text-base font-bold text-[#64748B]">₹</span>
                   <input
-                    type="number"
-                    min="10000"
-                    step="5000"
-                    value={principal}
-                    onChange={(e) => setPrincipal(Math.max(0, Number(e.target.value)))}
+                    type="text"
+                    inputMode="numeric"
+                    value={principalDisplay}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/,/g, '').replace(/\D/g, '');
+                      if (!raw) {
+                        setPrincipalDisplay('');
+                        setPrincipal(0);
+                        return;
+                      }
+                      const num = parseInt(raw, 10);
+                      setPrincipal(num);
+                      setPrincipalDisplay(num.toLocaleString('en-IN'));
+                    }}
+                    placeholder="Enter deposit amount (e.g. 10,00,000)"
                     className="w-full pl-9 pr-4 py-3 rounded-2xl border-2 border-[#CBD5E1] text-lg font-bold font-mono text-[#0B1F3A] outline-none focus:border-[#D4AF37]"
                     required
                   />
                 </div>
-                <p className="text-xs text-[#8C6808] font-serif italic mt-1.5 pl-1">
-                  Rupees {numberToWords(principal)} Only
-                </p>
+                {/* Quick Select Buttons */}
+                <div className="flex items-center gap-1.5 flex-wrap mt-2">
+                  <span className="text-[10px] text-[#64748B] font-bold uppercase mr-1">Quick Select:</span>
+                  {[50000, 100000, 200000, 500000, 1000000, 2500000].map((amt) => (
+                    <button
+                      key={amt}
+                      type="button"
+                      onClick={() => {
+                        setPrincipal(amt);
+                        setPrincipalDisplay(amt.toLocaleString('en-IN'));
+                      }}
+                      className={`px-2 py-0.5 rounded text-[11px] font-bold font-mono transition-all cursor-pointer ${
+                        principal === amt
+                          ? 'bg-[#8C6808] text-white shadow-sm'
+                          : 'bg-[#F1F5F9] hover:bg-[#E2E8F0] text-[#334155]'
+                      }`}
+                    >
+                      ₹{amt.toLocaleString('en-IN')}
+                    </button>
+                  ))}
+                </div>
+                {principal > 0 && (
+                  <p className="text-xs text-[#8C6808] font-serif italic mt-1.5 pl-1">
+                    Rupees {numberToWords(principal)} Only
+                  </p>
+                )}
               </div>
 
               {/* Tenure Selectors + Quick Buttons */}
@@ -460,7 +994,7 @@ export const FDBookingModal: React.FC<FDBookingModalProps> = ({
                   <label className="text-xs font-bold text-[#475569] uppercase tracking-wider">
                     Deposit Tenure Selector <span className="text-red-500">*</span>
                   </label>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="text-[11px] text-[#64748B] font-medium mr-1">Quick Sets:</span>
                     <button
                       type="button"
@@ -468,6 +1002,14 @@ export const FDBookingModal: React.FC<FDBookingModalProps> = ({
                       className="px-2 py-0.5 rounded text-[11px] font-bold bg-[#F1F5F9] hover:bg-[#E2E8F0] text-[#334155]"
                     >
                       180d
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyQuickTenure(0, 0, 444)}
+                      className="px-2.5 py-0.5 rounded text-[11px] font-bold bg-[#FEF3C7] hover:bg-[#FDE68A] text-[#92400E] border border-[#F59E0B]/50 shadow-xs"
+                      title="444 Days Special High-Yield Scheme"
+                    >
+                      ⭐ 444d Special
                     </button>
                     <button
                       type="button"
@@ -501,7 +1043,15 @@ export const FDBookingModal: React.FC<FDBookingModalProps> = ({
                       min="0"
                       max="10"
                       value={tenureYears}
-                      onChange={(e) => setTenureYears(Math.max(0, Number(e.target.value)))}
+                      onChange={(e) => {
+                        const val = Math.max(0, Number(e.target.value));
+                        if (val > 30) {
+                          setTenureYears(0);
+                          setTenureDays(val);
+                        } else {
+                          setTenureYears(val);
+                        }
+                      }}
                       className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] text-xs font-bold text-[#0B1F3A] outline-none"
                     />
                   </div>
@@ -521,7 +1071,7 @@ export const FDBookingModal: React.FC<FDBookingModalProps> = ({
                     <input
                       type="number"
                       min="0"
-                      max="364"
+                      max="3650"
                       value={tenureDays}
                       onChange={(e) => setTenureDays(Math.max(0, Number(e.target.value)))}
                       className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] text-xs font-bold text-[#0B1F3A] outline-none"
@@ -536,6 +1086,11 @@ export const FDBookingModal: React.FC<FDBookingModalProps> = ({
                   <div>
                     <span className="text-[#64748B]">Admin Rate Slab Base:</span>
                     <span className="font-bold text-[#0B1F3A] ml-1.5">{baseRate.toFixed(2)}% p.a.</span>
+                    {totalDays === 444 && (
+                      <span className="ml-2 px-2 py-0.5 rounded text-[10px] font-bold bg-[#ECFDF5] text-[#059669] border border-[#A7F3D0]">
+                        ⭐ 444 Days Special Scheme
+                      </span>
+                    )}
                   </div>
                   <div className="text-right">
                     <span className="text-[#64748B]">Effective Return:</span>
@@ -553,7 +1108,7 @@ export const FDBookingModal: React.FC<FDBookingModalProps> = ({
                       onChange={(e) => setSeniorBooster(e.target.checked)}
                       className="rounded text-[#D4AF37] focus:ring-0"
                     />
-                    <span>Senior Citizen (+0.50%)</span>
+                    <span>Senior Citizen (+1.00%)</span>
                     {isAutoSenior && (
                       <span className="text-[10px] text-[#059669] font-bold">Auto</span>
                     )}
@@ -820,9 +1375,84 @@ export const FDBookingModal: React.FC<FDBookingModalProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    if (activeStep === 1 && !selectedInvestor) {
-                      alert('Please select a customer first.');
-                      return;
+                    if (activeStep === 1) {
+                      if (customerMode === 'new') {
+                        if (!custFullName.trim()) {
+                          alert('Please enter customer full name.');
+                          return;
+                        }
+                        if (custMobile.trim().length !== 10) {
+                          alert('Please enter a valid 10-digit mobile number.');
+                          return;
+                        }
+                        if (custPan.trim().length !== 10) {
+                          alert('Please enter a valid 10-character PAN number.');
+                          return;
+                        }
+                        if (custBankAcc && custBankAccConfirm && custBankAcc !== custBankAccConfirm) {
+                          alert('Bank account numbers do not match. Please verify double-entry.');
+                          return;
+                        }
+
+                        // Auto-generate Customer ID: GLF-CUST-XXXX
+                        const existingList = getLocalInvestors();
+                        const nextSeq = existingList.length + 1;
+                        const customerId = `GLF-CUST-${String(nextSeq).padStart(4, '0')}`;
+
+                        const newCustomer: Investor = {
+                          id: `cust_${Date.now()}`,
+                          investorId: customerId,
+                          companyId: 'company_main',
+                          branchId: branchCode || 'BR-01',
+                          branchName: branchName || 'Chennai Main Branch',
+                          category: custIsSenior ? 'Senior Citizen' : custCategory,
+                          fullName: custFullName.trim(),
+                          fatherSpouseName: custFatherSpouse.trim(),
+                          dob: custDob,
+                          age: custAge,
+                          gender: custGender,
+                          primaryMobile: custMobile.trim(),
+                          email: custEmail.trim() || undefined,
+                          address: {
+                            doorNo: custDoorNo.trim(),
+                            street: custStreet.trim(),
+                            town: custTown.trim(),
+                            district: custDistrict.trim(),
+                            state: custState.trim(),
+                            pinCode: custPinCode.trim(),
+                          },
+                          pan: custPan.trim().toUpperCase(),
+                          aadhaar: custAadhaar.trim(),
+                          taxDeclaration: custTaxDeclaration,
+                          kycStatus: custPan && custAadhaar ? 'Verified' : 'Pending',
+                          documents: {},
+                          bankAccount: {
+                            holderName: custBankHolder.trim() || custFullName.trim(),
+                            bankName: custBankName.trim(),
+                            branchName: custBankBranch.trim(),
+                            accountNumber: custBankAcc.trim(),
+                            ifsc: custIfsc.trim().toUpperCase(),
+                            accountType: custAccountType,
+                            payoutMode: custPayoutMode,
+                          },
+                          activeFDsCount: 0,
+                          totalPrincipal: 0,
+                          monthlyInterest: 0,
+                          createdAt: new Date().toISOString(),
+                          updatedAt: new Date().toISOString(),
+                        };
+
+                        saveLocalInvestors([newCustomer, ...existingList]);
+                        setSelectedInvestor(newCustomer);
+                        if (custIsSenior) {
+                          setSeniorBooster(true);
+                        }
+                      } else {
+                        if (!selectedInvestor) {
+                          alert('Please select or search an existing customer, or switch to Register New FD Customer.');
+                          return;
+                        }
+                      }
                     }
                     setActiveStep((s) => (s + 1) as any);
                   }}

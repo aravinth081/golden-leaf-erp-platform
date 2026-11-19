@@ -7,7 +7,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Shield, Clock, CalendarCheck, AlertTriangle,
   Lock, Printer, Download, Plus, CheckCircle, RefreshCw,
-  Search, Eye, Filter, ArrowUpRight, BarChart3, PiggyBank
+  Search, Eye, Filter, ArrowUpRight, BarChart3, PiggyBank, UserPlus
 } from 'lucide-react';
 import type { FixedDeposit, FDStatus } from '../../types/fd.types';
 import type { Investor } from '../../types/investor.types';
@@ -18,7 +18,7 @@ import {
   getFDKPIMetrics,
 } from '../../services/fdService';
 import { getInvestors } from '../../services/investorService';
-import { formatINR } from '../../utils/fdCalculations';
+import { formatINR, isFDMaturingSoon, getDaysToMaturity } from '../../utils/fdCalculations';
 import { StatusBadge } from '../../components/ui/Badge';
 import { FDKPIRibbon } from './components/FDKPIRibbon';
 import { InstantCustomerSearch } from './components/InstantCustomerSearch';
@@ -90,7 +90,7 @@ export const FDListPage: React.FC = () => {
         list = fds.filter((f) => f.status === 'Active' && f.scheme === 'non-cumulative');
         break;
       case 'maturing':
-        list = fds.filter((f) => f.status === 'Maturing Soon');
+        list = fds.filter((f) => isFDMaturingSoon(f, 30));
         break;
       case 'preclose':
         list = fds.filter((f) => f.status === 'Lien Marked' || f.status === 'Pre-Close Requested' || f.status === 'Matured & Settled');
@@ -207,9 +207,9 @@ export const FDListPage: React.FC = () => {
               setPrefilledInvestor(null);
               setIsBookingOpen(true);
             }}
-            className="px-4 py-2 rounded-xl bg-[#D4AF37] hover:bg-[#C9A227] text-white font-bold text-xs transition-colors flex items-center gap-1.5 shadow-md"
+            className="px-4 py-2 rounded-xl bg-[#D4AF37] hover:bg-[#C9A227] text-white font-bold text-xs transition-colors flex items-center gap-1.5 shadow-md cursor-pointer"
           >
-            <Plus size={15} /> + Book New FD Application
+            <UserPlus size={15} /> + Create New FD Customer & Booking
           </button>
         </div>
       </div>
@@ -265,9 +265,9 @@ export const FDListPage: React.FC = () => {
             {
               id: 'maturing',
               label: 'Tab 4: Maturing Soon (30d)',
-              count: fds.filter((f) => f.status === 'Maturing Soon').length,
+              count: fds.filter((f) => isFDMaturingSoon(f, 30)).length,
               icon: AlertTriangle,
-              warning: fds.filter((f) => f.status === 'Maturing Soon').length > 0,
+              warning: fds.filter((f) => isFDMaturingSoon(f, 30)).length > 0,
             },
             {
               id: 'preclose',
@@ -386,14 +386,16 @@ export const FDListPage: React.FC = () => {
                       </td>
 
                       {/* Customer */}
-                      <td className="p-3.5">
-                        <div className="font-display font-bold text-[#0B1F3A] group-hover:text-[#D4AF37] transition-colors">
+                      <td className="p-3.5 whitespace-nowrap min-w-[200px]">
+                        <div className="font-display font-bold text-[#0B1F3A] group-hover:text-[#D4AF37] transition-colors leading-tight">
                           {fd.investorName}
                         </div>
-                        <div className="text-[10px] text-[#64748B] flex items-center gap-1.5 mt-0.5">
+                        <div className="text-[11px] text-[#64748B] flex items-center gap-2 mt-1 font-mono leading-none">
                           <span>{fd.investorMobile}</span>
-                          <span>·</span>
-                          <span className="font-mono">{fd.investorId}</span>
+                          <span className="text-[#CBD5E1]">|</span>
+                          <span className="px-1.5 py-0.5 rounded bg-[#F1F5F9] text-[#475569] font-medium text-[10px] border border-[#E2E8F0]">
+                            {(fd.investorId || '').replace('GLF-INV-', 'GLF-CUST-')}
+                          </span>
                         </div>
                       </td>
 
@@ -434,7 +436,14 @@ export const FDListPage: React.FC = () => {
 
                       {/* Status Badge */}
                       <td className="p-3.5 text-center whitespace-nowrap">
-                        <StatusBadge status={fd.status} />
+                        {isFDMaturingSoon(fd, 30) ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#FEF3C7] text-[#92400E] border border-[#F59E0B]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B] animate-pulse" />
+                            Maturing Soon ({getDaysToMaturity(fd.maturityDate)}d)
+                          </span>
+                        ) : (
+                          <StatusBadge status={fd.status} />
+                        )}
                       </td>
 
                       {/* Action buttons per tab */}
@@ -489,12 +498,12 @@ export const FDListPage: React.FC = () => {
                           )}
 
                           {/* Premature Closure Action */}
-                          {(activeTab === 'active' || activeTab === 'preclose') && (
+                          {(activeTab === 'active' || activeTab === 'preclose' || activeTab === 'maturing') && (
                             <button
                               onClick={() => setPrecloseFD(fd)}
                               className="px-2.5 py-1 rounded-lg bg-[#FEF2F2] hover:bg-[#FEE2E2] text-[#DC2626] border border-[#FCA5A5] text-xs font-bold transition-colors"
                             >
-                              Pre-Close
+                              {activeTab === 'maturing' ? 'Settle / Close' : 'Pre-Close'}
                             </button>
                           )}
 

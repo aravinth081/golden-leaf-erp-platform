@@ -105,7 +105,38 @@ export function getStoredLeaveRequests(): LeaveODRequest[] {
     }
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
-      return parsed;
+      // Auto-sanitize existing pending requests from HR or Managers to PENDING_ADMIN
+      let hasChanges = false;
+      const sanitized = parsed.map((r: LeaveODRequest) => {
+        const isHigherRole =
+          r.role === 'branch_manager' ||
+          r.role === 'hr_payroll_manager' ||
+          r.role === 'hr' ||
+          r.role === 'area_manager' ||
+          (r.roleTitle && (
+            r.roleTitle.toLowerCase().includes('hr') ||
+            r.roleTitle.toLowerCase().includes('manager') ||
+            r.roleTitle.toLowerCase().includes('head')
+          )) ||
+          (r.employeeName && r.employeeName.toLowerCase().includes('vinayagam'));
+
+        if (isHigherRole && r.status === 'PENDING_BRANCH_MANAGER') {
+          hasChanges = true;
+          return {
+            ...r,
+            status: 'PENDING_ADMIN' as LeaveStatus,
+            approverRole: 'admin' as const,
+          };
+        }
+        return r;
+      });
+
+      if (hasChanges) {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitized));
+        } catch {}
+      }
+      return sanitized;
     }
     return [];
   } catch (e) {
@@ -166,11 +197,25 @@ export function submitLeaveODRequest(input: CreateLeaveInput): LeaveODRequest {
   }) + ', ' + now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
   // WORKFLOW RULE:
-  // Branch Manager -> PENDING_ADMIN (requires Admin permission)
-  // CRO or Credit Manager -> PENDING_BRANCH_MANAGER (requires Branch Manager confirmation)
-  const isBranchManager = input.role === 'branch_manager';
-  const status: LeaveStatus = isBranchManager ? 'PENDING_ADMIN' : 'PENDING_BRANCH_MANAGER';
-  const approverRole: 'branch_manager' | 'admin' = isBranchManager ? 'admin' : 'branch_manager';
+  // 1. Branch Manager, HR / Payroll Manager, Area Manager -> PENDING_ADMIN (strictly requires Admin permission)
+  // 2. Field Staff (CRO, Credit Manager, etc.) -> PENDING_BRANCH_MANAGER (requires Branch Manager confirmation)
+  const isRequiresAdminApproval =
+    input.role === 'branch_manager' ||
+    input.role === 'hr_payroll_manager' ||
+    input.role === 'hr' ||
+    input.role === 'area_manager' ||
+    input.role === 'admin' ||
+    (input.roleTitle && (
+      input.roleTitle.toLowerCase().includes('branch manager') ||
+      input.roleTitle.toLowerCase().includes('hr') ||
+      input.roleTitle.toLowerCase().includes('payroll') ||
+      input.roleTitle.toLowerCase().includes('head') ||
+      input.roleTitle.toLowerCase().includes('manager')
+    )) ||
+    (input.employeeName && input.employeeName.toLowerCase().includes('vinayagam'));
+
+  const status: LeaveStatus = isRequiresAdminApproval ? 'PENDING_ADMIN' : 'PENDING_BRANCH_MANAGER';
+  const approverRole: 'branch_manager' | 'admin' = isRequiresAdminApproval ? 'admin' : 'branch_manager';
 
   const newRecord: LeaveODRequest = {
     id: `LOD-${now.getFullYear()}-${String(current.length + 1).padStart(3, '0')}`,
@@ -196,6 +241,27 @@ export function approveLeaveODRequest(
   const idx = current.findIndex((r) => r.id === requestId);
   if (idx === -1) return null;
 
+  const target = current[idx];
+
+  // ANTI SELF-APPROVAL CHECK:
+  if (
+    approverName &&
+    target.employeeName &&
+    target.employeeName.toLowerCase().trim() === approverName.toLowerCase().trim()
+  ) {
+    throw new Error('Self-approval is strictly prohibited. Your leave/OD request must be approved by Admin / Management.');
+  }
+
+  // PENDING_ADMIN requires Admin permission:
+  const isApproverAdmin =
+    approverRole === 'admin' ||
+    approverRole === 'System Admin' ||
+    approverRole === 'Managing Director';
+
+  if (target.status === 'PENDING_ADMIN' && !isApproverAdmin) {
+    throw new Error('This request requires Head Office Admin approval.');
+  }
+
   const now = new Date();
   const actionedAtDisplay = now.toLocaleDateString('en-GB', {
     day: '2-digit',
@@ -204,7 +270,7 @@ export function approveLeaveODRequest(
   }) + ', ' + now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
   const updatedRecord: LeaveODRequest = {
-    ...current[idx],
+    ...target,
     status: 'APPROVED',
     approvedBy: `${approverName} (${approverRole})`,
     approvalRemarks: approvalRemarks || 'Approved and granted authorization.',
@@ -227,6 +293,27 @@ export function rejectLeaveODRequest(
   const idx = current.findIndex((r) => r.id === requestId);
   if (idx === -1) return null;
 
+  const target = current[idx];
+
+  // ANTI SELF-APPROVAL CHECK:
+  if (
+    approverName &&
+    target.employeeName &&
+    target.employeeName.toLowerCase().trim() === approverName.toLowerCase().trim()
+  ) {
+    throw new Error('Self-rejection is invalid. Please withdraw your application from My Applications tab.');
+  }
+
+  // PENDING_ADMIN requires Admin permission:
+  const isApproverAdmin =
+    approverRole === 'admin' ||
+    approverRole === 'System Admin' ||
+    approverRole === 'Managing Director';
+
+  if (target.status === 'PENDING_ADMIN' && !isApproverAdmin) {
+    throw new Error('This request requires Head Office Admin authorization.');
+  }
+
   const now = new Date();
   const actionedAtDisplay = now.toLocaleDateString('en-GB', {
     day: '2-digit',
@@ -235,7 +322,7 @@ export function rejectLeaveODRequest(
   }) + ', ' + now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
   const updatedRecord: LeaveODRequest = {
-    ...current[idx],
+    ...target,
     status: 'REJECTED',
     approvedBy: `${approverName} (${approverRole})`,
     approvalRemarks: approvalRemarks || 'Application could not be approved at this time.',

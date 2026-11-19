@@ -6,6 +6,7 @@
 export const DEFAULT_RATE_SLABS = [
   { id: 'slab-1', label: '180–364 Days', minDays: 180, maxDays: 364, baseRate: 8.5, isActive: true },
   { id: 'slab-2', label: '12–23 Months', minDays: 365, maxDays: 729, baseRate: 9.0, isActive: true },
+  { id: 'slab-444', label: '444 Days (Special Flagship Scheme)', minDays: 444, maxDays: 444, baseRate: 10.0, isActive: true },
   { id: 'slab-3', label: '24–36 Months', minDays: 730, maxDays: 1095, baseRate: 9.5, isActive: true },
   { id: 'slab-4', label: '36+ Months', minDays: 1096, maxDays: 99999, baseRate: 9.75, isActive: true },
 ];
@@ -46,9 +47,49 @@ export function getDaysBetweenDates(startDateStr: string, endDateStr: string): n
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 }
 
+export function getDaysToMaturity(maturityDateStr: string): number {
+  if (!maturityDateStr) return 999999;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const matDate = new Date(maturityDateStr);
+  matDate.setHours(0, 0, 0, 0);
+
+  const diffTime = matDate.getTime() - today.getTime();
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+}
+
+export function isFDMaturingSoon(fd: { status: string; maturityDate?: string }, daysThreshold: number = 30): boolean {
+  if (fd.status === 'Maturing Soon') return true;
+  if (fd.status !== 'Active') return false;
+  if (!fd.maturityDate) return false;
+
+  const days = getDaysToMaturity(fd.maturityDate);
+  return days <= daysThreshold;
+}
+
 export function getBaseRateForDays(days: number, slabs = DEFAULT_RATE_SLABS): number {
+  // 1. Exact tenure match (e.g. 444 Days Special Flagship Scheme)
+  const exact = slabs.find((s) => s.minDays === days && s.maxDays === days && s.isActive);
+  if (exact) return exact.baseRate;
+
+  // 2. 444 days special flagship fallback (10.00% p.a.)
+  if (days === 444) {
+    const special = slabs.find((s) => s.id === 'slab-444' || s.label?.includes('444'));
+    return special && special.isActive ? special.baseRate : 10.0;
+  }
+
+  // 3. Match standard range
   const found = slabs.find((s) => days >= s.minDays && days <= s.maxDays && s.isActive);
-  return found ? found.baseRate : 8.5;
+  if (found) return found.baseRate;
+
+  // 4. Upper boundary: If tenure is >= 1096 days (3+ years), give top tier rate rather than defaulting to lowest 8.5%
+  if (days >= 1096) {
+    const highest = slabs.find((s) => s.id === 'slab-4' || s.minDays >= 1096);
+    return highest ? highest.baseRate : 9.75;
+  }
+
+  return 8.5;
 }
 
 export interface FDCalculationInput {
@@ -84,7 +125,7 @@ export function computeFDReturns(input: FDCalculationInput): FDCalculationResult
   const tYears = totalDays / 365;
 
   let booster = 0;
-  if (input.isSeniorCitizen) booster += 0.5;
+  if (input.isSeniorCitizen) booster += 1.0;
   if (input.isStaff) booster += 1.0;
   if (input.isRenewal) booster += 0.25;
   if (input.principal >= 1500000) booster += 0.25; // High value bulk deposit booster

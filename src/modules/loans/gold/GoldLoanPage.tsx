@@ -124,7 +124,7 @@ export const GoldLoanPage: React.FC = () => {
       addToast({
         type: 'success',
         title: 'Gold Loan Disbursed',
-        message: `Sanctioned amount ₹${utrModalLoan.sanctionedLoanAmount.toLocaleString('en-IN')} released to borrower account.`,
+        message: `Sanctioned amount ₹${Number(utrModalLoan.sanctionedLoanAmount || 0).toLocaleString('en-IN')} released to borrower account.`,
       });
       setUtrModalLoan(null);
       setUtrNumber('');
@@ -259,7 +259,7 @@ export const GoldLoanPage: React.FC = () => {
             <Scale size={18} className="text-amber-600" />
           </div>
           <div className="text-2xl font-extrabold text-[#0B1F3A] font-display">
-            {vaultStats.totalGrossWeight.toFixed(2)} <span className="text-xs font-medium text-gray-500">grams</span>
+            {(Number(vaultStats.totalGrossWeight) || 0).toFixed(2)} <span className="text-xs font-medium text-gray-500">grams</span>
           </div>
           <div className="mt-1 text-[11px] text-gray-500">
             Physical ornaments pledged
@@ -272,7 +272,7 @@ export const GoldLoanPage: React.FC = () => {
             <Sparkles size={18} className="text-[#D4AF37]" />
           </div>
           <div className="text-2xl font-extrabold text-[#0B1F3A] font-display">
-            {vaultStats.totalNetWeight.toFixed(2)} <span className="text-xs font-medium text-gray-500">grams</span>
+            {(Number(vaultStats.totalNetWeight) || 0).toFixed(2)} <span className="text-xs font-medium text-gray-500">grams</span>
           </div>
           <div className="mt-1 text-[11px] text-amber-700 font-semibold">
             Pure gold backing corpus
@@ -496,7 +496,7 @@ export const GoldLoanPage: React.FC = () => {
             </div>
             <div className="flex items-center gap-2 text-xs font-semibold text-gray-600">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              Vault Active • Total Pledged: {vaultStats.totalGrossWeight.toFixed(2)} g
+              Vault Active • Total Pledged: {(Number(vaultStats.totalGrossWeight) || 0).toFixed(2)} g
             </div>
           </div>
 
@@ -545,30 +545,30 @@ export const GoldLoanPage: React.FC = () => {
                         </td>
                         <td className="py-3.5 px-4">
                           <div className="font-semibold text-gray-800">
-                            {loan.totalNetWeightGrams.toFixed(2)} g Net{' '}
+                            {(Number(loan.totalNetWeightGrams) || 0).toFixed(2)} g Net{' '}
                             <span className="text-[10px] text-gray-400 font-normal">
-                              ({loan.totalGrossWeightGrams.toFixed(2)} g Gross)
+                              ({(Number(loan.totalGrossWeightGrams) || 0).toFixed(2)} g Gross)
                             </span>
                           </div>
                           <div className="text-[10px] text-gray-500">
                             {loan.totalQuantity} items ({loan.items.map((i) => i.ornamentType).slice(0, 2).join(', ')}
-                            {loan.items.length > 2 ? '...' : ''})
+                            {(loan.items || []).length > 2 ? '...' : ''})
                           </div>
                         </td>
                         <td className="py-3.5 px-4">
                           <div className="font-bold text-[#0B1F3A] text-[11px]">
-                            {loan.safeVaultLocation.safeNumber}
+                            {loan.safeVaultLocation?.safeNumber || 'SAFE-01'}
                           </div>
                           <div className="text-[10px] text-gray-500">
-                            {loan.safeVaultLocation.rackCabinet} • {loan.safeVaultLocation.traySlot}
+                            {loan.safeVaultLocation?.rackCabinet || 'RACK-A'} • {loan.safeVaultLocation?.traySlot || 'TRAY-01'}
                           </div>
                         </td>
                         <td className="py-3.5 px-4">
                           <div className="font-extrabold text-[#0B1F3A]">
-                            ₹{loan.sanctionedLoanAmount.toLocaleString('en-IN')}
+                            ₹{Number(loan.sanctionedLoanAmount || 0).toLocaleString('en-IN')}
                           </div>
                           <div className="text-[10px] text-emerald-700 font-semibold">
-                            ₹{loan.monthlyInterestAmount}/mo ({loan.interestRateAnnual}% p.a.)
+                            ₹{Number(loan.monthlyInterestAmount || 0).toLocaleString('en-IN')}/mo ({loan.interestRateAnnual || 12}% p.a.)
                           </div>
                         </td>
                         <td className="py-3.5 px-4">
@@ -613,8 +613,8 @@ export const GoldLoanPage: React.FC = () => {
                               </button>
                             )}
 
-                            {/* Admin Disburse UTR */}
-                            {userRole === 'admin' && bothSigned && loan.status === 'VAULT_LOCKED_PENDING_UTR' && (
+                            {/* Disburse UTR (Move to Next Stage) */}
+                            {bothSigned && (loan.status === 'VAULT_LOCKED_PENDING_UTR' || loan.status === 'APPRAISED_AWAITING_VAULT') && (
                               <button
                                 onClick={() => {
                                   setUtrModalLoan(loan);
@@ -693,12 +693,12 @@ export const GoldLoanPage: React.FC = () => {
                         <div className="text-[11px] text-gray-500 font-mono">{loan.customerMobile}</div>
                       </td>
                       <td className="py-3.5 px-4 font-extrabold text-[#0B1F3A]">
-                        ₹{loan.sanctionedLoanAmount.toLocaleString('en-IN')}
+                        ₹{Number(loan.sanctionedLoanAmount || 0).toLocaleString('en-IN')}
                       </td>
-                      <td className="py-3.5 px-4 text-gray-600 font-medium">{loan.maturityDate}</td>
+                      <td className="py-3.5 px-4 text-gray-600 font-medium">{loan.maturityDate || '-'}</td>
                       <td className="py-3.5 px-4">
                         <span className="text-[11px] font-semibold text-gray-700">
-                          {loan.overdueNotices.length} Notice(s) Sent
+                          {(loan.overdueNotices || []).length} Notice(s) Sent
                         </span>
                       </td>
                       <td className="py-3.5 px-4">{getStatusBadge(loan.status)}</td>
@@ -782,7 +782,7 @@ export const GoldLoanPage: React.FC = () => {
                         <div className="text-[11px] text-gray-500 font-mono">{loan.customerMobile}</div>
                       </td>
                       <td className="py-3.5 px-4 font-bold text-gray-800">
-                        {loan.totalNetWeightGrams.toFixed(2)} g
+                        {(Number(loan.totalNetWeightGrams) || 0).toFixed(2)} g
                       </td>
                       <td className="py-3.5 px-4">{getStatusBadge(loan.status)}</td>
                       <td className="py-3.5 px-4">
@@ -848,6 +848,10 @@ export const GoldLoanPage: React.FC = () => {
         isOpen={!!selectedLoanForPawnTicket}
         onClose={() => setSelectedLoanForPawnTicket(null)}
         loan={selectedLoanForPawnTicket}
+        onProceedToDisburse={(l) => {
+          setUtrModalLoan(l);
+          setUtrNumber(`UTR${Date.now().toString().slice(-8)}`);
+        }}
       />
 
       {/* 4. Gold Redemption & Release Acknowledgment Modal (Sample 12 Part B) */}
@@ -869,7 +873,7 @@ export const GoldLoanPage: React.FC = () => {
             </h3>
             <p className="text-xs text-gray-500 mb-4">
               Enter Bank Realization UTR / NEFT / IMPS reference to release{' '}
-              <strong>₹{utrModalLoan.sanctionedLoanAmount.toLocaleString('en-IN')}</strong> to{' '}
+              <strong>₹{Number(utrModalLoan.sanctionedLoanAmount || 0).toLocaleString('en-IN')}</strong> to{' '}
               <strong>{utrModalLoan.customerName}</strong>.
             </p>
 

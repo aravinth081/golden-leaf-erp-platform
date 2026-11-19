@@ -3,7 +3,7 @@
 // Centralized Morning Rate Entry (Admin Only) • Auto Carat Formula (18K–22K)
 // ──────────────────────────────────────────────────
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Sparkles, Check, AlertCircle, ShieldCheck } from 'lucide-react';
 import { goldLoanService } from '../../../../services/goldLoanService';
@@ -24,32 +24,44 @@ export const AdminGoldRateMasterModal: React.FC<AdminGoldRateMasterModalProps> =
   const currentUser = useAuthStore((s) => s.user);
   const { addToast } = useUIStore();
 
-  const [rate22K, setRate22K] = useState<number>(currentRate.daily22KRatePerGram);
-  const [maxLtv, setMaxLtv] = useState<number>(currentRate.maxPermittedLtvPercent);
+  const [rate22K, setRate22K] = useState<number | string>(currentRate.daily22KRatePerGram);
+  const [maxLtv, setMaxLtv] = useState<number | string>(currentRate.maxPermittedLtvPercent);
+
+  useEffect(() => {
+    if (isOpen) {
+      const freshRate = goldLoanService.getRateMaster();
+      setRate22K(freshRate.daily22KRatePerGram);
+      setMaxLtv(freshRate.maxPermittedLtvPercent);
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
   // Formula previews
-  const rate20K = Math.round(rate22K * (20 / 22));
-  const rate18K = Math.round(rate22K * (18 / 22));
+  const numRate22K = typeof rate22K === 'number' ? rate22K : parseFloat(String(rate22K)) || 0;
+  const numMaxLtv = typeof maxLtv === 'number' ? maxLtv : parseFloat(String(maxLtv)) || 75;
+
+  const rate24K = Math.round(numRate22K * (24 / 22));
+  const rate20K = Math.round(numRate22K * (20 / 22));
+  const rate18K = Math.round(numRate22K * (18 / 22));
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    if (rate22K <= 1000) {
+    if (numRate22K <= 1000) {
       addToast({ type: 'error', title: 'Invalid Rate', message: 'Enter a realistic 22K gold rate per gram.' });
       return;
     }
 
     goldLoanService.updateRateMaster(
-      rate22K,
-      maxLtv,
+      numRate22K,
+      numMaxLtv,
       currentUser?.displayName || 'Administrator'
     );
 
     addToast({
       type: 'success',
       title: 'Daily Gold Rate Master Updated',
-      message: `22K rate set to ₹${rate22K}/g (Max ${maxLtv}% LTV). Carat formulas adjusted across all branches.`,
+      message: `22K rate set to ₹${numRate22K}/g (Max ${numMaxLtv}% LTV). Carat formulas adjusted across all branches.`,
     });
 
     onRateUpdated();
@@ -99,7 +111,16 @@ export const AdminGoldRateMasterModal: React.FC<AdminGoldRateMasterModalProps> =
                     step="10"
                     required
                     value={rate22K}
-                    onChange={(e) => setRate22K(parseFloat(e.target.value) || 0)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '') {
+                        setRate22K('');
+                      } else {
+                        const clean = val.replace(/^0+(?=\d)/, '');
+                        setRate22K(clean);
+                      }
+                    }}
+                    placeholder="e.g. 5850"
                     className="w-full pl-8 pr-3 py-2.5 bg-gray-50 border border-gray-300 rounded-xl font-black text-base text-[#0B1F3A] focus:bg-white focus:border-[#0B1F3A] outline-none"
                   />
                 </div>
@@ -115,7 +136,16 @@ export const AdminGoldRateMasterModal: React.FC<AdminGoldRateMasterModalProps> =
                   max="75"
                   required
                   value={maxLtv}
-                  onChange={(e) => setMaxLtv(parseFloat(e.target.value) || 75)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '') {
+                      setMaxLtv('');
+                    } else {
+                      const clean = val.replace(/^0+(?=\d)/, '');
+                      setMaxLtv(clean);
+                    }
+                  }}
+                  placeholder="75"
                   className="w-full px-3 py-2.5 bg-gray-50 border border-gray-300 rounded-xl font-bold text-emerald-800 focus:bg-white focus:border-[#0B1F3A] outline-none"
                 />
               </div>
@@ -126,7 +156,11 @@ export const AdminGoldRateMasterModal: React.FC<AdminGoldRateMasterModalProps> =
               <span className="font-bold text-[#0B1F3A] uppercase text-[10px] block">
                 Automatic Carat Purity Scale Matrix:
               </span>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-center">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                <div className="p-2 bg-white rounded-xl border border-purple-300">
+                  <span className="text-[10px] uppercase font-bold text-gray-400 block">24 Karat (24/22)</span>
+                  <strong className="text-purple-900 text-xs font-mono font-black">₹{rate24K.toLocaleString('en-IN')}/g</strong>
+                </div>
                 <div className="p-2 bg-white rounded-xl border border-emerald-300">
                   <span className="text-[10px] uppercase font-bold text-gray-400 block">22 Karat</span>
                   <strong className="text-emerald-800 text-xs font-mono font-black">₹{rate22K.toLocaleString('en-IN')}/g</strong>

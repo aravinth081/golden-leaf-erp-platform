@@ -98,13 +98,13 @@ export const ResignationExitPanel: React.FC = () => {
         rec.id,
         currentUser?.displayName || 'Divya Natarajan (Head of HR)',
         isWaiver
-          ? 'Emergency medical relief approved. Notice working days waived under Clause 8.5.'
+          ? 'Special circumstance / early relief approved by HR upon situation verification. Notice working days waived.'
           : 'Working days attendance requirement verified 100%. Assets returned.',
         isWaiver
       );
       addToast({
         type: 'success',
-        title: 'Stage 2 HR Clearance Approved',
+        title: isWaiver ? 'Early Relief / Waiver Approved' : 'Stage 2 HR Clearance Approved',
         message: `Forwarded to Head Office Admin for final relieving & login deactivation.`,
       });
       loadData();
@@ -501,7 +501,7 @@ export const ResignationExitPanel: React.FC = () => {
                 </div>
                 <h3 className="text-sm font-bold text-[#0B1F3A]">No Active Resignation Record</h3>
                 <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                  You are currently in active service with Goldenleaf Finance. To submit a resignation or emergency relief request, click below.
+                  You are currently in active service with Goldenleaf Finance. To initiate a standard resignation request, click below.
                 </p>
                 {!isAdmin && (
                   <button
@@ -671,6 +671,17 @@ export const ResignationExitPanel: React.FC = () => {
                               >
                                 +1 Day
                               </button>
+
+                              {/* HR Early Relief / Waiver Button */}
+                              {!isComplete && (isAdmin || isBranchManager || userRole === 'hr') && (
+                                <button
+                                  onClick={() => handleApproveStage2HR(r, true)}
+                                  title="Verify situation & approve early relief waiver"
+                                  className="px-2.5 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs font-bold transition-all"
+                                >
+                                  Early Relief / Waiver
+                                </button>
+                              )}
 
                               {/* HR Approve */}
                               <button

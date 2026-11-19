@@ -256,7 +256,7 @@ class ResignationService {
     }
 
     const isWorkingDaysComplete = record.actualWorkingDaysServed >= record.roleNoticeRequirementDays;
-    const canUnlock = isWorkingDaysComplete || (record.category === 'IMMEDIATE_EMERGENCY' && isMedicalWaiver);
+    const canUnlock = isWorkingDaysComplete || isMedicalWaiver;
 
     if (!canUnlock) {
       throw new Error(
@@ -270,7 +270,7 @@ class ResignationService {
       approvedAt: new Date().toLocaleString('en-IN'),
       comments: comments.trim() || 'Working days attendance verified and F&F settlement initiated.',
       workingDaysServedVerified: isWorkingDaysComplete,
-      medicalEmergencyWaiverApproved: record.category === 'IMMEDIATE_EMERGENCY' && isMedicalWaiver,
+      medicalEmergencyWaiverApproved: isMedicalWaiver,
       companyIdCardAssetsReturned: true,
       leaveOdFnfSettlementCalculated: true,
     };

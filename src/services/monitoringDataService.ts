@@ -661,9 +661,9 @@ export function getMonitoredAttendance(
       const branchMatch = !branchId || g.branchId === branchId || (g.branchName && g.branchName.toLowerCase().includes(branchId.toLowerCase()));
       if (!branchMatch) return;
 
-      const lat = g.punchInGPS?.lat || 13.0827;
-      const lng = g.punchInGPS?.lng || 80.2707;
-      const address = g.punchInGPS?.address || 'Anna Nagar Main Branch, Chennai';
+      const lat = g.punchInGPS?.lat ?? 0;
+      const lng = g.punchInGPS?.lng ?? 0;
+      const address = g.punchInGPS?.address || (lat !== 0 ? `${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E` : 'Field Location (GPS Verification Pending)');
       const punchTimeFormatted = g.punchInTime ? formatTime(g.punchInTime) : '09:00 AM';
       const punchOutFormatted = g.punchOutTime ? formatTime(g.punchOutTime) : (g.date === todayStr ? 'In Progress' : '05:00 PM');
 
@@ -673,13 +673,13 @@ export function getMonitoredAttendance(
         employeeName: g.employeeName,
         role: g.role === 'collection_agent' ? 'Customer Relationship Officer (CRO)' : g.role,
         branchId: g.branchId || 'BR-01',
-        branchName: g.branchName || 'Anna Nagar Main Branch',
+        branchName: g.branchName || 'Main Branch',
         date: formatDateDisplay(g.date),
         rawDate: g.date,
         loginTime: punchTimeFormatted,
         logoutTime: punchOutFormatted,
         status: g.status === 'late' ? 'Late' : g.status === 'present' ? 'Present' : 'Absent',
-        gpsLocation: `${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E • ${address}`,
+        gpsLocation: lat !== 0 ? `${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E • ${address}` : address,
         lat,
         lng,
         address,
@@ -704,9 +704,9 @@ export function getMonitoredAttendance(
       processedEmployeeKeys.add(key);
       if (g.employeeName) processedEmployeeKeys.add(g.employeeName.toLowerCase());
 
-      const lat = g.punchInGPS?.lat || 13.0827;
-      const lng = g.punchInGPS?.lng || 80.2707;
-      const address = g.punchInGPS?.address || 'Anna Nagar Main Branch, Chennai';
+      const lat = g.punchInGPS?.lat ?? 0;
+      const lng = g.punchInGPS?.lng ?? 0;
+      const address = g.punchInGPS?.address || (lat !== 0 ? `${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E` : 'Field Location (GPS Verification Pending)');
       const punchTimeFormatted = g.punchInTime ? formatTime(g.punchInTime) : '09:00 AM';
       const punchOutFormatted = g.punchOutTime ? formatTime(g.punchOutTime) : (targetDate === todayStr ? 'In Progress' : '05:00 PM');
 
@@ -716,13 +716,13 @@ export function getMonitoredAttendance(
         employeeName: g.employeeName,
         role: g.role === 'collection_agent' ? 'Customer Relationship Officer (CRO)' : g.role,
         branchId: g.branchId || 'BR-01',
-        branchName: g.branchName || 'Anna Nagar Main Branch',
+        branchName: g.branchName || 'Main Branch',
         date: formatDateDisplay(targetDate),
         rawDate: targetDate,
         loginTime: punchTimeFormatted,
         logoutTime: punchOutFormatted,
         status: g.status === 'late' ? 'Late' : 'Present',
-        gpsLocation: `${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E • ${address}`,
+        gpsLocation: lat !== 0 ? `${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E • ${address}` : address,
         lat,
         lng,
         address,
@@ -748,16 +748,16 @@ export function getMonitoredAttendance(
           employeeName: gr.userName,
           role: gr.role === 'collection_agent' ? 'Customer Relationship Officer (CRO)' : gr.role,
           branchId: 'BR-01',
-          branchName: 'Anna Nagar Main Branch',
+          branchName: 'Main Branch',
           date: formatDateDisplay(targetDate),
           rawDate: targetDate,
           loginTime: gr.check_in_time,
           logoutTime: targetDate === todayStr ? 'In Progress' : '05:00 PM',
           status: 'Present',
-          gpsLocation: '13.0827° N, 80.2707° E • Anna Nagar Main Branch, Chennai',
-          lat: 13.0827,
-          lng: 80.2707,
-          address: 'Anna Nagar Main Branch, Chennai',
+          gpsLocation: 'Gate Punch • Live Field Location',
+          lat: 0,
+          lng: 0,
+          address: 'Gate Punch • Live Field Location',
           accuracy: 15,
           selfieVerified: true,
           historyReport: [],
@@ -844,12 +844,12 @@ export function getMonitoredAttendance(
       : emp.role;
 
     const branchObj = branches.find((b) => b.id === emp.branchId);
-    const branchName = branchObj ? branchObj.name : 'Anna Nagar Main Branch';
+    const branchName = branchObj ? branchObj.name : 'Main Branch';
 
     if (datePunch) {
-      const lat = datePunch.punchInGPS?.lat || 13.0827;
-      const lng = datePunch.punchInGPS?.lng || 80.2707;
-      const address = datePunch.punchInGPS?.address || `${branchName}, Chennai`;
+      const lat = datePunch.punchInGPS?.lat ?? 0;
+      const lng = datePunch.punchInGPS?.lng ?? 0;
+      const address = datePunch.punchInGPS?.address || (lat !== 0 ? `${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E` : `${branchName} Field Location`);
       results.push({
         id: datePunch.id,
         employeeId: emp.id,
@@ -862,7 +862,7 @@ export function getMonitoredAttendance(
         loginTime: datePunch.punchInTime ? formatTime(datePunch.punchInTime) : '09:00 AM',
         logoutTime: datePunch.punchOutTime ? formatTime(datePunch.punchOutTime) : (targetDate === todayStr ? 'In Progress' : '05:00 PM'),
         status: datePunch.status === 'late' ? 'Late' : 'Present',
-        gpsLocation: `${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E • ${address}`,
+        gpsLocation: lat !== 0 ? `${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E • ${address}` : address,
         lat,
         lng,
         address,

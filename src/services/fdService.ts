@@ -17,6 +17,7 @@ import {
   computePrematureClosure,
   generateFDNumber,
   DEFAULT_RATE_SLABS,
+  isFDMaturingSoon,
 } from '../utils/fdCalculations';
 import {
   createDocumentWithId,
@@ -39,7 +40,7 @@ const INITIAL_FDS: FixedDeposit[] = [];
 // Initial Referrals Seed
 const INITIAL_REFERRALS: FDReferral[] = [];
 
-function getLocalFDs(): FixedDeposit[] {
+export function getLocalFDs(): FixedDeposit[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_FDS);
     if (!raw) {
@@ -54,6 +55,9 @@ function getLocalFDs(): FixedDeposit[] {
 function saveLocalFDs(list: FixedDeposit[]): void {
   try {
     localStorage.setItem(STORAGE_KEY_FDS, JSON.stringify(list));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('glf_fd_updated', { detail: list }));
+    }
   } catch (e) {
     console.warn('LocalStorage save failed', e);
   }
@@ -412,7 +416,16 @@ export function getRateSlabs(): FDRateSlab[] {
       localStorage.setItem(STORAGE_KEY_SLABS, JSON.stringify(DEFAULT_RATE_SLABS));
       return DEFAULT_RATE_SLABS;
     }
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && !parsed.some((s: any) => s.id === 'slab-444' || s.label?.includes('444'))) {
+      const merged: FDRateSlab[] = [
+        ...parsed.filter((s: any) => s.id !== 'slab-444'),
+        { id: 'slab-444', label: '444 Days (Special Flagship Scheme)', minDays: 444, maxDays: 444, baseRate: 10.0, isActive: true },
+      ].sort((a: any, b: any) => a.minDays - b.minDays);
+      localStorage.setItem(STORAGE_KEY_SLABS, JSON.stringify(merged));
+      return merged;
+    }
+    return parsed;
   } catch {
     return DEFAULT_RATE_SLABS;
   }
@@ -457,7 +470,7 @@ export function getFDKPIMetrics(branchId?: string) {
   const list = branchId ? all.filter((fd) => fd.branchId === branchId) : all;
 
   const activeFDs = list.filter((fd) => fd.status === 'Active');
-  const maturingFDs = list.filter((fd) => fd.status === 'Maturing Soon');
+  const maturingFDs = list.filter((fd) => isFDMaturingSoon(fd, 30));
   const pendingFDs = list.filter((fd) => fd.status === 'Pending Approval');
   const lienFDs = list.filter((fd) => fd.status === 'Lien Marked');
 

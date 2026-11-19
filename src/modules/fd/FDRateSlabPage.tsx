@@ -163,7 +163,7 @@ export const FDRateSlabPage: React.FC = () => {
               <p className="font-bold text-[#065F46]">Senior Citizen Booster</p>
               <p className="text-[11px] text-[#047857]">Auto-detected when age is 60+ from DOB</p>
             </div>
-            <span className="font-mono font-bold text-sm text-[#059669]">+0.50% p.a.</span>
+            <span className="font-mono font-bold text-sm text-[#059669]">+1.00% p.a.</span>
           </div>
 
           <div className="p-3.5 rounded-2xl bg-[#EFF6FF] border border-[#BFDBFE] flex items-center justify-between">

@@ -17,6 +17,7 @@
 import { getStoredBranches, type DetailedBranch } from './branchService';
 import { businessLoanService } from './businessLoanService';
 import { goldLoanService } from './goldLoanService';
+import { getLocalFDs } from './fdService';
 import {
   getMonitoredCustomers,
   getMonitoredLoans,
@@ -405,6 +406,8 @@ export interface BranchReportRow {
   city: string;
   manager: string;
   totalEmployees: number;
+  totalCustomers: number;
+  totalFDValue: number;
   status: string;
 }
 
@@ -428,6 +431,31 @@ export function getBranchReport(branchId?: string | null): BranchReportRow[] {
     console.warn('Error reading staff profiles', e);
   }
 
+  // Read all Fixed Deposits
+  let allFDs: any[] = [];
+  try {
+    allFDs = getLocalFDs();
+  } catch (e) {
+    console.warn('Error reading FDs for branch report', e);
+  }
+
+  // Read all Monitored Customers
+  const monitoredCusts = getMonitoredCustomers(null);
+
+  // Read registered customers from localStorage
+  let regCusts: any[] = [];
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const stored = localStorage.getItem('glf_registered_customers_master');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          regCusts = parsed;
+        }
+      }
+    }
+  } catch (e) {}
+
   return list.map((b) => {
     const branchStaff = staffProfiles.filter(
       (p: any) => p.branchId === b.id || p.branchName === b.name || p.branchId === b.code
@@ -438,12 +466,62 @@ export function getBranchReport(branchId?: string | null): BranchReportRow[] {
       ? branchManager.fullName
       : (b.manager && b.manager !== 'Unassigned' ? b.manager : 'Unassigned');
 
+    const isMatch = (itemBranchId?: string, itemBranchName?: string, itemBranchCode?: string) => {
+      if (branches.length === 1) return true;
+      const bId = (b.id || '').toLowerCase().trim();
+      const bCode = (b.code || '').toLowerCase().trim();
+      const bName = (b.name || '').toLowerCase().trim();
+
+      const tId = (itemBranchId || '').toLowerCase().trim();
+      const tCode = (itemBranchCode || '').toLowerCase().trim();
+      const tName = (itemBranchName || '').toLowerCase().trim();
+
+      if (tId && (tId === bId || tId === bCode)) return true;
+      if (tCode && (tCode === bId || tCode === bCode)) return true;
+      if (tName && (tName === bName || tName.includes(bName) || bName.includes(tName))) return true;
+      return false;
+    };
+
+    // Calculate Branch FD value (exclude cancelled/closed if applicable, sum principal)
+    const branchFDs = allFDs.filter((fd: any) => {
+      if (fd.status === 'Matured & Settled' || fd.status === 'Rejected') return false;
+      return isMatch(fd.branchId, fd.branchName, fd.branchCode);
+    });
+
+    const totalFDValue = branchFDs.reduce((sum: number, fd: any) => sum + (Number(fd.principal) || 0), 0);
+
+    // Calculate Unique Customer Count
+    const customerKeys = new Set<string>();
+
+    monitoredCusts.forEach((c) => {
+      if (isMatch(c.branchId, c.branchName)) {
+        customerKeys.add(c.id || c.phone || c.name);
+      }
+    });
+
+    regCusts.forEach((c) => {
+      if (isMatch(c.branchId, c.branchName)) {
+        customerKeys.add(c.id || c.phone || c.name);
+      }
+    });
+
+    branchFDs.forEach((fd: any) => {
+      const k = fd.investorId || fd.investorMobile || fd.investorName || fd.customerId;
+      if (k) {
+        customerKeys.add(k);
+      }
+    });
+
+    const totalCustomers = Math.max(customerKeys.size, b.totalCustomers || 0);
+
     return {
       code: b.code,
       name: b.name,
       city: b.city,
       manager: managerName,
       totalEmployees: totalStaff,
+      totalCustomers,
+      totalFDValue,
       status: b.status,
     };
   });

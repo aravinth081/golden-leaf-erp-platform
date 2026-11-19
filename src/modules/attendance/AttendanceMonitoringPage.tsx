@@ -474,7 +474,7 @@ export const AttendanceMonitoringPage: React.FC = () => {
           <div className="pt-2.5 border-t border-white/10 text-[11.5px] text-slate-300 flex items-center gap-1.5 truncate">
             <Compass size={11} className="text-[#D4AF37] shrink-0" />
             <span className="truncate">
-              {stats.latestAgent?.address || 'Anna Nagar Main Branch, Chennai'}
+              {stats.latestAgent?.address || 'Awaiting Live Punch Location'}
             </span>
           </div>
         </div>
