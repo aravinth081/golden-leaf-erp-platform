@@ -79,7 +79,15 @@ const KycUpdatePage: React.FC = () => {
 
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement> | { target: { name: string; value: string } }) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    let cleanVal = value;
+    if (name === 'pancardNo') {
+      cleanVal = value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
+    } else if (name === 'mobileNumber') {
+      cleanVal = value.replace(/\D/g, '').slice(0, 10);
+    } else if (name === 'pincode') {
+      cleanVal = value.replace(/\D/g, '').slice(0, 6);
+    }
+    setFormData(prev => ({ ...prev, [name]: cleanVal }));
     setErrors(prev => ({ ...prev, [name]: '' }));
     
     // Reset verification status if the field is changed
@@ -294,7 +302,7 @@ const KycUpdatePage: React.FC = () => {
           <Input label="State" name="state" error={errors.state} value={formData.state} onChange={handleFormChange} />
 
           <Input label="Country" name="country" error={errors.country} value={formData.country} onChange={handleFormChange} />
-          <Input label="Mobile Number" name="mobileNumber" error={errors.mobileNumber} value={formData.mobileNumber} onChange={handleFormChange} />
+          <Input label="Mobile Number" name="mobileNumber" maxLength={10} error={errors.mobileNumber} value={formData.mobileNumber} onChange={handleFormChange} />
           <div className="flex items-end gap-2">
             <div className="flex-1">
               <Input label="Bank IFSC" name="bankIfsc" error={errors.bankIfsc} value={formData.bankIfsc} onChange={handleFormChange} />
@@ -321,7 +329,7 @@ const KycUpdatePage: React.FC = () => {
           <Input label="Smart Card No." name="smartCardNo" error={errors.smartCardNo} value={formData.smartCardNo} onChange={handleFormChange} />
 
           <Input label="Voter ID No." name="voterIdNo" error={errors.voterIdNo} value={formData.voterIdNo} onChange={handleFormChange} />
-          <Input label="Pancard No." name="pancardNo" error={errors.pancardNo} value={formData.pancardNo} onChange={handleFormChange} />
+          <Input label="Pancard No." name="pancardNo" maxLength={10} error={errors.pancardNo} value={formData.pancardNo} onChange={handleFormChange} />
           <div className="hidden md:block"></div> {/* Spacer */}
 
           <Input label="Latitude" name="latitude" error={errors.latitude} value={formData.latitude} onChange={handleFormChange} />

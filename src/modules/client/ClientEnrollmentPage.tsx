@@ -55,7 +55,13 @@ const ClientEnrollmentPage: React.FC = () => {
 
   const handleKycChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setKycData(prev => ({ ...prev, [name]: value }));
+    let cleanVal = value;
+    if (name === 'pan' || name === 'caPan') {
+      cleanVal = value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
+    } else if (name === 'mobile' || name === 'caMobile') {
+      cleanVal = value.replace(/\D/g, '').slice(0, 10);
+    }
+    setKycData(prev => ({ ...prev, [name]: cleanVal }));
     if (kycVerified) setKycVerified(false);
   };
 
@@ -436,16 +442,16 @@ const ClientEnrollmentPage: React.FC = () => {
         </h3>
 
         <div className="grid grid-cols-1 md:grid-cols-5 gap-x-5 gap-y-6">
-          <Input label="Mobile Number" name="mobile" value={kycData.mobile} onChange={handleKycChange} />
+          <Input label="Mobile Number" name="mobile" maxLength={10} value={kycData.mobile} onChange={handleKycChange} />
           <Input label="Voters ID No" name="voterId" value={kycData.voterId} onChange={handleKycChange} />
           <Input label="Other ID No" name="otherId" value={kycData.otherId} onChange={handleKycChange} />
-          <Input label="Pancard No" name="pan" value={kycData.pan} onChange={handleKycChange} />
+          <Input label="Pancard No" name="pan" maxLength={10} value={kycData.pan} onChange={handleKycChange} />
           <Input label="Smart Card No" name="smartCard" value={kycData.smartCard} onChange={handleKycChange} />
 
-          <Input label="C.A Mobile Number" name="caMobile" value={kycData.caMobile} onChange={handleKycChange} />
+          <Input label="C.A Mobile Number" name="caMobile" maxLength={10} value={kycData.caMobile} onChange={handleKycChange} />
           <Input label="C.A Voter ID No." name="caVoterId" value={kycData.caVoterId} onChange={handleKycChange} />
           <Input label="C.A Other ID No." name="caOtherId" value={kycData.caOtherId} onChange={handleKycChange} />
-          <Input label="C.A Pancard No." name="caPan" value={kycData.caPan} onChange={handleKycChange} />
+          <Input label="C.A Pancard No." name="caPan" maxLength={10} value={kycData.caPan} onChange={handleKycChange} />
         </div>
 
         <div className="mt-6">

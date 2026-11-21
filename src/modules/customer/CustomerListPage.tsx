@@ -1815,9 +1815,10 @@ export const CustomerListPage: React.FC = () => {
                           <input
                             type="tel"
                             value={formData.phone}
-                            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                            onChange={(e) => setFormData({ ...formData, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
                             placeholder="98765 43210"
                             maxLength={10}
+                            inputMode="numeric"
                             className="w-full bg-transparent text-xs text-[#0B1F3A] font-bold outline-none placeholder-slate-400 font-manrope tracking-wide"
                           />
                         </div>
@@ -1940,17 +1941,23 @@ export const CustomerListPage: React.FC = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       {/* Aadhaar */}
                       <div>
-                        <label className="block text-[11px] font-bold text-slate-600 mb-1.5 font-jakarta uppercase tracking-wider">
-                          Aadhaar Number
-                        </label>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="block text-[11px] font-bold text-slate-600 font-jakarta uppercase tracking-wider">
+                            Aadhaar Number
+                          </label>
+                          <span className={`text-[10px] font-mono ${formData.aadhaarNumber?.length === 12 ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>
+                            {formData.aadhaarNumber?.length || 0}/12
+                          </span>
+                        </div>
                         <div className="flex items-center gap-2.5 px-3.5 py-2.5 bg-slate-50/80 hover:bg-white focus-within:bg-white border border-slate-200/90 rounded-xl focus-within:border-[#D4AF37] focus-within:ring-2 focus-within:ring-[#D4AF37]/25 transition-all shadow-xs">
                           <Shield size={15} className="text-slate-400 shrink-0" />
                           <input
                             type="text"
                             value={formData.aadhaarNumber}
-                            onChange={(e) => setFormData({ ...formData, aadhaarNumber: e.target.value.replace(/\D/g, '') })}
-                            placeholder="e.g. 8234"
+                            onChange={(e) => setFormData({ ...formData, aadhaarNumber: e.target.value.replace(/\D/g, '').slice(0, 12) })}
+                            placeholder="12-digit UID"
                             maxLength={12}
+                            inputMode="numeric"
                             className="w-full bg-transparent text-xs text-[#0B1F3A] font-bold outline-none font-manrope tracking-wider"
                           />
                         </div>
@@ -1958,16 +1965,21 @@ export const CustomerListPage: React.FC = () => {
 
                       {/* PAN */}
                       <div>
-                        <label className="block text-[11px] font-bold text-slate-600 mb-1.5 font-jakarta uppercase tracking-wider">
-                          PAN Number
-                        </label>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="block text-[11px] font-bold text-slate-600 font-jakarta uppercase tracking-wider">
+                            PAN Number
+                          </label>
+                          <span className={`text-[10px] font-mono ${formData.panNumber?.length === 10 ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>
+                            {formData.panNumber?.length || 0}/10
+                          </span>
+                        </div>
                         <div className="flex items-center gap-2.5 px-3.5 py-2.5 bg-slate-50/80 hover:bg-white focus-within:bg-white border border-slate-200/90 rounded-xl focus-within:border-[#D4AF37] focus-within:ring-2 focus-within:ring-[#D4AF37]/25 transition-all shadow-xs">
                           <CreditCard size={15} className="text-slate-400 shrink-0" />
                           <input
                             type="text"
                             value={formData.panNumber}
-                            onChange={(e) => setFormData({ ...formData, panNumber: e.target.value.toUpperCase() })}
-                            placeholder="FLPKM9900L"
+                            onChange={(e) => setFormData({ ...formData, panNumber: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10) })}
+                            placeholder="ABCDE1234F"
                             maxLength={10}
                             className="w-full bg-transparent text-xs text-[#0B1F3A] font-mono uppercase font-bold outline-none tracking-wider"
                           />

@@ -111,9 +111,9 @@ const PDF_REPORT_CARDS: ReportCardItem[] = [
 export const ReportsPage: React.FC = () => {
   const navigate = useNavigate();
   const currentUser = useAuthStore((s) => s.user);
-  const userRole = currentUser?.customClaims?.role;
-  const isBranchScopedUser = (userRole as string) === 'branch_manager' || (userRole as string) === 'collection_agent' || (userRole as string) === 'cro';
-  const userBranchId = currentUser?.customClaims?.branchId;
+  const rawRole = (currentUser?.customClaims?.role || (currentUser as any)?.role || '').toString().toLowerCase();
+  const isBranchScopedUser = rawRole !== 'admin' && rawRole !== 'super_admin';
+  const userBranchId = currentUser?.customClaims?.branchId || (currentUser as any)?.branchId;
 
   const selectedBranchId = useUIStore((s) => s.selectedBranchId);
   const setSelectedBranchId = useUIStore((s) => s.setSelectedBranchId);

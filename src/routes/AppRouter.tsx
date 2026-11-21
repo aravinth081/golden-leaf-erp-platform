@@ -3,84 +3,85 @@
 // Strict Role-Based Access Control (RBAC) Routing Engine
 // ──────────────────────────────────────────────────
 
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, useState, useEffect } from 'react';
 import { createBrowserRouter, Navigate, useRouteError } from 'react-router-dom';
-import { AlertTriangle, RefreshCcw } from 'lucide-react';
+import { AlertTriangle, RefreshCcw, Home } from 'lucide-react';
 import { AppLayout } from '../layouts/AppLayout';
 import { AuthLayout } from '../layouts/AuthLayout';
 import { ProtectedRoute } from '../components/guards/ProtectedRoute';
 import { PageSkeleton } from '../components/ui';
 import { useAuthStore } from '../store';
+import { lazyWithRetry } from '../utils/lazyWithRetry';
 
 // Auth Pages
 import LoginPage from '../modules/auth/LoginPage';
-const ForgotPasswordPage = lazy(() => import('../modules/auth/ForgotPasswordPage'));
+const ForgotPasswordPage = lazyWithRetry(() => import('../modules/auth/ForgotPasswordPage'), 'forgot-password');
 
 // Role Dashboards
-const AdminDashboard = lazy(() => import('../modules/dashboard/AdminDashboard'));
-const BranchDashboard = lazy(() => import('../modules/dashboard/BranchDashboard'));
-const CreditDashboard = lazy(() => import('../modules/dashboard/CreditDashboard'));
-const AgentDashboard = lazy(() => import('../modules/dashboard/AgentDashboard'));
-const HRPayrollDashboardPage = lazy(() => import('../modules/hr/HRPayrollDashboardPage'));
+const AdminDashboard = lazyWithRetry(() => import('../modules/dashboard/AdminDashboard'), 'dashboard/admin');
+const BranchDashboard = lazyWithRetry(() => import('../modules/dashboard/BranchDashboard'), 'dashboard/branch');
+const CreditDashboard = lazyWithRetry(() => import('../modules/dashboard/CreditDashboard'), 'dashboard/credit');
+const AgentDashboard = lazyWithRetry(() => import('../modules/dashboard/AgentDashboard'), 'dashboard/agent');
+const HRPayrollDashboardPage = lazyWithRetry(() => import('../modules/hr/HRPayrollDashboardPage'), 'hr-payroll');
 
 // Admin Modules
-const InvestorListPage = lazy(() => import('../modules/investor/InvestorListPage'));
-const FDListPage = lazy(() => import('../modules/fd/FDListPage'));
-const FDRateSlabPage = lazy(() => import('../modules/fd/FDRateSlabPage'));
-const FDReferralPage = lazy(() => import('../modules/fd/FDReferralPage'));
-const BusinessLoanPage = lazy(() => import('../modules/loans/business/BusinessLoanPage'));
-const GoldLoanPage = lazy(() => import('../modules/loans/gold/GoldLoanPage'));
-const BranchListPage = lazy(() => import('../modules/branch/BranchListPage'));
-const BranchDashboardPage = lazy(() => import('../modules/branch/BranchDashboardPage'));
-const EmployeeListPage = lazy(() => import('../modules/employee/EmployeeListPage'));
-const SystemMonitoringPage = lazy(() => import('../modules/monitoring/SystemMonitoringPage'));
-const AuditLogPage = lazy(() => import('../modules/audit/AuditLogPage'));
-const SettingsPage = lazy(() => import('../modules/settings/SettingsPage'));
+const InvestorListPage = lazyWithRetry(() => import('../modules/investor/InvestorListPage'), 'investors');
+const FDListPage = lazyWithRetry(() => import('../modules/fd/FDListPage'), 'fixed-deposits');
+const FDRateSlabPage = lazyWithRetry(() => import('../modules/fd/FDRateSlabPage'), 'fixed-deposits/rates');
+const FDReferralPage = lazyWithRetry(() => import('../modules/fd/FDReferralPage'), 'fixed-deposits/referral');
+const BusinessLoanPage = lazyWithRetry(() => import('../modules/loans/business/BusinessLoanPage'), 'business-loans');
+const GoldLoanPage = lazyWithRetry(() => import('../modules/loans/gold/GoldLoanPage'), 'gold-loans');
+const BranchListPage = lazyWithRetry(() => import('../modules/branch/BranchListPage'), 'branches');
+const BranchDashboardPage = lazyWithRetry(() => import('../modules/branch/BranchDashboardPage'), 'branches/detail');
+const EmployeeListPage = lazyWithRetry(() => import('../modules/employee/EmployeeListPage'), 'employees');
+const SystemMonitoringPage = lazyWithRetry(() => import('../modules/monitoring/SystemMonitoringPage'), 'monitoring');
+const AuditLogPage = lazyWithRetry(() => import('../modules/audit/AuditLogPage'), 'audit-logs');
+const SettingsPage = lazyWithRetry(() => import('../modules/settings/SettingsPage'), 'settings');
 
 // Admin Monitoring Pages
-const CustomerMonitoringPage = lazy(() => import('../modules/customer/CustomerMonitoringPage'));
-const LoanMonitoringPage = lazy(() => import('../modules/loan/LoanMonitoringPage'));
-const SanctionLetterPage = lazy(() => import('../modules/loan/SanctionLetterPage'));
-const CollectionMonitoringPage = lazy(() => import('../modules/collection/CollectionMonitoringPage'));
-const AttendanceMonitoringPage = lazy(() => import('../modules/attendance/AttendanceMonitoringPage'));
+const CustomerMonitoringPage = lazyWithRetry(() => import('../modules/customer/CustomerMonitoringPage'), 'monitoring/customers');
+const LoanMonitoringPage = lazyWithRetry(() => import('../modules/loan/LoanMonitoringPage'), 'monitoring/loans');
+const SanctionLetterPage = lazyWithRetry(() => import('../modules/loan/SanctionLetterPage'), 'monitoring/sanction');
+const CollectionMonitoringPage = lazyWithRetry(() => import('../modules/collection/CollectionMonitoringPage'), 'monitoring/collections');
+const AttendanceMonitoringPage = lazyWithRetry(() => import('../modules/attendance/AttendanceMonitoringPage'), 'monitoring/attendance');
 
 // Admin Roles & Security Pages
-const RolesPermissionsPage = lazy(() => import('../modules/employee/RolesPermissionsPage'));
-const StaffProfileManagementPage = lazy(() => import('../modules/admin/StaffProfileManagementPage'));
-const CompensationManagementPage = lazy(() => import('../modules/admin/CompensationManagementPage'));
-const MyPayslipsPage = lazy(() => import('../modules/employee/MyPayslipsPage'));
-const SecurityPage = lazy(() => import('../modules/settings/SecurityPage'));
+const RolesPermissionsPage = lazyWithRetry(() => import('../modules/employee/RolesPermissionsPage'), 'roles');
+const StaffProfileManagementPage = lazyWithRetry(() => import('../modules/admin/StaffProfileManagementPage'), 'admin/staff-profiles');
+const CompensationManagementPage = lazyWithRetry(() => import('../modules/admin/CompensationManagementPage'), 'admin/compensation');
+const MyPayslipsPage = lazyWithRetry(() => import('../modules/employee/MyPayslipsPage'), 'my-payslips');
+const SecurityPage = lazyWithRetry(() => import('../modules/settings/SecurityPage'), 'settings/security');
 
 // Branch Manager & Operations Modules
-const CustomerListPage = lazy(() => import('../modules/customer/CustomerListPage'));
-const CustomerProfilePage = lazy(() => import('../modules/customer/CustomerProfilePage'));
-const CustomerRegistrationPage = lazy(() => import('../modules/customer/CustomerRegistrationPage'));
-const ClientManagementDashboard = lazy(() => import('../modules/customer/ClientManagementDashboard'));
-const CollectionGroupsPage = lazy(() => import('../modules/collection/CollectionGroupsPage'));
-const DailyClosingPage = lazy(() => import('../modules/collection/DailyClosingPage'));
-const PrintingPage = lazy(() => import('../modules/printing/PrintingPage'));
+const CustomerListPage = lazyWithRetry(() => import('../modules/customer/CustomerListPage'), 'customers');
+const CustomerProfilePage = lazyWithRetry(() => import('../modules/customer/CustomerProfilePage'), 'customers/profile');
+const CustomerRegistrationPage = lazyWithRetry(() => import('../modules/customer/CustomerRegistrationPage'), 'customer/registration');
+const ClientManagementDashboard = lazyWithRetry(() => import('../modules/customer/ClientManagementDashboard'), 'client/management');
+const CollectionGroupsPage = lazyWithRetry(() => import('../modules/collection/CollectionGroupsPage'), 'collections/groups');
+const DailyClosingPage = lazyWithRetry(() => import('../modules/collection/DailyClosingPage'), 'collections/closing');
+const PrintingPage = lazyWithRetry(() => import('../modules/printing/PrintingPage'), 'printing');
 
 // Credit Manager Verification Module
-const CreditVerificationPage = lazy(() => import('../modules/approval/CreditVerificationPage'));
-const ApprovalQueuePage = lazy(() => import('../modules/approval/ApprovalQueuePage'));
+const CreditVerificationPage = lazyWithRetry(() => import('../modules/approval/CreditVerificationPage'), 'credit/verification');
+const ApprovalQueuePage = lazyWithRetry(() => import('../modules/approval/ApprovalQueuePage'), 'approval/queue');
 
 // Collections Modules (Weekly, Advance, Pending, History, Dashboard)
-const CollectionsDashboard = lazy(() => import('../modules/collection/CollectionsDashboard'));
-const WeeklyCollectionPage = lazy(() => import('../modules/collection/WeeklyCollectionPage'));
-const AdvanceCollectionPage = lazy(() => import('../modules/collection/AdvanceCollectionPage'));
-const PendingCollectionPage = lazy(() => import('../modules/collection/PendingCollectionPage'));
-const CollectionListPage = lazy(() => import('../modules/collection/CollectionListPage'));
-const DemandCollectionPage = lazy(() => import('../modules/collection/DemandCollectionPage'));
-const LateCollectionPage = lazy(() => import('../modules/collection/LateCollectionPage'));
-const EODPage = lazy(() => import('../modules/collection/EODPage'));
+const CollectionsDashboard = lazyWithRetry(() => import('../modules/collection/CollectionsDashboard'), 'collections');
+const WeeklyCollectionPage = lazyWithRetry(() => import('../modules/collection/WeeklyCollectionPage'), 'collections/weekly');
+const AdvanceCollectionPage = lazyWithRetry(() => import('../modules/collection/AdvanceCollectionPage'), 'collections/advance');
+const PendingCollectionPage = lazyWithRetry(() => import('../modules/collection/PendingCollectionPage'), 'collections/pending');
+const CollectionListPage = lazyWithRetry(() => import('../modules/collection/CollectionListPage'), 'collections/history');
+const DemandCollectionPage = lazyWithRetry(() => import('../modules/collection/DemandCollectionPage'), 'demand/collection');
+const LateCollectionPage = lazyWithRetry(() => import('../modules/collection/LateCollectionPage'), 'collections/late');
+const EODPage = lazyWithRetry(() => import('../modules/collection/EODPage'), 'collections/eod');
 
 // Common & Shared Modules
-const AttendancePage = lazy(() => import('../modules/attendance/AttendancePage'));
-const ReportViewPage = lazy(() => import('../modules/reports/ReportViewPage'));
-const ReportsPage = lazy(() => import('../modules/reports/ReportsPage'));
-const ClientSearchPage = lazy(() => import('../modules/search/ClientSearchPage'));
-const LocateCenterPage = lazy(() => import('../modules/search/LocateCenterPage'));
-const ResetPasswordPage = lazy(() => import('../modules/employee/ResetPasswordPage'));
+const AttendancePage = lazyWithRetry(() => import('../modules/attendance/AttendancePage'), 'attendance');
+const ReportViewPage = lazyWithRetry(() => import('../modules/reports/ReportViewPage'), 'reports/view');
+const ReportsPage = lazyWithRetry(() => import('../modules/reports/ReportsPage'), 'reports');
+const ClientSearchPage = lazyWithRetry(() => import('../modules/search/ClientSearchPage'), 'search');
+const LocateCenterPage = lazyWithRetry(() => import('../modules/search/LocateCenterPage'), 'locate-center');
+const ResetPasswordPage = lazyWithRetry(() => import('../modules/employee/ResetPasswordPage'), 'reset-password');
 
 // Role-Aware Dynamic Dashboard Router for 10 Enterprise Roles
 const DashboardRouter: React.FC = () => {
@@ -109,36 +110,82 @@ const DashboardRouter: React.FC = () => {
 
 const RouteErrorBoundary: React.FC = () => {
   const error = useRouteError() as any;
+  const [isAutoRecovering, setIsAutoRecovering] = useState(false);
+
   const isChunkError =
-    error?.message &&
-    (/Failed to fetch dynamically imported module/i.test(error.message) ||
-     /Loading chunk/i.test(error.message) ||
-     /Importing a module script failed/i.test(error.message));
+    error?.name === 'ChunkLoadError' ||
+    (error?.message && (
+      /Failed to fetch dynamically imported module/i.test(error.message) ||
+      /Loading chunk/i.test(error.message) ||
+      /Importing a module script failed/i.test(error.message) ||
+      /NetworkError/i.test(error.message) ||
+      /Load failed/i.test(error.message)
+    ));
+
+  useEffect(() => {
+    // If it's a chunk or dynamic module error from fast navigation, recover seamlessly
+    if (isChunkError) {
+      const reloadKey = 'glf_auto_recovery_reload';
+      const last = sessionStorage.getItem(reloadKey);
+      const now = Date.now();
+      if (!last || now - Number(last) > 8000) {
+        sessionStorage.setItem(reloadKey, String(now));
+        setIsAutoRecovering(true);
+        const timer = setTimeout(() => {
+          window.location.reload();
+        }, 500);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [isChunkError]);
 
   const handleRefresh = () => {
     window.location.reload();
   };
 
+  const handleGoDashboard = () => {
+    window.location.href = '/dashboard';
+  };
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-[50vh] py-16 px-6">
+    <div className="flex flex-col items-center justify-center min-h-[50vh] py-16 px-6 font-sans">
       <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-4 text-[#D4AF37]">
-        <AlertTriangle size={32} />
+        {isAutoRecovering ? (
+          <RefreshCcw size={28} className="animate-spin text-[#D4AF37]" />
+        ) : (
+          <AlertTriangle size={30} />
+        )}
       </div>
       <h3 className="text-xl font-bold text-[#0F1F38] tracking-tight mb-2">
-        {isChunkError ? 'New Update Available' : 'Something went wrong'}
+        {isAutoRecovering
+          ? 'Optimizing Connection...'
+          : isChunkError
+          ? 'Application Updated'
+          : 'Navigation Interrupted'}
       </h3>
-      <p className="text-sm text-[#64748B] text-center max-w-md mb-6">
-        {isChunkError
-          ? 'A newer version of this module has been deployed. Please reload the page to load the latest update.'
-          : error?.message || 'An unexpected error occurred while loading this page.'}
+      <p className="text-xs sm:text-sm text-[#64748B] text-center max-w-md mb-6 leading-relaxed">
+        {isAutoRecovering
+          ? 'Syncing latest page modules for seamless navigation...'
+          : isChunkError
+          ? 'A newer optimized version of this module is available. Reloading will restore full navigation.'
+          : error?.message || 'A temporary transition glitch occurred. Click below to proceed smoothly.'}
       </p>
-      <button
-        onClick={handleRefresh}
-        className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#D4AF37] hover:bg-[#b89528] text-white font-bold text-sm shadow-md transition-all cursor-pointer"
-      >
-        <RefreshCcw size={16} />
-        Reload Page
-      </button>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={handleRefresh}
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#0B1F3A] hover:bg-[#162D4A] text-white font-bold text-xs uppercase tracking-wider shadow-md transition-all cursor-pointer active:scale-[0.98]"
+        >
+          <RefreshCcw size={14} className={isAutoRecovering ? 'animate-spin' : ''} />
+          Reload Page
+        </button>
+        <button
+          onClick={handleGoDashboard}
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#D4AF37] hover:bg-[#C9A227] text-[#0B1F3A] font-bold text-xs uppercase tracking-wider shadow-md transition-all cursor-pointer active:scale-[0.98]"
+        >
+          <Home size={14} />
+          Return to Dashboard
+        </button>
+      </div>
     </div>
   );
 };

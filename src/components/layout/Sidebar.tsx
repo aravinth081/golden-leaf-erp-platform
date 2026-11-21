@@ -20,6 +20,7 @@ import {
 import { useAuthStore, useUIStore } from '../../store';
 import { ROLE_LABELS, type UserRole } from '../../types';
 import { Avatar } from '../ui/Avatar';
+import { preloadRoute, preloadPriorityRoutes } from '../../utils/lazyWithRetry';
 const goldenLeafLogo = '/logo-icon.png';
 
 interface SubNavItem {
@@ -366,6 +367,26 @@ export const Sidebar: React.FC = () => {
     }
   };
 
+  // Proactive background preloading of primary modules based on active user role
+  React.useEffect(() => {
+    if (!userRole) return;
+    const priorityMap: Partial<Record<UserRole, string[]>> = {
+      branch_manager: ['demand/collection', 'approval/queue', 'collections/closing', 'printing', 'gold-loans'],
+      credit_manager: ['credit/verification', 'approval/queue', 'customers'],
+      admin: ['monitoring', 'reports', 'branches', 'employees', 'audit-logs'],
+      area_manager: ['monitoring', 'reports', 'branches'],
+      collection_agent: ['demand/collection', 'collections', 'attendance'],
+      recovery_officer: ['demand/collection', 'collections/late', 'attendance'],
+      hr_payroll_manager: ['hr-payroll', 'attendance', 'admin/compensation'],
+      accountant: ['collections/closing', 'printing', 'reports'],
+      auditor: ['audit-logs', 'reports', 'monitoring'],
+    };
+    const routes = priorityMap[userRole];
+    if (routes && routes.length > 0) {
+      preloadPriorityRoutes(routes);
+    }
+  }, [userRole]);
+
   // Close on Escape key press (both mobile and desktop)
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -619,6 +640,8 @@ export const Sidebar: React.FC = () => {
                   <NavLink
                     to={item.path}
                     onClick={handleLinkClick}
+                    onMouseEnter={() => preloadRoute(item.path)}
+                    onFocus={() => preloadRoute(item.path)}
                     data-nav-active={isActive ? "true" : undefined}
                     className={clsx(
                       'flex items-center gap-3 px-3 py-2.5 rounded-[10px] min-h-[44px]',
@@ -665,6 +688,8 @@ export const Sidebar: React.FC = () => {
                               key={sub.path}
                               to={sub.path}
                               onClick={handleLinkClick}
+                              onMouseEnter={() => preloadRoute(sub.path)}
+                              onFocus={() => preloadRoute(sub.path)}
                               data-nav-active={isSubActive ? "true" : undefined}
                               className={clsx(
                                 'flex items-center justify-between px-2.5 py-2 rounded-md min-h-[40px]',

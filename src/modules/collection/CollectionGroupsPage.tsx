@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore, useUIStore } from '../../store';
 import { getStoredBranches, type DetailedBranch } from '../../services/branchService';
+import { normalizeBranchId, matchBranchId } from '../../services/creditManagerService';
 import {
   getBranchCollectionGroups,
   addBranchCollectionGroup,
@@ -41,6 +42,12 @@ export const CollectionGroupsPage: React.FC = () => {
   const selectedBranchId = useUIStore((s) => s.selectedBranchId);
   const setSelectedBranchId = useUIStore((s) => s.setSelectedBranchId);
   const addToast = useUIStore((s) => s.addToast);
+
+  const rawRole = (user?.customClaims?.role || (user as any)?.role || '').toString().toLowerCase();
+  const isAdmin = rawRole === 'admin' || rawRole === 'super_admin';
+  const userBranchClaim = user?.customClaims?.branchId || (user as any)?.branchId;
+  const userBranchNameClaim = user?.customClaims?.branchName || (user as any)?.branchName;
+  const isBranchScoped = !isAdmin;
 
   // ── 1. AUTHENTICATED BRANCH CONTEXT & ISOLATION ──
   const [branches, setBranches] = useState<DetailedBranch[]>([]);
@@ -85,29 +92,49 @@ export const CollectionGroupsPage: React.FC = () => {
 
   useEffect(() => {
     const list = getStoredBranches();
-    setBranches(list);
+    const rawRole = (user?.customClaims?.role || (user as any)?.role || '').toString().toLowerCase();
+    const isAdmin = rawRole === 'admin' || rawRole === 'super_admin';
+    const userBranchClaim = user?.customClaims?.branchId || (user as any)?.branchId;
+    const userBranchNameClaim = user?.customClaims?.branchName || (user as any)?.branchName;
+    const isBranchScoped = !isAdmin;
 
-    const userBranchClaim = user?.customClaims?.branchId;
     let target: DetailedBranch | undefined;
 
-    if (selectedBranchId) {
-      target = list.find((b) => b.id === selectedBranchId || b.code === selectedBranchId);
+    // 1. If branch-scoped, strictly match login branch!
+    if (isBranchScoped) {
+      const claim = userBranchClaim || userBranchNameClaim;
+      if (claim) {
+        target = list.find((b) => matchBranchId(claim, b.id) || matchBranchId(claim, b.name) || matchBranchId(claim, b.code));
+      }
+      if (!target && userBranchNameClaim) {
+        const claimName = userBranchNameClaim.toLowerCase();
+        target = list.find((b) => b.name.toLowerCase().includes(claimName) || claimName.includes(b.name.toLowerCase()));
+      }
+      if (!target && list.length > 0) {
+        target = list.find((b) => b.name.toLowerCase().includes('gobi') || (b.code && b.code.toLowerCase().includes('6805'))) || list[0];
+      }
+    } else {
+      // 2. Company-wide admin fallback to UI store selection
+      if (selectedBranchId) {
+        target = list.find((b) => b.id === selectedBranchId || b.code === selectedBranchId);
+      }
+      if (!target && list.length > 0) {
+        target = list[0];
+      }
     }
-    if (!target && userBranchClaim) {
-      target = list.find(
-        (b) =>
-          b.id.toLowerCase() === userBranchClaim.toLowerCase() ||
-          b.code.toLowerCase() === userBranchClaim.toLowerCase() ||
-          (userBranchClaim === 'b1' && (b.id === 'BR-01' || b.code === 'GL-BR-001'))
-      );
-    }
-    if (!target && list.length > 0) {
-      target = list[0];
-    }
+
     if (target) {
       setCurrentBranch(target);
+      if (selectedBranchId !== target.id) {
+        setSelectedBranchId(target.id);
+      }
+      if (isBranchScoped) {
+        setBranches([target]);
+      } else {
+        setBranches(list);
+      }
     }
-  }, [user, selectedBranchId]);
+  }, [user, user?.customClaims?.branchId, user?.customClaims?.branchName, user?.customClaims?.role, selectedBranchId, setSelectedBranchId]);
 
   const activeBranchId = currentBranch?.id || 'BR-01';
   const currentBranchName = currentBranch?.name || 'Main Branch - Anna Nagar';
@@ -334,73 +361,82 @@ export const CollectionGroupsPage: React.FC = () => {
               Collection Groups
             </h1>
 
-            {/* Interactive Branch Switcher Dropdown */}
-            <div className="relative inline-block" ref={branchDropdownRef}>
-              <button
-                type="button"
-                onClick={() => setIsBranchDropdownOpen((prev) => !prev)}
-                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold tracking-wide transition-all cursor-pointer shadow-xs select-none ${
-                  isBranchDropdownOpen
-                    ? 'bg-white/20 text-white border border-[#D4AF37] ring-2 ring-[#D4AF37]/40'
-                    : 'bg-white/10 hover:bg-white/15 text-white border border-white/20 hover:border-white/30'
-                }`}
-                aria-haspopup="listbox"
-                aria-expanded={isBranchDropdownOpen}
-                aria-label="Switch Branch"
-              >
+            {/* Branch Context Badge: Static for Branch Manager / Scoped, Dropdown for Admin */}
+            {isBranchScoped ? (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold tracking-wide bg-white/10 text-white border border-white/20 shadow-xs">
                 <Building2 size={12} className="text-[#D4AF37] shrink-0" />
-                <span className="truncate max-w-[190px] sm:max-w-[260px]">
+                <span className="truncate max-w-[260px]">
                   {currentBranchName} ({activeBranchId})
                 </span>
-                <ChevronDown
-                  size={12}
-                  className={`text-slate-300 shrink-0 transition-transform duration-200 ${
-                    isBranchDropdownOpen ? 'rotate-180 text-[#D4AF37]' : ''
+              </div>
+            ) : (
+              <div className="relative inline-block" ref={branchDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsBranchDropdownOpen((prev) => !prev)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold tracking-wide transition-all cursor-pointer shadow-xs select-none ${
+                    isBranchDropdownOpen
+                      ? 'bg-white/20 text-white border border-[#D4AF37] ring-2 ring-[#D4AF37]/40'
+                      : 'bg-white/10 hover:bg-white/15 text-white border border-white/20 hover:border-white/30'
                   }`}
-                />
-              </button>
+                  aria-haspopup="listbox"
+                  aria-expanded={isBranchDropdownOpen}
+                  aria-label="Switch Branch"
+                >
+                  <Building2 size={12} className="text-[#D4AF37] shrink-0" />
+                  <span className="truncate max-w-[190px] sm:max-w-[260px]">
+                    {currentBranchName} ({activeBranchId})
+                  </span>
+                  <ChevronDown
+                    size={12}
+                    className={`text-slate-300 shrink-0 transition-transform duration-200 ${
+                      isBranchDropdownOpen ? 'rotate-180 text-[#D4AF37]' : ''
+                    }`}
+                  />
+                </button>
 
-              {/* Floating Branch Selection Menu */}
-              {isBranchDropdownOpen && (
-                <div className="absolute left-0 top-full mt-2 w-72 sm:w-80 bg-[#0B1F3A] border border-[#243E66] shadow-[0_16px_40px_rgba(0,0,0,0.5)] rounded-2xl overflow-hidden py-1.5 z-50 animate-in fade-in slide-in-from-top-2 duration-150 font-sans">
-                  <div className="px-4 py-2 border-b border-white/[0.08] text-[10.5px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-                    <span>Select Branch</span>
-                    <span className="text-[#D4AF37] text-[10px] font-semibold">{branches.length} Branches</span>
-                  </div>
-                  <div className="max-h-[280px] overflow-y-auto no-scrollbar py-1 divide-y divide-white/[0.04]">
-                    {branches.map((b) => {
-                      const isSelected = b.id === activeBranchId;
-                      return (
-                        <button
-                          key={b.id}
-                          type="button"
-                          onClick={() => handleSelectBranch(b)}
-                          className={`w-full flex items-center justify-between px-4 py-2.5 text-left text-xs transition-all cursor-pointer outline-none ${
-                            isSelected
-                              ? 'bg-[#D4AF37]/15 text-[#F5D061] font-bold'
-                              : 'text-white hover:bg-white/[0.08]'
-                          }`}
-                        >
-                          <div className="min-w-0 flex-1 pr-3">
-                            <div className="truncate font-bold text-xs flex items-center gap-1.5">
-                              <span>{b.name}</span>
+                {/* Floating Branch Selection Menu */}
+                {isBranchDropdownOpen && (
+                  <div className="absolute left-0 top-full mt-2 w-72 sm:w-80 bg-[#0B1F3A] border border-[#243E66] shadow-[0_16px_40px_rgba(0,0,0,0.5)] rounded-2xl overflow-hidden py-1.5 z-50 animate-in fade-in slide-in-from-top-2 duration-150 font-sans">
+                    <div className="px-4 py-2 border-b border-white/[0.08] text-[10.5px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                      <span>Select Branch</span>
+                      <span className="text-[#D4AF37] text-[10px] font-semibold">{branches.length} Branches</span>
+                    </div>
+                    <div className="max-h-[280px] overflow-y-auto no-scrollbar py-1 divide-y divide-white/[0.04]">
+                      {branches.map((b) => {
+                        const isSelected = b.id === activeBranchId;
+                        return (
+                          <button
+                            key={b.id}
+                            type="button"
+                            onClick={() => handleSelectBranch(b)}
+                            className={`w-full flex items-center justify-between px-4 py-2.5 text-left text-xs transition-all cursor-pointer outline-none ${
+                              isSelected
+                                ? 'bg-[#D4AF37]/15 text-[#F5D061] font-bold'
+                                : 'text-white hover:bg-white/[0.08]'
+                            }`}
+                          >
+                            <div className="min-w-0 flex-1 pr-3">
+                              <div className="truncate font-bold text-xs flex items-center gap-1.5">
+                                <span>{b.name}</span>
+                              </div>
+                              <div className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5">
+                                <span className="font-mono text-[#D4AF37] font-semibold">{b.id}</span>
+                                <span>•</span>
+                                <span>{b.city}</span>
+                              </div>
                             </div>
-                            <div className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5">
-                              <span className="font-mono text-[#D4AF37] font-semibold">{b.id}</span>
-                              <span>•</span>
-                              <span>{b.city}</span>
-                            </div>
-                          </div>
-                          {isSelected && (
-                            <Check size={15} className="text-[#D4AF37] shrink-0 ml-2" />
-                          )}
-                        </button>
-                      );
-                    })}
+                            {isSelected && (
+                              <Check size={15} className="text-[#D4AF37] shrink-0 ml-2" />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
           </div>
           <p className="text-xs sm:text-sm text-slate-300 font-medium">
             Create and manage collection groups for customer group assignment.
@@ -620,92 +656,103 @@ export const CollectionGroupsPage: React.FC = () => {
 
               {/* Modal Form */}
               <form onSubmit={handleCreateGroup} className="p-5 sm:p-6 space-y-4">
-                {/* 1. Branch Context Dropdown (All branches, with keyboard arrow navigation) */}
+                {/* 1. Branch Context: Readonly Badge for Branch Manager, Dropdown for Admin */}
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                     Authorized Branch Context
                   </label>
-                  <div className="relative" ref={modalBranchDropdownRef}>
-                    <button
-                      type="button"
-                      onClick={() => setIsModalBranchDropdownOpen((prev) => !prev)}
-                      onKeyDown={handleModalBranchKeyDown}
-                      className={`w-full px-3.5 py-2.5 rounded-xl border text-xs font-semibold text-[#0B1F3A] flex items-center justify-between gap-2 transition-all cursor-pointer outline-none ${
-                        isModalBranchDropdownOpen
-                          ? 'bg-white border-blue-600 ring-2 ring-blue-500/20'
-                          : 'bg-slate-50 hover:bg-slate-100/80 border-slate-200'
-                      }`}
-                      aria-haspopup="listbox"
-                      aria-expanded={isModalBranchDropdownOpen}
-                      aria-label="Select Branch"
-                    >
-                      <div className="flex items-center gap-2 truncate">
-                        <Building2 size={14} className="text-[#D4AF37] shrink-0" />
-                        <span className="truncate">
-                          {selectedModalBranch?.name} ({selectedModalBranch?.id})
-                        </span>
-                      </div>
-                      <ChevronDown
-                        size={14}
-                        className={`text-slate-400 shrink-0 transition-transform duration-200 ${
-                          isModalBranchDropdownOpen ? 'rotate-180 text-blue-600' : ''
-                        }`}
-                      />
-                    </button>
+                  {isBranchScoped ? (
+                    <div className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs font-semibold text-[#0B1F3A] flex items-center gap-2">
+                      <Building2 size={14} className="text-[#D4AF37] shrink-0" />
+                      <span className="truncate">
+                        {selectedModalBranch?.name} ({selectedModalBranch?.id})
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="relative" ref={modalBranchDropdownRef}>
+                        <button
+                          type="button"
+                          onClick={() => setIsModalBranchDropdownOpen((prev) => !prev)}
+                          onKeyDown={handleModalBranchKeyDown}
+                          className={`w-full px-3.5 py-2.5 rounded-xl border text-xs font-semibold text-[#0B1F3A] flex items-center justify-between gap-2 transition-all cursor-pointer outline-none ${
+                            isModalBranchDropdownOpen
+                              ? 'bg-white border-blue-600 ring-2 ring-blue-500/20'
+                              : 'bg-slate-50 hover:bg-slate-100/80 border-slate-200'
+                          }`}
+                          aria-haspopup="listbox"
+                          aria-expanded={isModalBranchDropdownOpen}
+                          aria-label="Select Branch"
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <Building2 size={14} className="text-[#D4AF37] shrink-0" />
+                            <span className="truncate">
+                              {selectedModalBranch?.name} ({selectedModalBranch?.id})
+                            </span>
+                          </div>
+                          <ChevronDown
+                            size={14}
+                            className={`text-slate-400 shrink-0 transition-transform duration-200 ${
+                              isModalBranchDropdownOpen ? 'rotate-180 text-blue-600' : ''
+                            }`}
+                          />
+                        </button>
 
-                    {/* Floating Dropdown List with Keyboard Navigation */}
-                    {isModalBranchDropdownOpen && (
-                      <div
-                        role="listbox"
-                        className="absolute left-0 right-0 top-full mt-1.5 bg-[#0B1F3A] border border-[#243E66] shadow-[0_16px_40px_rgba(0,0,0,0.55)] rounded-2xl overflow-hidden py-1.5 z-50 animate-in fade-in slide-in-from-top-1 duration-150 font-sans"
-                      >
-                        <div className="px-3.5 py-2 border-b border-white/[0.08] text-[10.5px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-                          <span>Select Branch (Use ↑/↓ Keys)</span>
-                          <span className="text-[#D4AF37] text-[10px] font-semibold">{branches.length} Branches</span>
-                        </div>
-                        <div className="max-h-[220px] overflow-y-auto no-scrollbar py-1 divide-y divide-white/[0.04]">
-                          {branches.map((b, idx) => {
-                            const isSelected = b.id === modalBranchId;
-                            const isFocused = idx === focusedModalBranchIndex;
-                            return (
-                              <button
-                                key={b.id}
-                                type="button"
-                                role="option"
-                                aria-selected={isSelected}
-                                onMouseEnter={() => setFocusedModalBranchIndex(idx)}
-                                onClick={() => handleSelectModalBranch(b)}
-                                className={`w-full flex items-center justify-between px-3.5 py-2.5 text-left text-xs transition-all cursor-pointer outline-none ${
-                                  isFocused
-                                    ? 'bg-white/[0.15] ring-1 ring-inset ring-[#D4AF37]'
-                                    : isSelected
-                                    ? 'bg-[#D4AF37]/15'
-                                    : 'hover:bg-white/[0.08]'
-                                } ${isSelected ? 'text-[#F5D061] font-bold' : 'text-white'}`}
-                              >
-                                <div className="min-w-0 flex-1 pr-2">
-                                  <div className="truncate font-bold text-xs flex items-center gap-1.5">
-                                    <span>{b.name}</span>
-                                  </div>
-                                  <div className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-0.5">
-                                    <span className="font-mono text-[#D4AF37] font-semibold">{b.id}</span>
-                                    <span>•</span>
-                                    <span>{b.city}</span>
-                                  </div>
-                                </div>
-                                {isSelected && (
-                                  <Check size={14} className="text-[#D4AF37] shrink-0 ml-1" />
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
+                        {/* Floating Dropdown List with Keyboard Navigation */}
+                        {isModalBranchDropdownOpen && (
+                          <div
+                            role="listbox"
+                            className="absolute left-0 right-0 top-full mt-1.5 bg-[#0B1F3A] border border-[#243E66] shadow-[0_16px_40px_rgba(0,0,0,0.55)] rounded-2xl overflow-hidden py-1.5 z-50 animate-in fade-in slide-in-from-top-1 duration-150 font-sans"
+                          >
+                            <div className="px-3.5 py-2 border-b border-white/[0.08] text-[10.5px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                              <span>Select Branch (Use ↑/↓ Keys)</span>
+                              <span className="text-[#D4AF37] text-[10px] font-semibold">{branches.length} Branches</span>
+                            </div>
+                            <div className="max-h-[220px] overflow-y-auto no-scrollbar py-1 divide-y divide-white/[0.04]">
+                              {branches.map((b, idx) => {
+                                const isSelected = b.id === modalBranchId;
+                                const isFocused = idx === focusedModalBranchIndex;
+                                return (
+                                  <button
+                                    key={b.id}
+                                    type="button"
+                                    role="option"
+                                    aria-selected={isSelected}
+                                    onMouseEnter={() => setFocusedModalBranchIndex(idx)}
+                                    onClick={() => handleSelectModalBranch(b)}
+                                    className={`w-full flex items-center justify-between px-3.5 py-2.5 text-left text-xs transition-all cursor-pointer outline-none ${
+                                      isFocused
+                                        ? 'bg-white/[0.15] ring-1 ring-inset ring-[#D4AF37]'
+                                        : isSelected
+                                        ? 'bg-[#D4AF37]/15'
+                                        : 'hover:bg-white/[0.08]'
+                                    } ${isSelected ? 'text-[#F5D061] font-bold' : 'text-white'}`}
+                                  >
+                                    <div className="min-w-0 flex-1 pr-2">
+                                      <div className="truncate font-bold text-xs flex items-center gap-1.5">
+                                        <span>{b.name}</span>
+                                      </div>
+                                      <div className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-0.5">
+                                        <span className="font-mono text-[#D4AF37] font-semibold">{b.id}</span>
+                                        <span>•</span>
+                                        <span>{b.city}</span>
+                                      </div>
+                                    </div>
+                                    {isSelected && (
+                                      <Check size={14} className="text-[#D4AF37] shrink-0 ml-1" />
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                  <p className="text-[10px] text-slate-400 mt-1">
-                    Select target branch using mouse or keyboard (Up/Down arrow keys & Enter).
-                  </p>
+                      <p className="text-[10px] text-slate-400 mt-1">
+                        Select target branch using mouse or keyboard (Up/Down arrow keys & Enter).
+                      </p>
+                    </>
+                  )}
                 </div>
 
                 {/* 2. Group Identifier (Manually editable input) */}

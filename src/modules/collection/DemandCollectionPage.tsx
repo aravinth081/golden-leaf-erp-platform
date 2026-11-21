@@ -42,6 +42,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore, useUIStore } from '../../store';
 import { getStoredBranches, type DetailedBranch } from '../../services/branchService';
+import { normalizeBranchId, matchBranchId } from '../../services/creditManagerService';
 import {
   getMonitoredCollections,
   getBranchCollectionGroups,
@@ -97,6 +98,12 @@ const DemandCollectionPage: React.FC = () => {
   const setSelectedBranchId = useUIStore((s) => s.setSelectedBranchId);
   const addToast = useUIStore((s) => s.addToast);
 
+  const userRole = (user?.customClaims?.role || (user as any)?.role || '').toString().toLowerCase();
+  const isAdmin = userRole === 'admin' || userRole === 'super_admin';
+  const userBranchClaim = user?.customClaims?.branchId || (user as any)?.branchId;
+  const userBranchNameClaim = user?.customClaims?.branchName || (user as any)?.branchName;
+  const isBranchScoped = !isAdmin;
+
   // ── 1. AUTHENTICATED BRANCH CONTEXT & ISOLATION ──
   const [branches, setBranches] = useState<DetailedBranch[]>([]);
   const [currentBranch, setCurrentBranch] = useState<DetailedBranch | null>(null);
@@ -137,25 +144,33 @@ const DemandCollectionPage: React.FC = () => {
   // Initialize branches & sync with selectedBranchId
   useEffect(() => {
     const stored = getStoredBranches();
-    setBranches(stored);
 
-    // Primary branch resolution:
-    const userBranchClaim = user?.customClaims?.branchId;
     let targetBranch: DetailedBranch | undefined;
 
-    // 1. High priority: Explicit branch selection from UI store
-    if (selectedBranchId) {
-      targetBranch = stored.find((b) => b.id === selectedBranchId || b.code === selectedBranchId);
+    // 1. High priority for branch-scoped users: strictly match login branch!
+    if (isBranchScoped) {
+      const claim = userBranchClaim || userBranchNameClaim;
+      if (claim) {
+        targetBranch = stored.find(
+          (b) => matchBranchId(claim, b.id) || matchBranchId(claim, b.name) || matchBranchId(claim, b.code)
+        );
+      }
+      if (!targetBranch && userBranchNameClaim) {
+        const claimName = userBranchNameClaim.toLowerCase();
+        targetBranch = stored.find(
+          (b) => b.name.toLowerCase().includes(claimName) || claimName.includes(b.name.toLowerCase())
+        );
+      }
+      if (!targetBranch && stored.length > 0) {
+        targetBranch =
+          stored.find((b) => b.name.toLowerCase().includes('gobi') || (b.code && b.code.toLowerCase().includes('6805'))) ||
+          stored[0];
+      }
     }
 
-    // 2. Second priority: Authenticated user branch claim
-    if (!targetBranch && userBranchClaim) {
-      targetBranch = stored.find(
-        (b) =>
-          b.id.toLowerCase() === userBranchClaim.toLowerCase() ||
-          b.code.toLowerCase() === userBranchClaim.toLowerCase() ||
-          (userBranchClaim === 'b1' && (b.id === 'BR-01' || b.code === 'GL-BR-001'))
-      );
+    // 2. Fallback for company-wide admin: Explicit branch selection from UI store
+    if (!targetBranch && selectedBranchId && !isBranchScoped) {
+      targetBranch = stored.find((b) => b.id === selectedBranchId || b.code === selectedBranchId);
     }
 
     // 3. Fallback: First stored branch
@@ -168,11 +183,17 @@ const DemandCollectionPage: React.FC = () => {
       if (selectedBranchId !== targetBranch.id) {
         setSelectedBranchId(targetBranch.id);
       }
+      if (isBranchScoped) {
+        setBranches([targetBranch]);
+      } else {
+        setBranches(stored);
+      }
     }
-  }, [user, selectedBranchId, setSelectedBranchId]);
+  }, [user, user?.customClaims?.branchId, user?.customClaims?.branchName, user?.customClaims?.role, isBranchScoped, selectedBranchId, setSelectedBranchId]);
 
   // Listen for global branch changes across components
   useEffect(() => {
+    if (isBranchScoped) return; // Strictly locked for branch manager / staff
     const handleBranchSync = (e: Event) => {
       const customEvent = e as CustomEvent<{ branchId: string }>;
       const newId = customEvent?.detail?.branchId;
@@ -187,7 +208,7 @@ const DemandCollectionPage: React.FC = () => {
     };
     window.addEventListener('glf-branch-changed', handleBranchSync);
     return () => window.removeEventListener('glf-branch-changed', handleBranchSync);
-  }, [setSelectedBranchId]);
+  }, [isBranchScoped, setSelectedBranchId]);
 
   const handleBranchSelect = (branch: DetailedBranch) => {
     setSelectedBranchId(branch.id);
@@ -845,17 +866,10 @@ const DemandCollectionPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Branch Switcher Dropdown (Role Scoped with Full Keyboard Navigation) */}
-            <div className="relative" ref={branchDropdownRef}>
-              <button
-                onClick={() => setIsBranchDropdownOpen(!isBranchDropdownOpen)}
-                onKeyDown={handleBranchKeyDown}
-                aria-haspopup="listbox"
-                aria-expanded={isBranchDropdownOpen}
-                className="inline-flex items-center gap-3 px-4 py-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] border border-white/20 hover:border-[#D4AF37]/70 focus:outline-none focus:ring-2 focus:ring-[#D4AF37] text-white text-xs font-semibold transition-all cursor-pointer shadow-md hover:shadow-lg backdrop-blur-md group"
-                title="Current Operating Branch"
-              >
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#D4AF37]/25 to-[#B38C1F]/15 border border-[#D4AF37]/40 flex items-center justify-center text-[#F5D77F] shadow-xs transition-transform shrink-0">
+            {/* Branch Badge: Static for Branch Manager / Scoped, Dropdown for Admin */}
+            {isBranchScoped ? (
+              <div className="inline-flex items-center gap-3 px-4 py-2 rounded-xl bg-white/[0.08] border border-white/20 text-white text-xs font-semibold shadow-md backdrop-blur-md">
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#D4AF37]/25 to-[#B38C1F]/15 border border-[#D4AF37]/40 flex items-center justify-center text-[#F5D77F] shadow-xs shrink-0">
                   <Building2 size={15} className="text-[#F5D77F]" />
                 </div>
                 <div className="text-left">
@@ -863,67 +877,93 @@ const DemandCollectionPage: React.FC = () => {
                     <span className="text-[9px] text-[#F3D779] uppercase tracking-wider block leading-none font-mono font-bold">OPERATING BRANCH</span>
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 ring-2 ring-emerald-400/30"></span>
                   </div>
-                  <span className="font-bold text-white block text-xs mt-0.5 whitespace-nowrap">{currentBranch?.name || 'Main Branch'}</span>
+                  <span className="font-bold text-white block text-xs mt-0.5 whitespace-nowrap">
+                    {currentBranch?.name || userBranchNameClaim || 'Assigned Branch'} {currentBranch?.code ? `(${currentBranch.code})` : ''}
+                  </span>
                 </div>
-                <ChevronDown size={14} className={`text-slate-300 ml-1 transition-transform duration-200 shrink-0 group-hover:text-[#F5D77F] ${isBranchDropdownOpen ? 'rotate-180' : ''}`} />
-              </button>
-
-              {isBranchDropdownOpen && (
-                <div
-                  role="listbox"
-                  aria-label="Authorized Branches"
-                  tabIndex={-1}
+              </div>
+            ) : (
+              <div className="relative" ref={branchDropdownRef}>
+                <button
+                  onClick={() => setIsBranchDropdownOpen(!isBranchDropdownOpen)}
                   onKeyDown={handleBranchKeyDown}
-                  className="absolute right-0 top-full mt-2 w-80 sm:w-88 bg-white rounded-2xl shadow-[0_16px_48px_rgba(11,31,58,0.25)] border border-[#E2E8F0] z-[100] p-2 overflow-hidden ring-1 ring-black/5 animate-in fade-in slide-in-from-top-2 duration-150"
+                  aria-haspopup="listbox"
+                  aria-expanded={isBranchDropdownOpen}
+                  className="inline-flex items-center gap-3 px-4 py-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] border border-white/20 hover:border-[#D4AF37]/70 focus:outline-none focus:ring-2 focus:ring-[#D4AF37] text-white text-xs font-semibold transition-all cursor-pointer shadow-md hover:shadow-lg backdrop-blur-md group"
+                  title="Current Operating Branch"
                 >
-                  <div className="px-3.5 py-2.5 border-b border-slate-100 flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-2">
-                      <Building2 size={14} className="text-[#D4AF37]" />
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-700 font-mono">Select Operating Branch</span>
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#D4AF37]/25 to-[#B38C1F]/15 border border-[#D4AF37]/40 flex items-center justify-center text-[#F5D77F] shadow-xs transition-transform shrink-0">
+                    <Building2 size={15} className="text-[#F5D77F]" />
+                  </div>
+                  <div className="text-left">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[9px] text-[#F3D779] uppercase tracking-wider block leading-none font-mono font-bold">OPERATING BRANCH</span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 ring-2 ring-emerald-400/30"></span>
                     </div>
-                    <span className="text-[10px] font-bold text-[#0B1F3A] bg-blue-50 px-2.5 py-0.5 rounded-full font-mono border border-blue-100">
-                      {branches.length} Branches
-                    </span>
+                    <span className="font-bold text-white block text-xs mt-0.5 whitespace-nowrap">
+                    {currentBranch?.name || userBranchNameClaim || 'Assigned Branch'} {currentBranch?.code ? `(${currentBranch.code})` : ''}
+                  </span>
                   </div>
-                  <div className="max-h-64 overflow-y-auto p-0.5 space-y-1 focus:outline-none custom-scrollbar">
-                    {branches.map((b, idx) => {
-                      const isSelected = b.id === currentBranch?.id;
-                      const isFocused = idx === focusedBranchIndex;
-                      return (
-                        <button
-                          key={b.id}
-                          ref={(el) => { branchOptionsRef.current[idx] = el; }}
-                          role="option"
-                          aria-selected={isSelected}
-                          type="button"
-                          onMouseEnter={() => setFocusedBranchIndex(idx)}
-                          onClick={() => handleBranchSelect(b)}
-                          className={`w-full px-3.5 py-2.5 rounded-xl text-left text-xs flex items-center justify-between transition-all cursor-pointer outline-none ${
-                            isSelected
-                              ? 'bg-amber-50/90 text-[#0B1F3A] font-bold border border-amber-200/80 shadow-2xs'
-                              : isFocused
-                              ? 'bg-slate-100/90 text-[#0B1F3A]'
-                              : 'text-slate-700 hover:bg-slate-50'
-                          }`}
-                        >
-                          <div className="flex flex-col">
-                            <span className={`text-xs ${isSelected ? 'font-bold text-[#0B1F3A]' : 'font-semibold text-slate-800'}`}>
-                              {b.name}
-                            </span>
-                            <span className="text-[10px] text-slate-400 font-mono mt-0.5">{b.id} • {b.city}</span>
-                          </div>
-                          {isSelected && (
-                            <div className="w-5 h-5 rounded-full bg-[#D4AF37] flex items-center justify-center text-white shrink-0 shadow-2xs">
-                              <Check size={12} strokeWidth={2.5} />
+                  <ChevronDown size={14} className={`text-slate-300 ml-1 transition-transform duration-200 shrink-0 group-hover:text-[#F5D77F] ${isBranchDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {isBranchDropdownOpen && (
+                  <div
+                    role="listbox"
+                    aria-label="Authorized Branches"
+                    tabIndex={-1}
+                    onKeyDown={handleBranchKeyDown}
+                    className="absolute right-0 top-full mt-2 w-80 sm:w-88 bg-white rounded-2xl shadow-[0_16px_48px_rgba(11,31,58,0.25)] border border-[#E2E8F0] z-[100] p-2 overflow-hidden ring-1 ring-black/5 animate-in fade-in slide-in-from-top-2 duration-150"
+                  >
+                    <div className="px-3.5 py-2.5 border-b border-slate-100 flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <Building2 size={14} className="text-[#D4AF37]" />
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-700 font-mono">Select Operating Branch</span>
+                      </div>
+                      <span className="text-[10px] font-bold text-[#0B1F3A] bg-blue-50 px-2.5 py-0.5 rounded-full font-mono border border-blue-100">
+                        {branches.length} Branches
+                      </span>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto p-0.5 space-y-1 focus:outline-none custom-scrollbar">
+                      {branches.map((b, idx) => {
+                        const isSelected = b.id === currentBranch?.id;
+                        const isFocused = idx === focusedBranchIndex;
+                        return (
+                          <button
+                            key={b.id}
+                            ref={(el) => { branchOptionsRef.current[idx] = el; }}
+                            role="option"
+                            aria-selected={isSelected}
+                            type="button"
+                            onMouseEnter={() => setFocusedBranchIndex(idx)}
+                            onClick={() => handleBranchSelect(b)}
+                            className={`w-full px-3.5 py-2.5 rounded-xl text-left text-xs flex items-center justify-between transition-all cursor-pointer outline-none ${
+                              isSelected
+                                ? 'bg-amber-50/90 text-[#0B1F3A] font-bold border border-amber-200/80 shadow-2xs'
+                                : isFocused
+                                ? 'bg-slate-100/90 text-[#0B1F3A]'
+                                : 'text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            <div className="flex flex-col">
+                              <span className={`text-xs ${isSelected ? 'font-bold text-[#0B1F3A]' : 'font-semibold text-slate-800'}`}>
+                                {b.name}
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-mono mt-0.5">{b.id} • {b.city}</span>
                             </div>
-                          )}
-                        </button>
-                      );
-                    })}
+                            {isSelected && (
+                              <div className="w-5 h-5 rounded-full bg-[#D4AF37] flex items-center justify-center text-white shrink-0 shadow-2xs">
+                                <Check size={12} strokeWidth={2.5} />
+                              </div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

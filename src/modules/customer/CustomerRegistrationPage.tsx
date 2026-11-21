@@ -11,7 +11,7 @@ import {
   ArrowRight, ArrowLeft, CheckCircle2, User, Shield, Users,
   UploadCloud, FileText, Check, RotateCcw, Save, Lock, AlertCircle,
   CreditCard, Landmark, DollarSign, Calculator, Eye, Trash2, CheckCircle,
-  ChevronDown, Loader2
+  ChevronDown, Loader2, FileSpreadsheet, FileCheck2, Paperclip
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useUIStore, useAuthStore } from '../../store';
@@ -244,13 +244,26 @@ const CustomerRegistrationPage: React.FC = () => {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [aadhaarDocName, setAadhaarDocName] = useState<string | null>(null);
   const [aadhaarPreview, setAadhaarPreview] = useState<string | null>(null);
+  const [panDocName, setPanDocName] = useState<string | null>(null);
+  const [panPreview, setPanPreview] = useState<string | null>(null);
+  const [voterDocName, setVoterDocName] = useState<string | null>(null);
+  const [voterPreview, setVoterPreview] = useState<string | null>(null);
+  const [smartCardDocName, setSmartCardDocName] = useState<string | null>(null);
+  const [smartCardPreview, setSmartCardPreview] = useState<string | null>(null);
   const [passbookDocName, setPassbookDocName] = useState<string | null>(null);
   const [passbookPreview, setPassbookPreview] = useState<string | null>(null);
+  const [otherDocName, setOtherDocName] = useState<string | null>(null);
+  const [otherDocTitle, setOtherDocTitle] = useState<string>('');
+  const [otherPreview, setOtherPreview] = useState<string | null>(null);
 
   // Cloudinary upload status indicators
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [isUploadingAadhaar, setIsUploadingAadhaar] = useState(false);
+  const [isUploadingPan, setIsUploadingPan] = useState(false);
+  const [isUploadingVoter, setIsUploadingVoter] = useState(false);
+  const [isUploadingSmartCard, setIsUploadingSmartCard] = useState(false);
   const [isUploadingPassbook, setIsUploadingPassbook] = useState(false);
+  const [isUploadingOther, setIsUploadingOther] = useState(false);
 
   // Form State - Starts completely empty so all data is entered manually
   const [formData, setFormData] = useState({
@@ -339,7 +352,20 @@ const CustomerRegistrationPage: React.FC = () => {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
-    const val = type === 'checkbox' ? (e.target as HTMLInputElement).checked : value;
+    let val: any = type === 'checkbox' ? (e.target as HTMLInputElement).checked : value;
+
+    if (typeof val === 'string') {
+      if (name === 'aadhaarNumber') {
+        val = val.replace(/\D/g, '').slice(0, 12);
+      } else if (name === 'panNumber') {
+        val = val.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
+      } else if (name === 'phone' || name === 'nomineePhone' || name === 'guarantorPhone') {
+        val = val.replace(/\D/g, '').slice(0, 10);
+      } else if (name === 'pincode') {
+        val = val.replace(/\D/g, '').slice(0, 6);
+      }
+    }
+
     setFormData(prev => ({ ...prev, [name]: val }));
 
     if (errors[name]) {
@@ -381,7 +407,10 @@ const CustomerRegistrationPage: React.FC = () => {
     }
   };
 
-  const handleDocUpload = async (type: 'aadhaar' | 'passbook', e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDocUpload = async (
+    type: 'aadhaar' | 'pan' | 'voter' | 'smart_card' | 'passbook' | 'other',
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -411,13 +440,85 @@ const CustomerRegistrationPage: React.FC = () => {
         setIsUploadingAadhaar(false);
         e.target.value = '';
       }
-    } else {
+    } else if (type === 'pan') {
+      setIsUploadingPan(true);
+      setPanDocName(file.name);
+      try {
+        const resUrl = await uploadKYCDocument(file, targetId, 'pan');
+        if (resUrl) {
+          setPanPreview(resUrl);
+          addToast({
+            type: 'success',
+            title: 'PAN Card Uploaded to Cloudinary',
+            message: `${file.name} uploaded and secured.`,
+          });
+        }
+      } catch (err: any) {
+        console.error('PAN upload error:', err);
+        addToast({
+          type: 'error',
+          title: 'Upload Failed',
+          message: err.message || 'Could not upload PAN card to Cloudinary. Please try again.',
+        });
+      } finally {
+        setIsUploadingPan(false);
+        e.target.value = '';
+      }
+    } else if (type === 'voter') {
+      setIsUploadingVoter(true);
+      setVoterDocName(file.name);
+      try {
+        const resUrl = await uploadKYCDocument(file, targetId, 'voter_id');
+        if (resUrl) {
+          setVoterPreview(resUrl);
+          addToast({
+            type: 'success',
+            title: 'Voter ID Uploaded to Cloudinary',
+            message: `${file.name} uploaded and secured.`,
+          });
+        }
+      } catch (err: any) {
+        console.error('Voter ID upload error:', err);
+        addToast({
+          type: 'error',
+          title: 'Upload Failed',
+          message: err.message || 'Could not upload Voter ID to Cloudinary. Please try again.',
+        });
+      } finally {
+        setIsUploadingVoter(false);
+        e.target.value = '';
+      }
+    } else if (type === 'smart_card') {
+      setIsUploadingSmartCard(true);
+      setSmartCardDocName(file.name);
+      try {
+        const resUrl = await uploadKYCDocument(file, targetId, 'smart_card');
+        if (resUrl) {
+          setSmartCardPreview(resUrl);
+          addToast({
+            type: 'success',
+            title: 'Smart Card Uploaded to Cloudinary',
+            message: `${file.name} uploaded and secured.`,
+          });
+        }
+      } catch (err: any) {
+        console.error('Smart Card upload error:', err);
+        addToast({
+          type: 'error',
+          title: 'Upload Failed',
+          message: err.message || 'Could not upload Smart Card to Cloudinary. Please try again.',
+        });
+      } finally {
+        setIsUploadingSmartCard(false);
+        e.target.value = '';
+      }
+    } else if (type === 'passbook') {
       setIsUploadingPassbook(true);
       setPassbookDocName(file.name);
       try {
-        const result = await uploadImage(file, `kyc/${targetId}/passbook`);
-        if (result?.secure_url) {
-          setPassbookPreview(result.secure_url);
+        const resUrl = await uploadKYCDocument(file, targetId, 'passbook');
+        if (resUrl) {
+          setPassbookPreview(resUrl);
           addToast({
             type: 'success',
             title: 'Passbook Uploaded to Cloudinary',
@@ -433,6 +534,30 @@ const CustomerRegistrationPage: React.FC = () => {
         });
       } finally {
         setIsUploadingPassbook(false);
+        e.target.value = '';
+      }
+    } else if (type === 'other') {
+      setIsUploadingOther(true);
+      setOtherDocName(file.name);
+      try {
+        const resUrl = await uploadKYCDocument(file, targetId, 'other');
+        if (resUrl) {
+          setOtherPreview(resUrl);
+          addToast({
+            type: 'success',
+            title: `${otherDocTitle.trim() || 'Supporting Document'} Uploaded to Cloudinary`,
+            message: `${file.name} uploaded and secured.`,
+          });
+        }
+      } catch (err: any) {
+        console.error('Other document upload error:', err);
+        addToast({
+          type: 'error',
+          title: 'Upload Failed',
+          message: err.message || 'Could not upload document to Cloudinary. Please try again.',
+        });
+      } finally {
+        setIsUploadingOther(false);
         e.target.value = '';
       }
     }
@@ -635,8 +760,17 @@ const CustomerRegistrationPage: React.FC = () => {
       setPhotoPreview(null);
       setAadhaarDocName(null);
       setAadhaarPreview(null);
+      setPanDocName(null);
+      setPanPreview(null);
+      setVoterDocName(null);
+      setVoterPreview(null);
+      setSmartCardDocName(null);
+      setSmartCardPreview(null);
       setPassbookDocName(null);
       setPassbookPreview(null);
+      setOtherDocName(null);
+      setOtherDocTitle('');
+      setOtherPreview(null);
       setErrors({});
       setMaxCompletedStep(-1);
       setCurrentStep(0);
@@ -662,7 +796,11 @@ const CustomerRegistrationPage: React.FC = () => {
 
       const cloudPhotoUrl = sanitizeCloudUrl(photoPreview);
       const cloudAadhaarUrl = sanitizeCloudUrl(aadhaarPreview);
+      const cloudPanUrl = sanitizeCloudUrl(panPreview);
+      const cloudVoterUrl = sanitizeCloudUrl(voterPreview);
+      const cloudSmartCardUrl = sanitizeCloudUrl(smartCardPreview);
       const cloudPassbookUrl = sanitizeCloudUrl(passbookPreview);
+      const cloudOtherUrl = sanitizeCloudUrl(otherPreview);
 
       const kycData = {
         aadhaarNumber: formData.aadhaarNumber,
@@ -673,7 +811,12 @@ const CustomerRegistrationPage: React.FC = () => {
         isMobileVerified: true,
         photoUrl: cloudPhotoUrl,
         aadhaarUrl: cloudAadhaarUrl,
+        panUrl: cloudPanUrl,
+        voterUrl: cloudVoterUrl,
+        smartCardUrl: cloudSmartCardUrl,
         passbookUrl: cloudPassbookUrl,
+        otherDocUrl: cloudOtherUrl,
+        otherDocTitle: otherDocTitle || 'Supporting Document',
       };
 
       await createClientEnrollment(kycData, {
@@ -709,6 +852,14 @@ const CustomerRegistrationPage: React.FC = () => {
         panNumber: formData.panNumber,
         voterId: formData.voterId,
         rationCard: formData.rationCard,
+        customerPhotoUrl: cloudPhotoUrl,
+        aadhaarFrontUrl: cloudAadhaarUrl,
+        panCardUrl: cloudPanUrl,
+        voterIdUrl: cloudVoterUrl,
+        smartCardUrl: cloudSmartCardUrl,
+        passbookUrl: cloudPassbookUrl,
+        otherDocUrl: cloudOtherUrl,
+        otherDocTitle: otherDocTitle || 'Supporting Document',
       });
 
       addToast({
@@ -1553,16 +1704,22 @@ const CustomerRegistrationPage: React.FC = () => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     {/* Aadhaar Number */}
                     <div className="flex flex-col gap-1.5">
-                      <label className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wider">
-                        Aadhaar Number (UIDAI) *
-                      </label>
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wider">
+                          Aadhaar Number (UIDAI) *
+                        </label>
+                        <span className={`text-[10px] font-mono ${formData.aadhaarNumber?.length === 12 ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>
+                          {formData.aadhaarNumber?.length || 0}/12
+                        </span>
+                      </div>
                       <input
                         type="text"
                         name="aadhaarNumber"
                         value={formData.aadhaarNumber}
                         onChange={handleChange}
                         placeholder="12-digit UID (e.g. 984012345678)"
-                        maxLength={14}
+                        maxLength={12}
+                        inputMode="numeric"
                         className={`w-full px-4 py-3 rounded-xl bg-white border text-sm text-[#0B1F3A] font-body focus:outline-none focus:ring-1 shadow-sm ${
                           errors.aadhaarNumber ? 'border-red-400 focus:ring-red-200 bg-red-50/20' : 'border-gray-200 focus:border-[#D4AF37] focus:ring-[#D4AF37]'
                         }`}
@@ -1572,9 +1729,14 @@ const CustomerRegistrationPage: React.FC = () => {
 
                     {/* PAN Card */}
                     <div className="flex flex-col gap-1.5">
-                      <label className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wider">
-                        PAN Card Number
-                      </label>
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wider">
+                          PAN Card Number
+                        </label>
+                        <span className={`text-[10px] font-mono ${formData.panNumber?.length === 10 ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>
+                          {formData.panNumber?.length || 0}/10
+                        </span>
+                      </div>
                       <input
                         type="text"
                         name="panNumber"
@@ -1803,52 +1965,69 @@ const CustomerRegistrationPage: React.FC = () => {
 
                 {/* Sub-section C: Document Attachments */}
                 <div className="pt-4 border-t border-gray-100">
-                  <h4 className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wider mb-4 flex items-center gap-2">
-                    <UploadCloud size={14} className="text-[#D4AF37]" /> C. KYC & Passbook Document Attachments
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                    {/* Borrower Photo Card */}
-                    <div className="border-2 border-dashed border-gray-200 hover:border-[#D4AF37] rounded-2xl p-5 text-center bg-[#FAFBFD] transition-all flex flex-col items-center justify-between">
-                      <div className="flex flex-col items-center">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+                    <div>
+                      <h4 className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wider flex items-center gap-2">
+                        <UploadCloud size={14} className="text-[#D4AF37]" /> C. KYC & Supporting Document Attachments
+                      </h4>
+                      <p className="text-[11px] text-gray-500 mt-0.5">
+                        Upload mandatory identity proofs, bank passbook, and optional secondary documentation (Max 5MB each, JPEG / PNG / PDF)
+                      </p>
+                    </div>
+                    <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-[#0B1F3A]/5 text-[#0B1F3A] border border-[#0B1F3A]/10 self-start sm:self-auto">
+                      2-Column Verification Grid
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    {/* Card 1: Borrower Photo Card */}
+                    <div className="border-2 border-dashed border-gray-200 hover:border-[#D4AF37] rounded-2xl p-5 text-center bg-[#FAFBFD] hover:bg-white transition-all flex flex-col items-center justify-between shadow-sm min-h-[220px]">
+                      <div className="flex flex-col items-center w-full">
                         {photoPreview ? (
                           <div className="relative mb-2">
-                            <img src={photoPreview} alt="Borrower" className="w-20 h-20 object-cover rounded-xl border border-[#D4AF37] shadow-sm" />
+                            <img src={photoPreview} alt="Borrower" className="w-20 h-20 object-cover rounded-xl border-2 border-[#D4AF37] shadow-sm" />
                             <button
                               type="button"
                               onClick={() => setPhotoPreview(null)}
-                              className="absolute -top-1 -right-1 bg-red-500 text-white p-1 rounded-full text-[10px]"
+                              className="absolute -top-1.5 -right-1.5 bg-red-500 text-white p-1 rounded-full text-[10px] hover:bg-red-600 transition-colors shadow-md"
+                              title="Remove photo"
                             >
-                              <Trash2 size={10} />
+                              <Trash2 size={11} />
                             </button>
+                            <span className="absolute bottom-1 right-1 bg-emerald-600 text-white p-0.5 rounded-full shadow">
+                              <Check size={10} />
+                            </span>
                           </div>
                         ) : (
-                          <UploadCloud size={28} className="text-[#D4AF37] mb-2" />
+                          <div className="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center text-[#D4AF37] mb-2 border border-amber-200/60 shadow-inner">
+                            <UploadCloud size={24} />
+                          </div>
                         )}
-                        <p className="text-xs font-bold text-[#0B1F3A] uppercase">Borrower Passport Photo</p>
-                        <p className="text-[10px] text-gray-400 mt-0.5">JPEG / PNG under 5MB</p>
+                        <p className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wide">1. Borrower Passport Photo</p>
+                        <p className="text-[10px] text-gray-400 mt-0.5">JPEG / PNG under 5MB • Face Portrait</p>
                       </div>
-                      <label className={`mt-3 px-4 py-2 rounded-lg bg-[#0B1F3A] text-white hover:bg-[#162D4A] text-xs font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 ${isUploadingPhoto ? 'opacity-70 pointer-events-none' : ''}`}>
+                      <label className={`mt-3 w-full max-w-[220px] px-4 py-2.5 rounded-xl bg-[#0B1F3A] text-white hover:bg-[#162D4A] text-xs font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow-sm ${isUploadingPhoto ? 'opacity-70 pointer-events-none' : ''}`}>
                         {isUploadingPhoto ? (
                           <>
                             <Loader2 size={13} className="animate-spin text-[#D4AF37]" />
                             <span>Uploading to Cloudinary...</span>
                           </>
                         ) : (
-                          <span>{photoPreview ? 'Change Photo' : 'Select Photo'}</span>
+                          <span>{photoPreview ? 'Change Photo' : 'Upload Photo'}</span>
                         )}
                         <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" disabled={isUploadingPhoto} />
                       </label>
                     </div>
 
-                    {/* Aadhaar Scan Card */}
-                    <div className="border-2 border-dashed border-gray-200 hover:border-[#D4AF37] rounded-2xl p-5 text-center bg-[#FAFBFD] transition-all flex flex-col items-center justify-between">
-                      <div className="flex flex-col items-center">
+                    {/* Card 2: Aadhaar Scan Card */}
+                    <div className="border-2 border-dashed border-gray-200 hover:border-[#D4AF37] rounded-2xl p-5 text-center bg-[#FAFBFD] hover:bg-white transition-all flex flex-col items-center justify-between shadow-sm min-h-[220px]">
+                      <div className="flex flex-col items-center w-full">
                         {aadhaarPreview ? (
                           <div className="relative mb-2">
                             <img
                               src={aadhaarPreview}
                               alt="Aadhaar Card"
-                              className="w-20 h-20 object-cover rounded-xl border border-[#D4AF37] shadow-sm"
+                              className="w-20 h-20 object-cover rounded-xl border-2 border-[#D4AF37] shadow-sm"
                             />
                             <button
                               type="button"
@@ -1856,19 +2035,24 @@ const CustomerRegistrationPage: React.FC = () => {
                                 setAadhaarPreview(null);
                                 setAadhaarDocName(null);
                               }}
-                              className="absolute -top-1 -right-1 bg-red-500 text-white p-1 rounded-full text-[10px] hover:bg-red-600 transition-colors shadow-sm"
-                              title="Remove file"
+                              className="absolute -top-1.5 -right-1.5 bg-red-500 text-white p-1 rounded-full text-[10px] hover:bg-red-600 transition-colors shadow-md"
+                              title="Remove Aadhaar"
                             >
-                              <Trash2 size={10} />
+                              <Trash2 size={11} />
                             </button>
+                            <span className="absolute bottom-1 right-1 bg-emerald-600 text-white p-0.5 rounded-full shadow">
+                              <Check size={10} />
+                            </span>
                           </div>
                         ) : (
-                          <FileText size={28} className="text-[#0B1F3A] mb-2" />
+                          <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-[#0B1F3A] mb-2 border border-blue-200/60 shadow-inner">
+                            <FileText size={24} />
+                          </div>
                         )}
-                        <p className="text-xs font-bold text-[#0B1F3A] uppercase">Aadhaar Card Scan (Front & Back)</p>
-                        <p className="text-[10px] text-gray-400 mt-0.5 truncate max-w-[180px]">{aadhaarDocName || 'PDF or Image proof'}</p>
+                        <p className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wide">2. Aadhaar Card Scan (Front & Back)</p>
+                        <p className="text-[10px] text-gray-400 mt-0.5 truncate max-w-[200px]">{aadhaarDocName || '12-digit UID • PDF or Image'}</p>
                       </div>
-                      <label className={`mt-3 px-4 py-2 rounded-lg bg-[#0B1F3A] text-white hover:bg-[#162D4A] text-xs font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 ${isUploadingAadhaar ? 'opacity-70 pointer-events-none' : ''}`}>
+                      <label className={`mt-3 w-full max-w-[220px] px-4 py-2.5 rounded-xl bg-[#0B1F3A] text-white hover:bg-[#162D4A] text-xs font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow-sm ${isUploadingAadhaar ? 'opacity-70 pointer-events-none' : ''}`}>
                         {isUploadingAadhaar ? (
                           <>
                             <Loader2 size={13} className="animate-spin text-[#D4AF37]" />
@@ -1881,15 +2065,153 @@ const CustomerRegistrationPage: React.FC = () => {
                       </label>
                     </div>
 
-                    {/* Passbook Scan Card */}
-                    <div className="border-2 border-dashed border-gray-200 hover:border-[#D4AF37] rounded-2xl p-5 text-center bg-[#FAFBFD] transition-all flex flex-col items-center justify-between">
-                      <div className="flex flex-col items-center">
+                    {/* Card 3: PAN Card Scan */}
+                    <div className="border-2 border-dashed border-gray-200 hover:border-[#D4AF37] rounded-2xl p-5 text-center bg-[#FAFBFD] hover:bg-white transition-all flex flex-col items-center justify-between shadow-sm min-h-[220px]">
+                      <div className="flex flex-col items-center w-full">
+                        {panPreview ? (
+                          <div className="relative mb-2">
+                            <img
+                              src={panPreview}
+                              alt="PAN Card"
+                              className="w-20 h-20 object-cover rounded-xl border-2 border-[#D4AF37] shadow-sm"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPanPreview(null);
+                                setPanDocName(null);
+                              }}
+                              className="absolute -top-1.5 -right-1.5 bg-red-500 text-white p-1 rounded-full text-[10px] hover:bg-red-600 transition-colors shadow-md"
+                              title="Remove PAN"
+                            >
+                              <Trash2 size={11} />
+                            </button>
+                            <span className="absolute bottom-1 right-1 bg-emerald-600 text-white p-0.5 rounded-full shadow">
+                              <Check size={10} />
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-700 mb-2 border border-indigo-200/60 shadow-inner">
+                            <CreditCard size={24} />
+                          </div>
+                        )}
+                        <p className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wide">3. PAN Card Scan</p>
+                        <p className="text-[10px] text-gray-400 mt-0.5 truncate max-w-[200px]">{panDocName || '10-char PAN ID • PDF or Image'}</p>
+                      </div>
+                      <label className={`mt-3 w-full max-w-[220px] px-4 py-2.5 rounded-xl bg-[#0B1F3A] text-white hover:bg-[#162D4A] text-xs font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow-sm ${isUploadingPan ? 'opacity-70 pointer-events-none' : ''}`}>
+                        {isUploadingPan ? (
+                          <>
+                            <Loader2 size={13} className="animate-spin text-[#D4AF37]" />
+                            <span>Uploading to Cloudinary...</span>
+                          </>
+                        ) : (
+                          <span>{panPreview || panDocName ? 'Change PAN' : 'Upload PAN Card'}</span>
+                        )}
+                        <input type="file" accept="image/*,.pdf" onChange={(e) => handleDocUpload('pan', e)} className="hidden" disabled={isUploadingPan} />
+                      </label>
+                    </div>
+
+                    {/* Card 4: Voter ID Scan */}
+                    <div className="border-2 border-dashed border-gray-200 hover:border-[#D4AF37] rounded-2xl p-5 text-center bg-[#FAFBFD] hover:bg-white transition-all flex flex-col items-center justify-between shadow-sm min-h-[220px]">
+                      <div className="flex flex-col items-center w-full">
+                        {voterPreview ? (
+                          <div className="relative mb-2">
+                            <img
+                              src={voterPreview}
+                              alt="Voter ID"
+                              className="w-20 h-20 object-cover rounded-xl border-2 border-[#D4AF37] shadow-sm"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setVoterPreview(null);
+                                setVoterDocName(null);
+                              }}
+                              className="absolute -top-1.5 -right-1.5 bg-red-500 text-white p-1 rounded-full text-[10px] hover:bg-red-600 transition-colors shadow-md"
+                              title="Remove Voter ID"
+                            >
+                              <Trash2 size={11} />
+                            </button>
+                            <span className="absolute bottom-1 right-1 bg-emerald-600 text-white p-0.5 rounded-full shadow">
+                              <Check size={10} />
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-700 mb-2 border border-emerald-200/60 shadow-inner">
+                            <Shield size={24} />
+                          </div>
+                        )}
+                        <p className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wide">4. Voter ID Card Scan</p>
+                        <p className="text-[10px] text-gray-400 mt-0.5 truncate max-w-[200px]">{voterDocName || 'Election Commission EPIC card'}</p>
+                      </div>
+                      <label className={`mt-3 w-full max-w-[220px] px-4 py-2.5 rounded-xl bg-[#0B1F3A] text-white hover:bg-[#162D4A] text-xs font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow-sm ${isUploadingVoter ? 'opacity-70 pointer-events-none' : ''}`}>
+                        {isUploadingVoter ? (
+                          <>
+                            <Loader2 size={13} className="animate-spin text-[#D4AF37]" />
+                            <span>Uploading to Cloudinary...</span>
+                          </>
+                        ) : (
+                          <span>{voterPreview || voterDocName ? 'Change Voter ID' : 'Upload Voter ID'}</span>
+                        )}
+                        <input type="file" accept="image/*,.pdf" onChange={(e) => handleDocUpload('voter', e)} className="hidden" disabled={isUploadingVoter} />
+                      </label>
+                    </div>
+
+                    {/* Card 5: Smart Card / Ration Card Scan */}
+                    <div className="border-2 border-dashed border-gray-200 hover:border-[#D4AF37] rounded-2xl p-5 text-center bg-[#FAFBFD] hover:bg-white transition-all flex flex-col items-center justify-between shadow-sm min-h-[220px]">
+                      <div className="flex flex-col items-center w-full">
+                        {smartCardPreview ? (
+                          <div className="relative mb-2">
+                            <img
+                              src={smartCardPreview}
+                              alt="Smart Card"
+                              className="w-20 h-20 object-cover rounded-xl border-2 border-[#D4AF37] shadow-sm"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSmartCardPreview(null);
+                                setSmartCardDocName(null);
+                              }}
+                              className="absolute -top-1.5 -right-1.5 bg-red-500 text-white p-1 rounded-full text-[10px] hover:bg-red-600 transition-colors shadow-md"
+                              title="Remove Smart Card"
+                            >
+                              <Trash2 size={11} />
+                            </button>
+                            <span className="absolute bottom-1 right-1 bg-emerald-600 text-white p-0.5 rounded-full shadow">
+                              <Check size={10} />
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-700 mb-2 border border-amber-200/60 shadow-inner">
+                            <FileSpreadsheet size={24} />
+                          </div>
+                        )}
+                        <p className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wide">5. Smart Card / Ration Card Scan</p>
+                        <p className="text-[10px] text-gray-400 mt-0.5 truncate max-w-[200px]">{smartCardDocName || 'Civil Supplies Smart Family Card'}</p>
+                      </div>
+                      <label className={`mt-3 w-full max-w-[220px] px-4 py-2.5 rounded-xl bg-[#0B1F3A] text-white hover:bg-[#162D4A] text-xs font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow-sm ${isUploadingSmartCard ? 'opacity-70 pointer-events-none' : ''}`}>
+                        {isUploadingSmartCard ? (
+                          <>
+                            <Loader2 size={13} className="animate-spin text-[#D4AF37]" />
+                            <span>Uploading to Cloudinary...</span>
+                          </>
+                        ) : (
+                          <span>{smartCardPreview || smartCardDocName ? 'Change Smart Card' : 'Upload Smart Card'}</span>
+                        )}
+                        <input type="file" accept="image/*,.pdf" onChange={(e) => handleDocUpload('smart_card', e)} className="hidden" disabled={isUploadingSmartCard} />
+                      </label>
+                    </div>
+
+                    {/* Card 6: Bank Passbook Scan Card */}
+                    <div className="border-2 border-dashed border-gray-200 hover:border-[#D4AF37] rounded-2xl p-5 text-center bg-[#FAFBFD] hover:bg-white transition-all flex flex-col items-center justify-between shadow-sm min-h-[220px]">
+                      <div className="flex flex-col items-center w-full">
                         {passbookPreview ? (
                           <div className="relative mb-2">
                             <img
                               src={passbookPreview}
                               alt="Bank Passbook"
-                              className="w-20 h-20 object-cover rounded-xl border border-[#D4AF37] shadow-sm"
+                              className="w-20 h-20 object-cover rounded-xl border-2 border-[#D4AF37] shadow-sm"
                             />
                             <button
                               type="button"
@@ -1897,19 +2219,24 @@ const CustomerRegistrationPage: React.FC = () => {
                                 setPassbookPreview(null);
                                 setPassbookDocName(null);
                               }}
-                              className="absolute -top-1 -right-1 bg-red-500 text-white p-1 rounded-full text-[10px] hover:bg-red-600 transition-colors shadow-sm"
-                              title="Remove file"
+                              className="absolute -top-1.5 -right-1.5 bg-red-500 text-white p-1 rounded-full text-[10px] hover:bg-red-600 transition-colors shadow-md"
+                              title="Remove Passbook"
                             >
-                              <Trash2 size={10} />
+                              <Trash2 size={11} />
                             </button>
+                            <span className="absolute bottom-1 right-1 bg-emerald-600 text-white p-0.5 rounded-full shadow">
+                              <Check size={10} />
+                            </span>
                           </div>
                         ) : (
-                          <CreditCard size={28} className="text-[#059669] mb-2" />
+                          <div className="w-12 h-12 rounded-2xl bg-teal-50 flex items-center justify-center text-[#059669] mb-2 border border-teal-200/60 shadow-inner">
+                            <Landmark size={24} />
+                          </div>
                         )}
-                        <p className="text-xs font-bold text-[#0B1F3A] uppercase">Bank Passbook / Cheque</p>
-                        <p className="text-[10px] text-gray-400 mt-0.5 truncate max-w-[180px]">{passbookDocName || 'Account statement scan'}</p>
+                        <p className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wide">6. Bank Passbook / Cheque</p>
+                        <p className="text-[10px] text-gray-400 mt-0.5 truncate max-w-[200px]">{passbookDocName || 'Account statement scan or cheque'}</p>
                       </div>
-                      <label className={`mt-3 px-4 py-2 rounded-lg bg-[#0B1F3A] text-white hover:bg-[#162D4A] text-xs font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 ${isUploadingPassbook ? 'opacity-70 pointer-events-none' : ''}`}>
+                      <label className={`mt-3 w-full max-w-[220px] px-4 py-2.5 rounded-xl bg-[#0B1F3A] text-white hover:bg-[#162D4A] text-xs font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow-sm ${isUploadingPassbook ? 'opacity-70 pointer-events-none' : ''}`}>
                         {isUploadingPassbook ? (
                           <>
                             <Loader2 size={13} className="animate-spin text-[#D4AF37]" />
@@ -1920,6 +2247,75 @@ const CustomerRegistrationPage: React.FC = () => {
                         )}
                         <input type="file" accept="image/*,.pdf" onChange={(e) => handleDocUpload('passbook', e)} className="hidden" disabled={isUploadingPassbook} />
                       </label>
+                    </div>
+
+                    {/* Card 7: Other Supporting Document (Spans 2 columns on desktop) */}
+                    <div className="md:col-span-2 border-2 border-dashed border-gray-200 hover:border-[#D4AF37] rounded-2xl p-6 bg-[#FAFBFD] hover:bg-white transition-all shadow-sm flex flex-col md:flex-row items-center justify-between gap-6">
+                      <div className="flex items-start gap-4 flex-1 w-full">
+                        <div className="w-12 h-12 rounded-2xl bg-purple-50 flex items-center justify-center text-purple-700 flex-shrink-0 border border-purple-200/60 shadow-inner">
+                          <Paperclip size={24} />
+                        </div>
+                        <div className="flex-1 w-full space-y-2">
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wide">7. Other Supporting Document</p>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800">
+                              Optional Verification Proof
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-gray-400">
+                            Electricity bill, gas cylinder receipt, rental deed, property tax, trade license, or business card.
+                          </p>
+                          <input
+                            type="text"
+                            value={otherDocTitle}
+                            onChange={(e) => setOtherDocTitle(e.target.value)}
+                            placeholder="Enter Document Title (e.g. EB Bill / Gas Bill / Rent Agreement)"
+                            className="w-full max-w-md px-3.5 py-2 rounded-xl border border-gray-200 bg-white text-xs text-[#0B1F3A] placeholder:text-gray-400 focus:outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] shadow-sm"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col items-center justify-center gap-2 flex-shrink-0">
+                        {otherPreview ? (
+                          <div className="relative">
+                            <img
+                              src={otherPreview}
+                              alt="Other Supporting Document"
+                              className="w-20 h-20 object-cover rounded-xl border-2 border-[#D4AF37] shadow-sm"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOtherPreview(null);
+                                setOtherDocName(null);
+                              }}
+                              className="absolute -top-1.5 -right-1.5 bg-red-500 text-white p-1 rounded-full text-[10px] hover:bg-red-600 transition-colors shadow-md"
+                              title="Remove Document"
+                            >
+                              <Trash2 size={11} />
+                            </button>
+                            <span className="absolute bottom-1 right-1 bg-emerald-600 text-white p-0.5 rounded-full shadow">
+                              <Check size={10} />
+                            </span>
+                          </div>
+                        ) : null}
+                        <label className={`px-5 py-2.5 rounded-xl bg-[#0B1F3A] text-white hover:bg-[#162D4A] text-xs font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow-sm min-w-[200px] ${isUploadingOther ? 'opacity-70 pointer-events-none' : ''}`}>
+                          {isUploadingOther ? (
+                            <>
+                              <Loader2 size={13} className="animate-spin text-[#D4AF37]" />
+                              <span>Uploading to Cloudinary...</span>
+                            </>
+                          ) : (
+                            <span>{otherPreview || otherDocName ? 'Change Document' : 'Upload Other Document'}</span>
+                          )}
+                          <input type="file" accept="image/*,.pdf" onChange={(e) => handleDocUpload('other', e)} className="hidden" disabled={isUploadingOther} />
+                        </label>
+                        {otherDocName && (
+                          <span className="text-[10px] text-gray-500 font-mono truncate max-w-[190px]">
+                            {otherDocName}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -2719,6 +3115,116 @@ const CustomerRegistrationPage: React.FC = () => {
                       <div><span className="text-gray-400 block text-[10px]">REQUESTED LOAN</span><span className="font-black text-[#0B1F3A] text-sm">₹{loanCalculations.principal.toLocaleString('en-IN')}</span></div>
                       <div><span className="text-gray-400 block text-[10px]">WEEKLY EMI</span><span className="font-black text-[#D4AF37] text-sm">₹{loanCalculations.weeklyEMI.toLocaleString('en-IN')} ({formData.tenorWeeks} wks)</span></div>
                       <div><span className="text-gray-400 block text-[10px]">TOTAL PAYABLE</span><span className="font-bold text-gray-800">₹{loanCalculations.totalPayable.toLocaleString('en-IN')}</span></div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Attached Documents Audit Checklist (7 Verified Artifacts) */}
+                <div className="bg-[#FAFBFD] p-5 rounded-2xl border border-gray-200 space-y-3">
+                  <div className="flex items-center justify-between border-b border-gray-200 pb-2">
+                    <div className="flex items-center gap-2">
+                      <UploadCloud size={16} className="text-[#D4AF37]" />
+                      <h4 className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wider">
+                        KYC & Supporting Documents Review (7 Documents Audit)
+                      </h4>
+                    </div>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#0B1F3A]/5 text-[#0B1F3A]">
+                      Cloudinary Secured
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3 pt-2">
+                    {/* Doc 1: Photo */}
+                    <div className="p-3 bg-white rounded-xl border border-gray-100 flex flex-col items-center text-center shadow-xs">
+                      {photoPreview ? (
+                        <img src={photoPreview} alt="Photo" className="w-12 h-12 rounded-lg object-cover border border-[#D4AF37] mb-1.5 shadow-xs" />
+                      ) : (
+                        <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400 mb-1.5"><User size={18} /></div>
+                      )}
+                      <span className="text-[10px] font-bold text-[#0B1F3A] truncate w-full">Photo</span>
+                      <span className={`text-[9px] font-semibold mt-0.5 px-1.5 py-0.5 rounded-full ${photoPreview ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>
+                        {photoPreview ? 'Uploaded ✓' : 'Not Uploaded'}
+                      </span>
+                    </div>
+
+                    {/* Doc 2: Aadhaar */}
+                    <div className="p-3 bg-white rounded-xl border border-gray-100 flex flex-col items-center text-center shadow-xs">
+                      {aadhaarPreview ? (
+                        <img src={aadhaarPreview} alt="Aadhaar" className="w-12 h-12 rounded-lg object-cover border border-[#D4AF37] mb-1.5 shadow-xs" />
+                      ) : (
+                        <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400 mb-1.5"><FileText size={18} /></div>
+                      )}
+                      <span className="text-[10px] font-bold text-[#0B1F3A] truncate w-full">Aadhaar Card</span>
+                      <span className={`text-[9px] font-semibold mt-0.5 px-1.5 py-0.5 rounded-full ${aadhaarPreview ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>
+                        {aadhaarPreview ? 'Uploaded ✓' : 'Not Uploaded'}
+                      </span>
+                    </div>
+
+                    {/* Doc 3: PAN */}
+                    <div className="p-3 bg-white rounded-xl border border-gray-100 flex flex-col items-center text-center shadow-xs">
+                      {panPreview ? (
+                        <img src={panPreview} alt="PAN" className="w-12 h-12 rounded-lg object-cover border border-[#D4AF37] mb-1.5 shadow-xs" />
+                      ) : (
+                        <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400 mb-1.5"><CreditCard size={18} /></div>
+                      )}
+                      <span className="text-[10px] font-bold text-[#0B1F3A] truncate w-full">PAN Card</span>
+                      <span className={`text-[9px] font-semibold mt-0.5 px-1.5 py-0.5 rounded-full ${panPreview ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>
+                        {panPreview ? 'Uploaded ✓' : 'Optional'}
+                      </span>
+                    </div>
+
+                    {/* Doc 4: Voter ID */}
+                    <div className="p-3 bg-white rounded-xl border border-gray-100 flex flex-col items-center text-center shadow-xs">
+                      {voterPreview ? (
+                        <img src={voterPreview} alt="Voter ID" className="w-12 h-12 rounded-lg object-cover border border-[#D4AF37] mb-1.5 shadow-xs" />
+                      ) : (
+                        <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400 mb-1.5"><Shield size={18} /></div>
+                      )}
+                      <span className="text-[10px] font-bold text-[#0B1F3A] truncate w-full">Voter ID</span>
+                      <span className={`text-[9px] font-semibold mt-0.5 px-1.5 py-0.5 rounded-full ${voterPreview ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>
+                        {voterPreview ? 'Uploaded ✓' : 'Optional'}
+                      </span>
+                    </div>
+
+                    {/* Doc 5: Smart Card */}
+                    <div className="p-3 bg-white rounded-xl border border-gray-100 flex flex-col items-center text-center shadow-xs">
+                      {smartCardPreview ? (
+                        <img src={smartCardPreview} alt="Smart Card" className="w-12 h-12 rounded-lg object-cover border border-[#D4AF37] mb-1.5 shadow-xs" />
+                      ) : (
+                        <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400 mb-1.5"><FileSpreadsheet size={18} /></div>
+                      )}
+                      <span className="text-[10px] font-bold text-[#0B1F3A] truncate w-full">Smart Card</span>
+                      <span className={`text-[9px] font-semibold mt-0.5 px-1.5 py-0.5 rounded-full ${smartCardPreview ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>
+                        {smartCardPreview ? 'Uploaded ✓' : 'Optional'}
+                      </span>
+                    </div>
+
+                    {/* Doc 6: Passbook */}
+                    <div className="p-3 bg-white rounded-xl border border-gray-100 flex flex-col items-center text-center shadow-xs">
+                      {passbookPreview ? (
+                        <img src={passbookPreview} alt="Passbook" className="w-12 h-12 rounded-lg object-cover border border-[#D4AF37] mb-1.5 shadow-xs" />
+                      ) : (
+                        <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400 mb-1.5"><Landmark size={18} /></div>
+                      )}
+                      <span className="text-[10px] font-bold text-[#0B1F3A] truncate w-full">Passbook</span>
+                      <span className={`text-[9px] font-semibold mt-0.5 px-1.5 py-0.5 rounded-full ${passbookPreview ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>
+                        {passbookPreview ? 'Uploaded ✓' : 'Not Uploaded'}
+                      </span>
+                    </div>
+
+                    {/* Doc 7: Other */}
+                    <div className="p-3 bg-white rounded-xl border border-gray-100 flex flex-col items-center text-center shadow-xs">
+                      {otherPreview ? (
+                        <img src={otherPreview} alt="Other Doc" className="w-12 h-12 rounded-lg object-cover border border-[#D4AF37] mb-1.5 shadow-xs" />
+                      ) : (
+                        <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400 mb-1.5"><Paperclip size={18} /></div>
+                      )}
+                      <span className="text-[10px] font-bold text-[#0B1F3A] truncate w-full" title={otherDocTitle || 'Other Document'}>
+                        {otherDocTitle.trim() || 'Other Doc'}
+                      </span>
+                      <span className={`text-[9px] font-semibold mt-0.5 px-1.5 py-0.5 rounded-full ${otherPreview ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>
+                        {otherPreview ? 'Uploaded ✓' : 'Optional'}
+                      </span>
                     </div>
                   </div>
                 </div>

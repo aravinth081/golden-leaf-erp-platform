@@ -165,7 +165,7 @@ export async function uploadCustomerPhoto(
 export async function uploadKYCDocument(
   file: File,
   customerId: string,
-  documentType: 'aadhaar_front' | 'aadhaar_back' | 'pan' | 'voter_id'
+  documentType: 'aadhaar_front' | 'aadhaar_back' | 'pan' | 'voter_id' | 'smart_card' | 'passbook' | 'other'
 ): Promise<string> {
   const result = await uploadImage(file, `kyc/${customerId}/${documentType}`);
   return result.secure_url;

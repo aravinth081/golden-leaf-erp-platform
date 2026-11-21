@@ -8,6 +8,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { clsx } from 'clsx';
 import { Sidebar } from '../components/layout/Sidebar';
 import { TopBar } from '../components/layout/TopBar';
+import { SessionTimeoutManager } from '../components/security/SessionTimeoutManager';
 import { useUIStore } from '../store';
 import { usePlatformSmoothScroll } from '../hooks/usePlatformSmoothScroll';
 
@@ -20,9 +21,13 @@ export const AppLayout: React.FC = () => {
 
   // Reset scroll position on route change
   useEffect(() => {
-    const mainEl = document.getElementById('main-content-scroll');
-    if (mainEl) {
-      mainEl.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    try {
+      const mainEl = document.getElementById('main-content-scroll');
+      if (mainEl) {
+        mainEl.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      }
+    } catch {
+      // Safe fallback
     }
   }, [location.pathname]);
 
@@ -75,6 +80,9 @@ export const AppLayout: React.FC = () => {
           </div>
         </main>
       </div>
+
+      {/* Institutional Security: Inactivity Session Timeout Manager */}
+      <SessionTimeoutManager />
     </div>
   );
 };

@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { useUIStore, useAuthStore } from '../../store';
 import { getStoredBranches, type DetailedBranch } from '../../services/branchService';
-import { normalizeBranchId } from '../../services/creditManagerService';
+import { normalizeBranchId, matchBranchId } from '../../services/creditManagerService';
 import {
   getMonitoredCollections,
   type MonitoredCollection,
@@ -163,25 +163,39 @@ function addDailyClosingAuditLog(entry: {
 export const DailyClosingPage: React.FC = () => {
   const { addToast, selectedBranchId, setSelectedBranchId } = useUIStore();
   const currentUser = useAuthStore((s) => s.user);
-  const userBranchClaim = currentUser?.customClaims?.branchId;
-  const userRole = (currentUser?.customClaims?.role || 'branch_manager').toLowerCase();
+  const userBranchClaim = currentUser?.customClaims?.branchId || (currentUser as any)?.branchId;
+  const userBranchNameClaim = currentUser?.customClaims?.branchName || (currentUser as any)?.branchName;
+  const userRole = (currentUser?.customClaims?.role || (currentUser as any)?.role || 'branch_manager').toString().toLowerCase();
+  const isAdmin = userRole === 'admin' || userRole === 'super_admin';
+  const isBranchScoped = !isAdmin;
 
   // Load all system branches
   const branches = useMemo(() => getStoredBranches(), []);
 
-  // Determine active branch selection (defaults to selectedBranchId or user branch or BR-01)
+  // Determine active branch selection (strictly match login branch when branch-scoped)
   const [activeBranchId, setActiveBranchId] = useState<string>(() => {
+    if (isBranchScoped) {
+      const claim = userBranchClaim || userBranchNameClaim;
+      if (claim) {
+        const matched = branches.find(
+          (b) => matchBranchId(claim, b.id) || matchBranchId(claim, b.name) || matchBranchId(claim, b.code)
+        );
+        if (matched) return matched.id;
+        return claim;
+      }
+      const gobi = branches.find((b) => b.name.toLowerCase().includes('gobi') || (b.code && b.code.toLowerCase().includes('6805')));
+      if (gobi) return gobi.id;
+    }
     if (selectedBranchId) return selectedBranchId;
-    if (userBranchClaim) return normalizeBranchId(userBranchClaim);
-    return 'BR-01';
+    return branches[0]?.id || 'BR-01';
   });
 
-  // Keep in sync if global selectedBranchId changes
+  // Keep in sync if global selectedBranchId changes (only for non-branch-scoped)
   useEffect(() => {
-    if (selectedBranchId && selectedBranchId !== activeBranchId) {
+    if (!isBranchScoped && selectedBranchId && selectedBranchId !== activeBranchId) {
       setActiveBranchId(selectedBranchId);
     }
-  }, [selectedBranchId]);
+  }, [selectedBranchId, isBranchScoped, activeBranchId]);
 
   // Find active branch details
   const activeBranch = useMemo(() => {
@@ -469,115 +483,128 @@ export const DailyClosingPage: React.FC = () => {
 
             {/* Branch Context Selector + Date Selector */}
             <div className="flex flex-wrap items-center gap-3">
-              {/* Branch Selector */}
-              <div className="relative z-40" ref={dropdownRef}>
-                <div className="text-[10px] font-bold uppercase tracking-wider text-[#9CA3AF] mb-1">
-                  Active Branch
-                </div>
-                <button
-                  ref={triggerButtonRef}
-                  type="button"
-                  onClick={() => setBranchDropdownOpen((prev) => !prev)}
-                  onKeyDown={handleTriggerKeyDown}
-                  aria-haspopup="listbox"
-                  aria-expanded={branchDropdownOpen}
-                  aria-label={`Select branch. Currently selected: ${activeBranch.name}`}
-                  className="inline-flex items-center justify-between gap-2.5 px-3.5 py-2 bg-white/10 hover:bg-white/15 active:bg-white/20 border border-white/20 hover:border-[#D4AF37]/50 rounded-xl text-xs font-bold text-white shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-[#D4AF37] cursor-pointer min-w-[220px]"
-                >
-                  <div className="flex items-center gap-2 truncate">
-                    <Building size={14} className="text-[#D4AF37] shrink-0" />
-                    <span className="truncate">{activeBranch.name}</span>
-                    <span className="text-[10px] text-[#D4AF37] font-semibold">({activeBranch.code || activeBranch.id})</span>
+              {/* Branch Selector: Static for Branch Manager, Dropdown for Admin */}
+              {isBranchScoped ? (
+                <div className="relative z-40">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#9CA3AF] mb-1">
+                    Active Branch
                   </div>
-                  <ChevronDown
-                    size={14}
-                    className={`text-white/70 transition-transform duration-200 shrink-0 ${branchDropdownOpen ? 'rotate-180 text-[#D4AF37]' : ''}`}
-                  />
-                </button>
+                  <div className="inline-flex items-center gap-2.5 px-3.5 py-2 bg-white/10 border border-white/20 rounded-xl text-xs font-bold text-white shadow-sm min-w-[220px]">
+                    <Building size={14} className="text-[#D4AF37] shrink-0" />
+                    <span className="truncate">{activeBranch?.name || userBranchNameClaim || 'Assigned Branch'}</span>
+                    <span className="text-[10px] text-[#D4AF37] font-semibold">({activeBranch?.code || activeBranch?.id || userBranchClaim})</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="relative z-40" ref={dropdownRef}>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#9CA3AF] mb-1">
+                    Active Branch
+                  </div>
+                  <button
+                    ref={triggerButtonRef}
+                    type="button"
+                    onClick={() => setBranchDropdownOpen((prev) => !prev)}
+                    onKeyDown={handleTriggerKeyDown}
+                    aria-haspopup="listbox"
+                    aria-expanded={branchDropdownOpen}
+                    aria-label={`Select branch. Currently selected: ${activeBranch.name}`}
+                    className="inline-flex items-center justify-between gap-2.5 px-3.5 py-2 bg-white/10 hover:bg-white/15 active:bg-white/20 border border-white/20 hover:border-[#D4AF37]/50 rounded-xl text-xs font-bold text-white shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-[#D4AF37] cursor-pointer min-w-[220px]"
+                  >
+                    <div className="flex items-center gap-2 truncate">
+                      <Building size={14} className="text-[#D4AF37] shrink-0" />
+                      <span className="truncate">{activeBranch.name}</span>
+                      <span className="text-[10px] text-[#D4AF37] font-semibold">({activeBranch.code || activeBranch.id})</span>
+                    </div>
+                    <ChevronDown
+                      size={14}
+                      className={`text-white/70 transition-transform duration-200 shrink-0 ${branchDropdownOpen ? 'rotate-180 text-[#D4AF37]' : ''}`}
+                    />
+                  </button>
 
-                <AnimatePresence>
-                  {branchDropdownOpen && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 4, scale: 0.98 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: 4, scale: 0.98 }}
-                      transition={{ duration: 0.12 }}
-                      className="absolute right-0 top-full mt-2 w-[min(92vw,360px)] bg-white rounded-2xl shadow-[0_20px_60px_rgba(11,31,58,0.35)] border border-[#E2E8F0] z-[100] p-2 ring-1 ring-black/5"
-                    >
-                      {/* Dropdown Header */}
-                      <div className="px-3.5 py-2.5 border-b border-slate-100 flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-2">
-                          <Building size={14} className="text-[#D4AF37]" />
-                          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-700 font-mono">
-                            Select Operating Branch
+                  <AnimatePresence>
+                    {branchDropdownOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 4, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 4, scale: 0.98 }}
+                        transition={{ duration: 0.12 }}
+                        className="absolute right-0 top-full mt-2 w-[min(92vw,360px)] bg-white rounded-2xl shadow-[0_20px_60px_rgba(11,31,58,0.35)] border border-[#E2E8F0] z-[100] p-2 ring-1 ring-black/5"
+                      >
+                        {/* Dropdown Header */}
+                        <div className="px-3.5 py-2.5 border-b border-slate-100 flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <Building size={14} className="text-[#D4AF37]" />
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-700 font-mono">
+                              Select Operating Branch
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-bold text-[#0B1F3A] bg-blue-50 px-2.5 py-0.5 rounded-full font-mono border border-blue-100">
+                            {branches.length} Branches
                           </span>
                         </div>
-                        <span className="text-[10px] font-bold text-[#0B1F3A] bg-blue-50 px-2.5 py-0.5 rounded-full font-mono border border-blue-100">
-                          {branches.length} Branches
-                        </span>
-                      </div>
 
-                      {/* Navigation hint */}
-                      <div className="px-3.5 py-1 text-[10px] text-gray-400 flex items-center justify-between border-b border-slate-50 mb-1 font-mono">
-                        <span>↑ / ↓ Navigate</span>
-                        <span>↵ Select</span>
-                        <span>Esc Close</span>
-                      </div>
+                        {/* Navigation hint */}
+                        <div className="px-3.5 py-1 text-[10px] text-gray-400 flex items-center justify-between border-b border-slate-50 mb-1 font-mono">
+                          <span>↑ / ↓ Navigate</span>
+                          <span>↵ Select</span>
+                          <span>Esc Close</span>
+                        </div>
 
-                      {/* Branch Options List */}
-                      <div
-                        ref={listboxContainerRef}
-                        role="listbox"
-                        tabIndex={-1}
-                        aria-label="Operating Branches"
-                        onKeyDown={handleDropdownKeyDown}
-                        className="max-h-72 overflow-y-auto p-0.5 space-y-1 custom-scrollbar focus:outline-none"
-                      >
-                        {branches.map((b, idx) => {
-                          const isSelected = b.id === activeBranch.id;
-                          const isFocused = idx === focusedBranchIndex;
-                          return (
-                            <button
-                              key={b.id}
-                              ref={(el) => {
-                                optionRefs.current[idx] = el;
-                              }}
-                              role="option"
-                              aria-selected={isSelected}
-                              type="button"
-                              onClick={() => handleSelectBranch(b)}
-                              onMouseEnter={() => setFocusedBranchIndex(idx)}
-                              className={`w-full px-3.5 py-2.5 rounded-xl text-left text-xs flex items-center justify-between transition-all cursor-pointer outline-none ${
-                                isFocused
-                                  ? isSelected
-                                    ? 'bg-amber-100 text-[#0B1F3A] font-bold border border-amber-300 ring-2 ring-[#D4AF37] shadow-xs'
-                                    : 'bg-slate-100 text-[#0B1F3A] ring-2 ring-[#D4AF37]/70 font-semibold'
-                                  : isSelected
-                                  ? 'bg-amber-50/90 text-[#0B1F3A] font-bold border border-amber-200/80 shadow-xs'
-                                  : 'text-slate-700 hover:bg-slate-50'
-                              }`}
-                            >
-                              <div className="flex flex-col truncate pr-2">
-                                <span className={`text-xs truncate ${isSelected ? 'font-bold text-[#0B1F3A]' : 'font-semibold text-slate-800'}`}>
-                                  {b.name}
-                                </span>
-                                <span className="text-[10px] text-slate-400 font-mono mt-0.5">
-                                  {b.code || b.id} • {b.city || 'Tamil Nadu'}
-                                </span>
-                              </div>
-                              {isSelected && (
-                                <div className="w-5 h-5 rounded-full bg-[#D4AF37] flex items-center justify-center text-white shrink-0 shadow-xs">
-                                  <Check size={12} strokeWidth={2.5} />
+                        {/* Branch Options List */}
+                        <div
+                          ref={listboxContainerRef}
+                          role="listbox"
+                          tabIndex={-1}
+                          aria-label="Operating Branches"
+                          onKeyDown={handleDropdownKeyDown}
+                          className="max-h-72 overflow-y-auto p-0.5 space-y-1 custom-scrollbar focus:outline-none"
+                        >
+                          {branches.map((b, idx) => {
+                            const isSelected = b.id === activeBranch.id;
+                            const isFocused = idx === focusedBranchIndex;
+                            return (
+                              <button
+                                key={b.id}
+                                ref={(el) => {
+                                  optionRefs.current[idx] = el;
+                                }}
+                                role="option"
+                                aria-selected={isSelected}
+                                type="button"
+                                onClick={() => handleSelectBranch(b)}
+                                onMouseEnter={() => setFocusedBranchIndex(idx)}
+                                className={`w-full px-3.5 py-2.5 rounded-xl text-left text-xs flex items-center justify-between transition-all cursor-pointer outline-none ${
+                                  isFocused
+                                    ? isSelected
+                                      ? 'bg-amber-100 text-[#0B1F3A] font-bold border border-amber-300 ring-2 ring-[#D4AF37] shadow-xs'
+                                      : 'bg-slate-100 text-[#0B1F3A] ring-2 ring-[#D4AF37]/70 font-semibold'
+                                    : isSelected
+                                    ? 'bg-amber-50/90 text-[#0B1F3A] font-bold border border-amber-200/80 shadow-xs'
+                                    : 'text-slate-700 hover:bg-slate-50'
+                                }`}
+                              >
+                                <div className="flex flex-col truncate pr-2">
+                                  <span className={`text-xs truncate ${isSelected ? 'font-bold text-[#0B1F3A]' : 'font-semibold text-slate-800'}`}>
+                                    {b.name}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                    {b.code || b.id} • {b.city || 'Tamil Nadu'}
+                                  </span>
                                 </div>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
+                                {isSelected && (
+                                  <div className="w-5 h-5 rounded-full bg-[#D4AF37] flex items-center justify-center text-white shrink-0 shadow-xs">
+                                    <Check size={12} strokeWidth={2.5} />
+                                  </div>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
 
               {/* Business / Closing Date Selector */}
               <div>

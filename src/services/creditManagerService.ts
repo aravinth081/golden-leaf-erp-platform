@@ -4,6 +4,7 @@
 // ──────────────────────────────────────────────────
 
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { getStoredBranches } from './branchService';
 
 export interface VerificationDocument {
   id: string;
@@ -67,6 +68,10 @@ export interface CreditApplicant {
   aadhaarBackUrl?: string;
   panCardUrl?: string;
   voterIdUrl?: string;
+  smartCardUrl?: string;
+  passbookUrl?: string;
+  otherDocUrl?: string;
+  otherDocTitle?: string;
   kycStatus: 'Pending' | 'Verified' | 'Rejected';
   kycRemarks?: string;
   kycVerifiedBy?: string;
@@ -195,6 +200,57 @@ export function normalizeBranchId(id?: string | null): string {
   if (lower === 'b4' || lower === 'br-04' || lower === 'gl-br-004') return 'BR-04';
   if (lower === 'b5' || lower === 'br-05' || lower === 'gl-br-005') return 'BR-05';
   return id;
+}
+
+/**
+ * Robustly matches branch IDs, codes, names across all dynamically generated branches
+ * (e.g. 'BR-6805' <-> 'GL-BR-002' <-> 'GOBI MAIN BRANCH', or 'b1' <-> 'BR-01').
+ */
+export function matchBranchId(filterBranchId?: string | null, appBranchId?: string | null): boolean {
+  if (!filterBranchId || filterBranchId === 'all') return true;
+  if (!appBranchId) return false;
+
+  const f = filterBranchId.trim().toLowerCase();
+  const a = appBranchId.trim().toLowerCase();
+  if (f === a) return true;
+
+  // Normalized standard IDs
+  const normF = normalizeBranchId(filterBranchId).toLowerCase();
+  const normA = normalizeBranchId(appBranchId).toLowerCase();
+  if (normF && normA && normF === normA) return true;
+
+  // Dynamic system branches lookup
+  try {
+    const branches = getStoredBranches();
+    const branchF = branches.find(
+      (b) =>
+        b.id.toLowerCase() === f ||
+        b.code.toLowerCase() === f ||
+        normalizeBranchId(b.id).toLowerCase() === normF ||
+        normalizeBranchId(b.code).toLowerCase() === normF ||
+        b.name.toLowerCase() === f ||
+        b.name.toLowerCase().includes(f) ||
+        f.includes(b.name.toLowerCase())
+    );
+    const branchA = branches.find(
+      (b) =>
+        b.id.toLowerCase() === a ||
+        b.code.toLowerCase() === a ||
+        normalizeBranchId(b.id).toLowerCase() === normA ||
+        normalizeBranchId(b.code).toLowerCase() === normA ||
+        b.name.toLowerCase() === a ||
+        b.name.toLowerCase().includes(a) ||
+        a.includes(b.name.toLowerCase())
+    );
+
+    if (branchF && branchA && branchF.id === branchA.id) return true;
+    if (branchF && (branchF.id.toLowerCase() === a || branchF.code.toLowerCase() === a || branchF.name.toLowerCase().includes(a) || a.includes(branchF.name.toLowerCase()))) return true;
+    if (branchA && (branchA.id.toLowerCase() === f || branchA.code.toLowerCase() === f || branchA.name.toLowerCase().includes(f) || f.includes(branchA.name.toLowerCase()))) return true;
+  } catch {
+    // Ignore lookup errors
+  }
+
+  return false;
 }
 
 const STORAGE_KEY = 'glf_credit_manager_applicants_v5';
@@ -552,6 +608,14 @@ class CreditManagerService {
       panNumber: applicantData.panNumber,
       voterId: applicantData.voterId,
       rationCard: applicantData.rationCard,
+      customerPhotoUrl: applicantData.customerPhotoUrl,
+      aadhaarFrontUrl: applicantData.aadhaarFrontUrl,
+      panCardUrl: applicantData.panCardUrl,
+      voterIdUrl: applicantData.voterIdUrl,
+      smartCardUrl: applicantData.smartCardUrl,
+      passbookUrl: applicantData.passbookUrl,
+      otherDocUrl: applicantData.otherDocUrl,
+      otherDocTitle: applicantData.otherDocTitle,
       kycStatus: 'Pending',
       documents: applicantData.documents || [
         { id: 'DOC-1', name: 'Borrower Photo', type: 'photo', fileName: 'borrower_photo.jpg', status: 'verified' },
@@ -620,9 +684,7 @@ class CreditManagerService {
 
       // Branch isolation (supports normalized IDs like 'b1' <-> 'BR-01', and 'all')
       if (branchId && branchId !== 'all') {
-        const normFilter = normalizeBranchId(branchId);
-        const normApp = normalizeBranchId(app.branchId);
-        if (normFilter !== normApp && app.branchId !== branchId) return false;
+        if (!matchBranchId(branchId, app.branchId)) return false;
       }
 
       // Only show pending BM applications
@@ -646,9 +708,7 @@ class CreditManagerService {
       if (!cmComplete) return false;
 
       if (branchId && branchId !== 'all') {
-        const normFilter = normalizeBranchId(branchId);
-        const normApp = normalizeBranchId(app.branchId);
-        if (normFilter !== normApp && app.branchId !== branchId) return false;
+        if (!matchBranchId(branchId, app.branchId)) return false;
       }
 
       return app.branchManagerApprovalStatus !== 'Not Reached';
@@ -661,9 +721,7 @@ class CreditManagerService {
   public getBranchManagerApprovalHistory(branchId?: string): CreditApplicant[] {
     return this.applicants.filter(app => {
       if (branchId && branchId !== 'all') {
-        const normFilter = normalizeBranchId(branchId);
-        const normApp = normalizeBranchId(app.branchId);
-        if (normFilter !== normApp && app.branchId !== branchId) return false;
+        if (!matchBranchId(branchId, app.branchId)) return false;
       }
 
       return app.branchManagerApprovalStatus === 'Approved' || app.branchManagerApprovalStatus === 'Rejected';

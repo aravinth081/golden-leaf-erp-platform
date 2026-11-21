@@ -362,11 +362,27 @@ export const GoldLoanAppraisalModal: React.FC<GoldLoanAppraisalModalProps> = ({
       return;
     }
 
-    if (numSanctioned > appraisalTotals.maxEligible || numSanctioned <= 0) {
+    if (customerMobile && customerMobile.length !== 10) {
+      addToast({ type: 'error', title: 'Invalid Mobile Number', message: 'Borrower Mobile Number must be exactly 10 digits.' });
+      return;
+    }
+
+    if (aadhaarNumber && aadhaarNumber.length !== 12) {
+      addToast({ type: 'error', title: 'Invalid Aadhaar Number', message: 'Aadhaar Number must be exactly 12 digits.' });
+      return;
+    }
+
+    if (panNumber && panNumber.length !== 10) {
+      addToast({ type: 'error', title: 'Invalid PAN Number', message: 'PAN Card Number must be exactly 10 alphanumeric characters.' });
+      return;
+    }
+
+    const finalSanctioned = numSanctioned > 0 ? Math.min(numSanctioned, appraisalTotals.maxEligible) : appraisalTotals.maxEligible;
+    if (finalSanctioned <= 0) {
       addToast({
         type: 'error',
-        title: 'LTV Violation (Max 75% Limit)',
-        message: `Sanctioned amount ₹${numSanctioned.toLocaleString('en-IN')} cannot exceed max eligible limit ₹${appraisalTotals.maxEligible.toLocaleString('en-IN')}.`,
+        title: 'Appraisal Required',
+        message: 'Please add at least one valid gold ornament with net weight to calculate sanction amount.',
       });
       return;
     }
@@ -394,7 +410,7 @@ export const GoldLoanAppraisalModal: React.FC<GoldLoanAppraisalModalProps> = ({
       liveCustomerCounterPhotoUrl: customerCounterPhoto || undefined,
 
       maxEligibleLoanAmount: appraisalTotals.maxEligible,
-      sanctionedLoanAmount: numSanctioned,
+      sanctionedLoanAmount: finalSanctioned,
       repaymentScheme,
       tenureMonths,
       interestRateAnnual,
@@ -494,7 +510,7 @@ export const GoldLoanAppraisalModal: React.FC<GoldLoanAppraisalModalProps> = ({
               <span className="font-extrabold text-[#0B1F3A] uppercase tracking-wider block text-xs">
                 Section 1: Borrower KYC, Nominee & Ownership Declaration
               </span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1">Borrower Full Name *</label>
                   <input
@@ -507,14 +523,20 @@ export const GoldLoanAppraisalModal: React.FC<GoldLoanAppraisalModalProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1">Mobile Number (10 Digits) *</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[10px] font-bold text-gray-600 uppercase">Mobile Number (10 Digits) *</label>
+                    <span className={`text-[10px] font-mono ${customerMobile.length === 10 ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>
+                      {customerMobile.length}/10
+                    </span>
+                  </div>
                   <input
                     type="tel"
                     required
                     maxLength={10}
+                    inputMode="numeric"
                     placeholder="10-digit mobile"
                     value={customerMobile}
-                    onChange={(e) => setCustomerMobile(e.target.value.replace(/[^0-9]/g, ''))}
+                    onChange={(e) => setCustomerMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
                     className="w-full px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg font-mono font-bold"
                   />
                 </div>
@@ -543,6 +565,39 @@ export const GoldLoanAppraisalModal: React.FC<GoldLoanAppraisalModalProps> = ({
                     <option value="Daughter">Daughter</option>
                     <option value="Brother">Brother</option>
                   </select>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[10px] font-bold text-gray-600 uppercase">Aadhaar (12 Digits)</label>
+                    <span className={`text-[10px] font-mono ${aadhaarNumber.length === 12 ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>
+                      {aadhaarNumber.length}/12
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    maxLength={12}
+                    inputMode="numeric"
+                    placeholder="12-digit Aadhaar"
+                    value={aadhaarNumber}
+                    onChange={(e) => setAadhaarNumber(e.target.value.replace(/\D/g, '').slice(0, 12))}
+                    className="w-full px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg font-mono text-xs font-bold"
+                  />
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[10px] font-bold text-gray-600 uppercase">PAN Card (10 Chars)</label>
+                    <span className={`text-[10px] font-mono ${panNumber.length === 10 ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>
+                      {panNumber.length}/10
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    maxLength={10}
+                    placeholder="ABCDE1234F"
+                    value={panNumber}
+                    onChange={(e) => setPanNumber(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))}
+                    className="w-full px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg font-mono text-xs font-bold uppercase"
+                  />
                 </div>
               </div>
 

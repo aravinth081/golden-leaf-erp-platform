@@ -24,6 +24,7 @@ import {
   updateDocument,
   queryDocuments,
 } from './firestore';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 const FD_COLLECTION = 'fixed_deposits';
 const REFERRALS_COLLECTION = 'fd_referrals';
@@ -61,6 +62,18 @@ function saveLocalFDs(list: FixedDeposit[]): void {
   } catch (e) {
     console.warn('LocalStorage save failed', e);
   }
+
+  // Persistent Cloud Sync to Supabase
+  if (isSupabaseConfigured() && supabase && list.length > 0) {
+    const upsertRows = list.map((fd) => ({
+      collection: FD_COLLECTION,
+      id: fd.id,
+      data: fd,
+      is_deleted: false,
+      updated_at: new Date().toISOString(),
+    }));
+    void supabase.from('documents').upsert(upsertRows).then();
+  }
 }
 
 function getLocalReferrals(): FDReferral[] {
@@ -80,6 +93,18 @@ function saveLocalReferrals(list: FDReferral[]): void {
     localStorage.setItem(STORAGE_KEY_REFERRALS, JSON.stringify(list));
   } catch (e) {
     console.warn('LocalStorage save failed', e);
+  }
+
+  // Persistent Cloud Sync to Supabase
+  if (isSupabaseConfigured() && supabase && list.length > 0) {
+    const upsertRows = list.map((ref) => ({
+      collection: REFERRALS_COLLECTION,
+      id: ref.id,
+      data: ref,
+      is_deleted: false,
+      updated_at: new Date().toISOString(),
+    }));
+    void supabase.from('documents').upsert(upsertRows).then();
   }
 }
 
@@ -356,6 +381,14 @@ export async function rolloverFDRenewal(
 
   const updatedList = [renewedFD, ...current];
   saveLocalFDs(updatedList);
+
+  try {
+    await updateDocument(FD_COLLECTION, original.id, { status: 'Matured & Settled' });
+    await createDocumentWithId(FD_COLLECTION, renewedFD.id, renewedFD);
+  } catch (err) {
+    console.warn('Firestore write failed for rollover:', err);
+  }
+
   return renewedFD;
 }
 

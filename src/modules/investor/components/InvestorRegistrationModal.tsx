@@ -602,14 +602,19 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-[#475569] mb-1 uppercase tracking-wider">
-                    PAN Card Number (10 Characters) <span className="text-red-500">*</span>
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-[#475569] uppercase tracking-wider">
+                      PAN Card Number (10 Characters) <span className="text-red-500">*</span>
+                    </label>
+                    <span className={`text-[10px] font-mono ${pan.length === 10 ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>
+                      {pan.length}/10
+                    </span>
+                  </div>
                   <input
                     type="text"
                     maxLength={10}
                     value={pan}
-                    onChange={(e) => setPan(e.target.value.toUpperCase())}
+                    onChange={(e) => setPan(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))}
                     placeholder="e.g. ABCPK1234D"
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[#CBD5E1] font-mono text-sm font-bold text-[#0B1F3A] outline-none focus:border-[#D4AF37]"
                     required
@@ -620,16 +625,22 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-[#475569] mb-1 uppercase tracking-wider">
-                    Aadhaar Number (12 Digits) <span className="text-red-500">*</span>
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-[#475569] uppercase tracking-wider">
+                      Aadhaar Number (12 Digits) <span className="text-red-500">*</span>
+                    </label>
+                    <span className={`text-[10px] font-mono ${aadhaar.length === 12 ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>
+                      {aadhaar.length}/12
+                    </span>
+                  </div>
                   <input
                     type="text"
                     maxLength={12}
+                    inputMode="numeric"
                     value={aadhaar}
-                    onChange={(e) => setAadhaar(e.target.value.replace(/\D/g, ''))}
+                    onChange={(e) => setAadhaar(e.target.value.replace(/\D/g, '').slice(0, 12))}
                     placeholder="12-digit Aadhaar number"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#CBD5E1] font-mono text-sm font-bold text-[#0B1F3A] outline-none"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#CBD5E1] font-mono text-sm font-bold text-[#0B1F3A] outline-none focus:border-[#D4AF37]"
                     required
                   />
                 </div>

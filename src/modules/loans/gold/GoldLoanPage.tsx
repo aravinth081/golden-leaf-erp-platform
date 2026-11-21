@@ -26,6 +26,7 @@ import { AdminGoldRateMasterModal } from './components/AdminGoldRateMasterModal'
 import { GoldLoanAppraisalModal } from './components/GoldLoanAppraisalModal';
 import { GoldLoanPawnTicketModal } from './components/GoldLoanPawnTicketModal';
 import { GoldLoanRedemptionModal } from './components/GoldLoanRedemptionModal';
+import { GoldLoanCustomerDetailsModal } from './components/GoldLoanCustomerDetailsModal';
 
 export const GoldLoanPage: React.FC = () => {
   const currentUser = useAuthStore((s) => s.user);
@@ -48,6 +49,7 @@ export const GoldLoanPage: React.FC = () => {
   const [selectedReferralForAppraisal, setSelectedReferralForAppraisal] = useState<CroGoldReferral | null>(null);
   const [selectedLoanForPawnTicket, setSelectedLoanForPawnTicket] = useState<GoldLoanRecord | null>(null);
   const [selectedLoanForRedemption, setSelectedLoanForRedemption] = useState<GoldLoanRecord | null>(null);
+  const [selectedLoanForCustomerDetails, setSelectedLoanForCustomerDetails] = useState<GoldLoanRecord | null>(null);
 
   // UTR Quick modal for Admin
   const [utrModalLoan, setUtrModalLoan] = useState<GoldLoanRecord | null>(null);
@@ -539,9 +541,18 @@ export const GoldLoanPage: React.FC = () => {
                             {loan.tamperProofPacketSerialNo}
                           </div>
                         </td>
-                        <td className="py-3.5 px-4">
-                          <div className="font-extrabold text-[#0B1F3A]">{loan.customerName}</div>
-                          <div className="text-[11px] text-gray-500 font-mono">{loan.customerMobile}</div>
+                        <td
+                          className="py-3.5 px-4 cursor-pointer group hover:bg-amber-50/70 transition-colors"
+                          onClick={() => setSelectedLoanForCustomerDetails(loan)}
+                          title="Click to view Customer & Vault Dossier"
+                        >
+                          <div className="font-extrabold text-[#0B1F3A] group-hover:text-blue-700 flex items-center gap-1.5 transition-colors">
+                            <span>{loan.customerName}</span>
+                            <ArrowUpRight size={12} className="text-gray-400 group-hover:text-blue-600 transition-colors shrink-0" />
+                          </div>
+                          <div className="text-[11px] text-gray-500 font-mono mt-0.5">
+                            +91 {loan.customerMobile.replace('+91', '').trim()}
+                          </div>
                         </td>
                         <td className="py-3.5 px-4">
                           <div className="font-semibold text-gray-800">
@@ -564,8 +575,16 @@ export const GoldLoanPage: React.FC = () => {
                           </div>
                         </td>
                         <td className="py-3.5 px-4">
-                          <div className="font-extrabold text-[#0B1F3A]">
-                            ₹{Number(loan.sanctionedLoanAmount || 0).toLocaleString('en-IN')}
+                          <div className="font-extrabold text-[#0B1F3A] flex items-center gap-1.5">
+                            <span>₹{Number(loan.sanctionedLoanAmount || 0).toLocaleString('en-IN')}</span>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedLoanForCustomerDetails(loan)}
+                              title="View / Edit Sanction Details"
+                              className="p-1 rounded-md hover:bg-slate-200 text-slate-400 hover:text-[#0B1F3A] transition-colors cursor-pointer"
+                            >
+                              <ArrowUpRight size={11} />
+                            </button>
                           </div>
                           <div className="text-[10px] text-emerald-700 font-semibold">
                             ₹{Number(loan.monthlyInterestAmount || 0).toLocaleString('en-IN')}/mo ({loan.interestRateAnnual || 12}% p.a.)
@@ -862,6 +881,16 @@ export const GoldLoanPage: React.FC = () => {
         onRedemptionSuccess={() => {
           handleRefresh();
         }}
+      />
+
+      {/* 4.5 Gold Loan Customer & Vault Dossier Modal */}
+      <GoldLoanCustomerDetailsModal
+        isOpen={!!selectedLoanForCustomerDetails}
+        onClose={() => setSelectedLoanForCustomerDetails(null)}
+        loan={selectedLoanForCustomerDetails ? goldLoanService.getLoanById(selectedLoanForCustomerDetails.id) || selectedLoanForCustomerDetails : null}
+        onOpenPawnTicket={(l) => setSelectedLoanForPawnTicket(l)}
+        onOpenRedemption={(l) => setSelectedLoanForRedemption(l)}
+        onLoanUpdated={() => handleRefresh()}
       />
 
       {/* 5. Admin UTR Disbursement Modal */}

@@ -11,6 +11,7 @@ import {
   queryDocuments,
   listenToCollection,
 } from './firestore';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 const COLLECTION = 'investors';
 const STORAGE_KEY = 'glf_investors_cache_v1';
@@ -105,6 +106,18 @@ export function saveLocalInvestors(list: Investor[]): void {
     }
   } catch (e) {
     console.warn('LocalStorage save failed', e);
+  }
+
+  // Persistent Cloud Sync to Supabase
+  if (isSupabaseConfigured() && supabase && list.length > 0) {
+    const upsertRows = list.map((inv) => ({
+      collection: COLLECTION,
+      id: inv.id,
+      data: inv,
+      is_deleted: false,
+      updated_at: new Date().toISOString(),
+    }));
+    void supabase.from('documents').upsert(upsertRows).then();
   }
 }
 

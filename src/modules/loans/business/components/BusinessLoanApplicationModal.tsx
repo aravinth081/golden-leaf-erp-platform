@@ -3,13 +3,14 @@
 // Neat 4-Box Layout • 5-Doc Checklist • Fast Repeat Customer Autofill
 // ──────────────────────────────────────────────────
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X, Check, Sparkles, Building, User, Store, Calculator,
   Upload, Camera, ShieldCheck, AlertCircle, FileText,
-  DollarSign, MapPin, Search
+  DollarSign, MapPin, Search, Loader2, CheckCircle2, Cloud
 } from 'lucide-react';
+import { uploadImage } from '../../../../services/cloudinary';
 import {
   businessLoanService,
   REPEAT_BUSINESS_CUSTOMERS,
@@ -85,20 +86,61 @@ export const BusinessLoanApplicationModal: React.FC<BusinessLoanApplicationModal
   const [accountNo, setAccountNo] = useState('');
   const [ifscCode, setIfscCode] = useState('SBIN0001245');
 
-  // Document Uploads Status
-  const [uploadedDocs, setUploadedDocs] = useState<{
-    doc1: boolean;
-    doc2: boolean;
-    doc3: boolean;
-    doc4: boolean;
-    doc5: boolean;
+  // Document Uploads Status & Cloudinary URLs
+  const [docUrls, setDocUrls] = useState<{
+    doc1: string; // Applicant & Guarantor Photos
+    doc2: string; // Personal KYC Proofs (Aadhaar & PAN)
+    doc3: string; // Mandatory Live Shop Photo with Owner & Nameboard
+    doc4: string; // Business Proof (MSME/GST/License)
+    doc5: string; // Banking Proof
   }>({
-    doc1: true,
-    doc2: true,
-    doc3: true,
-    doc4: true,
-    doc5: true,
+    doc1: '',
+    doc2: '',
+    doc3: '',
+    doc4: '',
+    doc5: '',
   });
+
+  const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
+
+  const fileInputDoc1 = useRef<HTMLInputElement>(null);
+  const fileInputDoc2 = useRef<HTMLInputElement>(null);
+  const fileInputDoc3 = useRef<HTMLInputElement>(null);
+  const fileInputDoc4 = useRef<HTMLInputElement>(null);
+  const fileInputDoc5 = useRef<HTMLInputElement>(null);
+
+  const handleDocUpload = async (docKey: 'doc1' | 'doc2' | 'doc3' | 'doc4' | 'doc5', file: File) => {
+    if (!file) return;
+    setUploadingDoc(docKey);
+    try {
+      const res = await uploadImage(file, 'business_loans/kyc');
+      if (res?.secure_url) {
+        setDocUrls((prev) => ({ ...prev, [docKey]: res.secure_url }));
+        addToast({
+          type: 'success',
+          title: 'Uploaded to Cloudinary',
+          message: 'Document uploaded to Cloudinary and secured successfully.',
+        });
+      }
+    } catch (err: any) {
+      console.warn('Document Cloudinary upload error:', err);
+      // Fallback: Read as data URL for offline preview
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        if (e.target?.result) {
+          setDocUrls((prev) => ({ ...prev, [docKey]: e.target!.result as string }));
+        }
+      };
+      reader.readAsDataURL(file);
+      addToast({
+        type: 'info',
+        title: 'Document Saved Locally',
+        message: 'Document saved in active session.',
+      });
+    } finally {
+      setUploadingDoc(null);
+    }
+  };
 
   // Calculations
   const calculations = useMemo(() => {
@@ -213,6 +255,33 @@ export const BusinessLoanApplicationModal: React.FC<BusinessLoanApplicationModal
       return;
     }
 
+    if (primaryMobile && primaryMobile.length !== 10) {
+      addToast({
+        type: 'error',
+        title: 'Invalid Mobile Number',
+        message: 'Primary Mobile number must be exactly 10 digits.',
+      });
+      return;
+    }
+
+    if (aadhaarNumber && aadhaarNumber.length !== 12) {
+      addToast({
+        type: 'error',
+        title: 'Invalid Aadhaar Number',
+        message: 'Aadhaar Number must be exactly 12 digits.',
+      });
+      return;
+    }
+
+    if (panNumber && panNumber.length !== 10) {
+      addToast({
+        type: 'error',
+        title: 'Invalid PAN Number',
+        message: 'PAN Card Number must be exactly 10 alphanumeric characters (e.g. ABCDE1234F).',
+      });
+      return;
+    }
+
     if (age < 21 || age > 60) {
       addToast({
         type: 'error',
@@ -226,6 +295,8 @@ export const BusinessLoanApplicationModal: React.FC<BusinessLoanApplicationModal
     const endDate = new Date(Date.now() + tenureUnits * (collectionFrequency === 'Daily' ? 86400000 : collectionFrequency === 'Weekly' ? 7 * 86400000 : 30 * 86400000)).toISOString().slice(0, 10);
 
     const newLoan = businessLoanService.createApplication({
+      branchId: currentUser?.customClaims?.branchId || 'BR-01',
+      branchName: currentUser?.customClaims?.branchName || 'Main Branch',
       customerName,
       fatherOrSpouseName,
       dob,
@@ -279,6 +350,49 @@ export const BusinessLoanApplicationModal: React.FC<BusinessLoanApplicationModal
       customerBankName: bankName,
       customerBankAccountNo: accountNo || '000012345678',
       customerBankIfsc: ifscCode,
+
+      documents: {
+        applicantAndGuarantorPhotos: {
+          id: 'DOC-1',
+          title: 'Applicant & Guarantor Photos',
+          description: 'Live facial photo captured at shop counter',
+          fileUrl: docUrls.doc1 || undefined,
+          status: docUrls.doc1 ? 'VERIFIED' : 'PENDING',
+          uploadedAt: docUrls.doc1 ? new Date().toISOString() : undefined,
+        },
+        personalKycProofs: {
+          id: 'DOC-2',
+          title: 'Personal KYC Proofs (Aadhaar & PAN)',
+          description: 'Aadhaar & PAN Card scans',
+          fileUrl: docUrls.doc2 || undefined,
+          status: docUrls.doc2 ? 'VERIFIED' : 'PENDING',
+          uploadedAt: docUrls.doc2 ? new Date().toISOString() : undefined,
+        },
+        liveShopPhoto: {
+          id: 'DOC-3',
+          title: 'Mandatory Live Shop Photo with Owner & Nameboard',
+          description: 'Owner standing at shop entrance with legible nameboard',
+          fileUrl: docUrls.doc3 || undefined,
+          status: docUrls.doc3 ? 'VERIFIED' : 'PENDING',
+          uploadedAt: docUrls.doc3 ? new Date().toISOString() : undefined,
+        },
+        businessProof: {
+          id: 'DOC-4',
+          title: 'Business Proof (MSME/GST/License)',
+          description: 'Udyam Registration / GST / Trade License / Rental Deed',
+          fileUrl: docUrls.doc4 || undefined,
+          status: docUrls.doc4 ? 'VERIFIED' : 'PENDING',
+          uploadedAt: docUrls.doc4 ? new Date().toISOString() : undefined,
+        },
+        bankingProof: {
+          id: 'DOC-5',
+          title: 'Banking Proof (Passbook / Statement)',
+          description: 'Last 6 months Bank Statement / Passbook Front Page',
+          fileUrl: docUrls.doc5 || undefined,
+          status: docUrls.doc5 ? 'VERIFIED' : 'PENDING',
+          uploadedAt: docUrls.doc5 ? new Date().toISOString() : undefined,
+        },
+      },
 
       originatingCroId: currentUser?.employeeId || 'GLF-CRO-101',
       originatingCroName: currentUser?.displayName || 'Customer Relationship Officer',
@@ -424,49 +538,74 @@ export const BusinessLoanApplicationModal: React.FC<BusinessLoanApplicationModal
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1">Primary Mobile (10 Digits) *</label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[10px] font-bold text-gray-600 uppercase">Primary Mobile (10 Digits) *</label>
+                      <span className={`text-[10px] font-mono ${primaryMobile.length === 10 ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>
+                        {primaryMobile.length}/10
+                      </span>
+                    </div>
                     <input
                       type="tel"
                       required
                       maxLength={10}
+                      inputMode="numeric"
                       placeholder="10-digit mobile"
                       value={primaryMobile}
-                      onChange={(e) => setPrimaryMobile(e.target.value.replace(/[^0-9]/g, ''))}
+                      onChange={(e) => setPrimaryMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
                       className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg font-bold font-mono"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1">Alternate Mobile</label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[10px] font-bold text-gray-600 uppercase">Alternate Mobile</label>
+                      <span className={`text-[10px] font-mono ${alternateMobile.length === 10 ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>
+                        {alternateMobile.length}/10
+                      </span>
+                    </div>
                     <input
                       type="tel"
                       maxLength={10}
+                      inputMode="numeric"
                       placeholder="Alternate mobile"
                       value={alternateMobile}
-                      onChange={(e) => setAlternateMobile(e.target.value.replace(/[^0-9]/g, ''))}
+                      onChange={(e) => setAlternateMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
                       className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg font-medium font-mono"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1">Aadhaar No (12 Digits) *</label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[10px] font-bold text-gray-600 uppercase">Aadhaar No (12 Digits) *</label>
+                      <span className={`text-[10px] font-mono ${aadhaarNumber.length === 12 ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>
+                        {aadhaarNumber.length}/12
+                      </span>
+                    </div>
                     <input
                       type="text"
-                      placeholder="XXXX-XXXX-XXXX"
+                      required
+                      maxLength={12}
+                      inputMode="numeric"
+                      placeholder="12-digit Aadhaar UID"
                       value={aadhaarNumber}
-                      onChange={(e) => setAadhaarNumber(e.target.value)}
-                      className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg font-mono font-medium"
+                      onChange={(e) => setAadhaarNumber(e.target.value.replace(/\D/g, '').slice(0, 12))}
+                      className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg font-mono font-bold"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1">PAN Card No (10 Chars)</label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[10px] font-bold text-gray-600 uppercase">PAN Card No (10 Chars)</label>
+                      <span className={`text-[10px] font-mono ${panNumber.length === 10 ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>
+                        {panNumber.length}/10
+                      </span>
+                    </div>
                     <input
                       type="text"
                       maxLength={10}
                       placeholder="ABCDE1234F"
                       value={panNumber}
-                      onChange={(e) => setPanNumber(e.target.value.toUpperCase())}
+                      onChange={(e) => setPanNumber(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))}
                       className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg font-mono font-bold uppercase"
                     />
                   </div>
@@ -516,18 +655,20 @@ export const BusinessLoanApplicationModal: React.FC<BusinessLoanApplicationModal
                       <input
                         type="tel"
                         maxLength={10}
-                        placeholder="Guarantor Mobile No"
+                        inputMode="numeric"
+                        placeholder="Guarantor Mobile (10 Digits)"
                         value={guarantorMobile}
-                        onChange={(e) => setGuarantorMobile(e.target.value)}
+                        onChange={(e) => setGuarantorMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
                         className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-lg font-mono"
                       />
                     </div>
                     <div>
                       <input
                         type="text"
-                        placeholder="Guarantor Aadhaar / PAN"
+                        maxLength={12}
+                        placeholder="Guarantor Aadhaar (12 Digits) / PAN"
                         value={guarantorAadhaar}
-                        onChange={(e) => setGuarantorAadhaar(e.target.value)}
+                        onChange={(e) => setGuarantorAadhaar(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12))}
                         className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-lg font-mono"
                       />
                     </div>
@@ -793,76 +934,305 @@ export const BusinessLoanApplicationModal: React.FC<BusinessLoanApplicationModal
                 </div>
               </div>
 
-              {/* ─── BOX 4: CLEAN 5-DOC CHECKLIST & UPLOADS ─── */}
+              {/* ─── BOX 4: CLEAN 5-DOC CHECKLIST & CLOUDINARY UPLOADS ─── */}
               <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-2xs space-y-3">
                 <div className="flex items-center justify-between border-b border-gray-100 pb-2">
                   <h3 className="font-extrabold text-[#0B1F3A] uppercase tracking-wider text-xs flex items-center gap-2">
                     <Upload size={15} className="text-[#D4AF37]" />
                     Box 4: Clean 5-Document Checklist
                   </h3>
-                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
-                    5/5 Ready
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                    Object.values(docUrls).filter(Boolean).length === 5
+                      ? 'text-emerald-700 bg-emerald-50'
+                      : 'text-amber-700 bg-amber-50'
+                  }`}>
+                    {Object.values(docUrls).filter(Boolean).length}/5 Uploaded
                   </span>
                 </div>
 
                 <div className="space-y-2 text-[11px]">
+                  {/* Hidden inputs */}
+                  <input
+                    type="file"
+                    ref={fileInputDoc1}
+                    className="hidden"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleDocUpload('doc1', f);
+                    }}
+                  />
+                  <input
+                    type="file"
+                    ref={fileInputDoc2}
+                    className="hidden"
+                    accept="image/*,.pdf"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleDocUpload('doc2', f);
+                    }}
+                  />
+                  <input
+                    type="file"
+                    ref={fileInputDoc3}
+                    className="hidden"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleDocUpload('doc3', f);
+                    }}
+                  />
+                  <input
+                    type="file"
+                    ref={fileInputDoc4}
+                    className="hidden"
+                    accept="image/*,.pdf"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleDocUpload('doc4', f);
+                    }}
+                  />
+                  <input
+                    type="file"
+                    ref={fileInputDoc5}
+                    className="hidden"
+                    accept="image/*,.pdf"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleDocUpload('doc5', f);
+                    }}
+                  />
+
                   {/* Doc 1 */}
                   <div className="p-2.5 rounded-xl border border-gray-200 bg-gray-50/50 flex items-center justify-between gap-2">
-                    <div>
-                      <strong className="block text-gray-900">1) Applicant & Guarantor Passport Photos</strong>
-                      <span className="text-[10px] text-gray-500">Live facial photo captured at shop counter</span>
+                    <div className="flex items-center gap-2.5">
+                      {docUrls.doc1 ? (
+                        <img src={docUrls.doc1} alt="Doc 1" className="w-10 h-10 object-cover rounded-lg border border-emerald-300" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-400">
+                          <User size={18} />
+                        </div>
+                      )}
+                      <div>
+                        <strong className="block text-gray-900">1) Applicant & Guarantor Passport Photos</strong>
+                        <span className="text-[10px] text-gray-500">Live facial photo captured at shop counter</span>
+                      </div>
                     </div>
-                    <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">
-                      ✓ Attached
-                    </span>
+                    <div>
+                      {uploadingDoc === 'doc1' ? (
+                        <span className="px-2 py-1 rounded bg-amber-50 text-amber-800 text-[10px] font-bold flex items-center gap-1">
+                          <Loader2 size={12} className="animate-spin" /> Uploading...
+                        </span>
+                      ) : docUrls.doc1 ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold flex items-center gap-1">
+                            <CheckCircle2 size={11} /> Cloudinary
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => fileInputDoc1.current?.click()}
+                            className="text-[10px] text-blue-600 hover:underline cursor-pointer"
+                          >
+                            Change
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => fileInputDoc1.current?.click()}
+                          className="px-2.5 py-1 rounded-lg bg-[#0B1F3A] hover:bg-[#132c4e] text-white text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all"
+                        >
+                          <Upload size={11} /> Upload Photo
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Doc 2 */}
                   <div className="p-2.5 rounded-xl border border-gray-200 bg-gray-50/50 flex items-center justify-between gap-2">
-                    <div>
-                      <strong className="block text-gray-900">2) Personal KYC Proofs</strong>
-                      <span className="text-[10px] text-gray-500">Aadhaar & PAN Card (Front & Back scans)</span>
+                    <div className="flex items-center gap-2.5">
+                      {docUrls.doc2 ? (
+                        <img src={docUrls.doc2} alt="Doc 2" className="w-10 h-10 object-cover rounded-lg border border-emerald-300" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-400">
+                          <FileText size={18} />
+                        </div>
+                      )}
+                      <div>
+                        <strong className="block text-gray-900">2) Personal KYC Proofs</strong>
+                        <span className="text-[10px] text-gray-500">Aadhaar & PAN Card (Front & Back scans)</span>
+                      </div>
                     </div>
-                    <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">
-                      ✓ Attached
-                    </span>
+                    <div>
+                      {uploadingDoc === 'doc2' ? (
+                        <span className="px-2 py-1 rounded bg-amber-50 text-amber-800 text-[10px] font-bold flex items-center gap-1">
+                          <Loader2 size={12} className="animate-spin" /> Uploading...
+                        </span>
+                      ) : docUrls.doc2 ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold flex items-center gap-1">
+                            <CheckCircle2 size={11} /> Cloudinary
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => fileInputDoc2.current?.click()}
+                            className="text-[10px] text-blue-600 hover:underline cursor-pointer"
+                          >
+                            Change
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => fileInputDoc2.current?.click()}
+                          className="px-2.5 py-1 rounded-lg bg-[#0B1F3A] hover:bg-[#132c4e] text-white text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all"
+                        >
+                          <Upload size={11} /> Upload KYC
+                        </button>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Doc 3 - Live Shop Photo */}
-                  <div className="p-2.5 rounded-xl border-2 border-emerald-600 bg-emerald-50/30 flex items-center justify-between gap-2">
-                    <div>
-                      <strong className="block text-emerald-950 font-black">
-                        3) Mandatory Live Shop Photo with Owner & Nameboard
-                      </strong>
-                      <span className="text-[10px] text-emerald-800">
-                        Owner standing at shop entrance with legible nameboard
-                      </span>
+                  {/* Doc 3 - Mandatory Live Shop Photo */}
+                  <div className={`p-2.5 rounded-xl border-2 transition-all flex items-center justify-between gap-2 ${
+                    docUrls.doc3 ? 'border-emerald-500 bg-emerald-50/40' : 'border-amber-400 bg-amber-50/30'
+                  }`}>
+                    <div className="flex items-center gap-2.5">
+                      {docUrls.doc3 ? (
+                        <img src={docUrls.doc3} alt="Shop Front" className="w-10 h-10 object-cover rounded-lg border-2 border-emerald-500" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-lg bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-700">
+                          <Camera size={18} />
+                        </div>
+                      )}
+                      <div>
+                        <strong className="block text-[#0B1F3A] font-bold">
+                          3) Mandatory Live Shop Photo with Owner & Nameboard
+                        </strong>
+                        <span className="text-[10px] text-gray-500">
+                          Owner standing at shop entrance with legible nameboard
+                        </span>
+                      </div>
                     </div>
-                    <span className="px-2 py-1 rounded-lg bg-emerald-700 text-white text-[10px] font-bold flex items-center gap-1">
-                      <Camera size={12} /> Live Captured
-                    </span>
+                    <div>
+                      {uploadingDoc === 'doc3' ? (
+                        <span className="px-2 py-1 rounded bg-amber-50 text-amber-800 text-[10px] font-bold flex items-center gap-1">
+                          <Loader2 size={12} className="animate-spin" /> Uploading...
+                        </span>
+                      ) : docUrls.doc3 ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="px-2 py-1 rounded-lg bg-emerald-700 text-white text-[10px] font-bold flex items-center gap-1 shadow-2xs">
+                            <CheckCircle2 size={11} /> Live Captured
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => fileInputDoc3.current?.click()}
+                            className="text-[10px] text-blue-600 hover:underline cursor-pointer"
+                          >
+                            Retake
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => fileInputDoc3.current?.click()}
+                          className="px-2.5 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all shadow-xs"
+                        >
+                          <Camera size={12} /> Capture Photo
+                        </button>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Doc 4 */}
+                  {/* Doc 4 - Business Proof */}
                   <div className="p-2.5 rounded-xl border border-gray-200 bg-gray-50/50 flex items-center justify-between gap-2">
-                    <div>
-                      <strong className="block text-gray-900">4) Business Proof Document</strong>
-                      <span className="text-[10px] text-gray-500">Udyam Registration / GST / Trade License / Rental Deed</span>
+                    <div className="flex items-center gap-2.5">
+                      {docUrls.doc4 ? (
+                        <img src={docUrls.doc4} alt="Doc 4" className="w-10 h-10 object-cover rounded-lg border border-emerald-300" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-400">
+                          <Building size={18} />
+                        </div>
+                      )}
+                      <div>
+                        <strong className="block text-gray-900">4) Business Proof Document</strong>
+                        <span className="text-[10px] text-gray-500">Udyam Registration / GST / Trade License / Rental Deed</span>
+                      </div>
                     </div>
-                    <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">
-                      ✓ Attached
-                    </span>
+                    <div>
+                      {uploadingDoc === 'doc4' ? (
+                        <span className="px-2 py-1 rounded bg-amber-50 text-amber-800 text-[10px] font-bold flex items-center gap-1">
+                          <Loader2 size={12} className="animate-spin" /> Uploading...
+                        </span>
+                      ) : docUrls.doc4 ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold flex items-center gap-1">
+                            <CheckCircle2 size={11} /> Cloudinary
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => fileInputDoc4.current?.click()}
+                            className="text-[10px] text-blue-600 hover:underline cursor-pointer"
+                          >
+                            Change
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => fileInputDoc4.current?.click()}
+                          className="px-2.5 py-1 rounded-lg bg-[#0B1F3A] hover:bg-[#132c4e] text-white text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all"
+                        >
+                          <Upload size={11} /> Upload Proof
+                        </button>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Doc 5 */}
+                  {/* Doc 5 - Banking Proof */}
                   <div className="p-2.5 rounded-xl border border-gray-200 bg-gray-50/50 flex items-center justify-between gap-2">
-                    <div>
-                      <strong className="block text-gray-900">5) Banking Proof</strong>
-                      <span className="text-[10px] text-gray-500">Last 6 months Bank Statement / Passbook Front Page</span>
+                    <div className="flex items-center gap-2.5">
+                      {docUrls.doc5 ? (
+                        <img src={docUrls.doc5} alt="Doc 5" className="w-10 h-10 object-cover rounded-lg border border-emerald-300" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-400">
+                          <DollarSign size={18} />
+                        </div>
+                      )}
+                      <div>
+                        <strong className="block text-gray-900">5) Banking Proof</strong>
+                        <span className="text-[10px] text-gray-500">Last 6 months Bank Statement / Passbook Front Page</span>
+                      </div>
                     </div>
-                    <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">
-                      ✓ Attached
-                    </span>
+                    <div>
+                      {uploadingDoc === 'doc5' ? (
+                        <span className="px-2 py-1 rounded bg-amber-50 text-amber-800 text-[10px] font-bold flex items-center gap-1">
+                          <Loader2 size={12} className="animate-spin" /> Uploading...
+                        </span>
+                      ) : docUrls.doc5 ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold flex items-center gap-1">
+                            <CheckCircle2 size={11} /> Cloudinary
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => fileInputDoc5.current?.click()}
+                            className="text-[10px] text-blue-600 hover:underline cursor-pointer"
+                          >
+                            Change
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => fileInputDoc5.current?.click()}
+                          className="px-2.5 py-1 rounded-lg bg-[#0B1F3A] hover:bg-[#132c4e] text-white text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all"
+                        >
+                          <Upload size={11} /> Upload Passbook
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

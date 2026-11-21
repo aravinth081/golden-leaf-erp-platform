@@ -77,7 +77,74 @@ export const GoldLoanRedemptionModal: React.FC<GoldLoanRedemptionModalProps> = (
   };
 
   const handlePrint = () => {
-    window.print();
+    const printWindow = window.open('', '_blank', 'width=800,height=900');
+    if (!printWindow) {
+      window.print();
+      return;
+    }
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Ornament Release Slip - ${loan.id}</title>
+          <style>
+            @page { size: A4 portrait; margin: 12mm; }
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #0B1F3A; background: #fff; padding: 24px; font-size: 11px; line-height: 1.5; }
+            .header-bar { border-bottom: 2px solid #0B1F3A; padding-bottom: 12px; margin-bottom: 16px; text-align: center; }
+            .brand-name { font-size: 18px; font-weight: 900; color: #0B1F3A; }
+            .brand-sub { font-size: 10px; font-weight: 700; color: #D4AF37; margin-top: 3px; }
+            .badge { display: inline-block; background: #0B1F3A; color: #fff; font-size: 8.5px; font-weight: 800; padding: 4px 10px; border-radius: 9999px; text-transform: uppercase; margin-bottom: 12px; }
+            .meta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 12px; margin-bottom: 16px; }
+            .meta-label { font-size: 8.5px; font-weight: 800; color: #64748B; text-transform: uppercase; margin-bottom: 2px; }
+            .meta-val { font-size: 12px; font-weight: 800; color: #0B1F3A; }
+            .statement { padding: 16px; background: #FEF3C7; border: 1.5px solid #F59E0B; border-radius: 10px; color: #78350F; font-style: italic; margin-bottom: 24px; font-size: 11.5px; }
+            .sig-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; border-top: 2px solid #0B1F3A; padding-top: 16px; text-align: center; }
+            .sig-card { border: 1px solid #CBD5E1; border-radius: 8px; padding: 12px; height: 100px; display: flex; flex-direction: column; justify-content: space-between; }
+            .footer { margin-top: 24px; text-align: center; font-size: 8.5px; color: #94A3B8; border-top: 1px dashed #CBD5E1; padding-top: 8px; }
+          </style>
+        </head>
+        <body>
+          <div class="header-bar">
+            <div class="brand-name">GOLDENLEAF FINANCE LIMITED</div>
+            <div class="brand-sub">Branch Office: ${loan.branchName || 'Main Branch'} | Safe Custody Vault Register</div>
+          </div>
+          <div style="text-align: center;">
+            <span class="badge">PART B: GOLD ORNAMENT REDEMPTION & SAFE VAULT RELEASE ACKNOWLEDGMENT</span>
+          </div>
+          <div class="meta-grid">
+            <div><span class="meta-label">Redemption Date</span><div class="meta-val">${loan.redemption?.redemptionDate || new Date().toLocaleString('en-IN')}</div></div>
+            <div><span class="meta-label">Total Amount Paid</span><div class="meta-val" style="color: #065F46;">₹${(loan.redemption?.totalSettledAmount || 0).toLocaleString('en-IN')}.00</div></div>
+            <div><span class="meta-label">Receipt Number</span><div class="meta-val" style="font-family: monospace;">${loan.redemption?.receiptNo || 'REC-SETTLED'}</div></div>
+          </div>
+          <div class="statement">
+            "I, <strong>${loan.customerName}</strong>, confirm that I have repaid my Gold Loan Account No. <strong>${loan.id}</strong> in full, surrendered my original Pawn Ticket, and received back all <strong>${loan.totalQuantity} pieces</strong> of my pledged gold ornaments (Gross Weight: <strong>${loan.totalGrossWeightGrams}g</strong>) from Sealed Packet No. <strong>${loan.tamperProofPacketSerialNo}</strong> in good and intact condition."
+          </div>
+          <div class="sig-grid">
+            <div class="sig-card">
+              <span class="meta-label">Borrower Signature on Ornament Delivery</span>
+              <div style="border-bottom: 1px dashed #94A3B8; margin: auto 0; font-style: italic; color: #94A3B8; font-size: 9px;">Sign Above</div>
+              <strong>${loan.redemption?.borrowerAcknowledgedSignature || loan.customerName}</strong>
+            </div>
+            <div class="sig-card">
+              <span class="meta-label">Branch Manager Release Sign & Vault Stamp</span>
+              <div style="margin: auto 0;"><span style="background: #D1FAE5; color: #065F46; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 8px;">RELEASE AUTHORIZED</span></div>
+              <strong style="color: #065F46;">${loan.redemption?.releasedByBranchManager || 'Branch Manager'}</strong>
+            </div>
+          </div>
+          <div class="footer">
+            Golden Leaf Finance Pvt. Ltd. • Official Redemption & Release Record • Digitally Generated on ${new Date().toLocaleString('en-IN')}
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+              window.onafterprint = function() { window.close(); };
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   return (

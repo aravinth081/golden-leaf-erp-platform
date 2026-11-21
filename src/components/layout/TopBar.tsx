@@ -47,7 +47,7 @@ export const TopBar: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
       if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
         setShowProfileMenu(false);
       }
@@ -58,9 +58,11 @@ export const TopBar: React.FC = () => {
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
     document.addEventListener('keydown', handleKeyDown);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, []);
@@ -210,7 +212,7 @@ export const TopBar: React.FC = () => {
               aria-expanded={showProfileMenu}
               aria-haspopup="true"
               aria-label="User profile and settings menu"
-              className="flex items-center gap-2.5 pl-2 pr-3.5 py-1.5 rounded-full bg-white hover:bg-slate-50/80 border border-slate-200/90 hover:border-[#D4AF37]/60 transition-all duration-200 min-h-[44px] cursor-pointer shadow-xs hover:shadow-sm group"
+              className="flex items-center gap-2 sm:gap-2.5 p-1 sm:pl-2 sm:pr-3.5 sm:py-1.5 rounded-full bg-white hover:bg-slate-50/80 border border-slate-200/90 hover:border-[#D4AF37]/60 transition-all duration-200 min-h-[38px] sm:min-h-[44px] cursor-pointer shadow-xs hover:shadow-sm group"
             >
               {/* Avatar with Gold Border Ring */}
               <div className="relative shrink-0">
@@ -247,37 +249,37 @@ export const TopBar: React.FC = () => {
 
             {/* Profile Dropdown Menu */}
             {showProfileMenu && (
-              <div className="absolute right-0 top-[3.35rem] w-[min(calc(100vw-24px),19.5rem)] bg-white rounded-2xl shadow-[0_12px_40px_rgba(11,31,58,0.14)] border border-slate-200/90 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150 p-2.5">
+              <div className="absolute right-0 top-[2.85rem] sm:top-[3.35rem] w-[250px] sm:w-[280px] max-w-[calc(100vw-20px)] bg-white rounded-2xl shadow-[0_10px_35px_rgba(11,31,58,0.14)] border border-slate-200/90 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150 p-2 sm:p-2.5">
                 {/* Header User Card inside Dropdown */}
-                <div className="p-3 rounded-xl bg-slate-50/90 border border-slate-200/70">
-                  <div className="flex items-center gap-3">
+                <div className="p-2 sm:p-2.5 rounded-xl bg-slate-50/90 border border-slate-200/70">
+                  <div className="flex items-center gap-2.5 sm:gap-3">
                     <div className="relative shrink-0">
-                      <div className="w-10 h-10 rounded-full p-[1.5px] bg-gradient-to-br from-[#F5D061] via-[#D4AF37] to-[#8C6808] shadow-xs">
+                      <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full p-[1.5px] bg-gradient-to-br from-[#F5D061] via-[#D4AF37] to-[#8C6808] shadow-xs">
                         <div className="w-full h-full rounded-full overflow-hidden bg-[#0B1F3A] flex items-center justify-center">
                           <Avatar
                             name={displayName}
                             src={user?.photoURL}
-                            size="md"
+                            size="sm"
                           />
                         </div>
                       </div>
-                      <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white shadow-2xs" />
+                      <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white shadow-2xs" />
                     </div>
 
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
-                        <p className="text-xs font-bold text-[#0B1F3A] truncate font-sans" title={displayName}>
+                        <p className="text-[11.5px] sm:text-xs font-bold text-[#0B1F3A] truncate font-sans leading-tight" title={displayName}>
                           {displayName}
                         </p>
-                        <span className="px-1.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[9px] font-extrabold flex items-center gap-0.5 shrink-0">
-                          <CheckCircle2 size={9} /> Verified
+                        <span className="px-1.5 py-0.2 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[8.5px] font-extrabold flex items-center gap-0.5 shrink-0">
+                          <CheckCircle2 size={8.5} /> Verified
                         </span>
                       </div>
-                      <p className="text-[11px] text-slate-500 truncate font-sans mt-0.5" title={user?.email || 'staff@goldenleaf.finance'}>
+                      <p className="text-[10px] sm:text-[11px] text-slate-500 truncate font-sans mt-0.5" title={user?.email || 'staff@goldenleaf.finance'}>
                         {user?.email || 'staff@goldenleaf.finance'}
                       </p>
-                      <div className="mt-1 flex items-center gap-1 text-[11px] font-medium text-slate-600 truncate" title={branchLabel}>
-                        <Building2 size={11} className="text-[#D4AF37] shrink-0" />
+                      <div className="mt-0.5 flex items-center gap-1 text-[10px] sm:text-[10.5px] font-medium text-slate-600 truncate" title={branchLabel}>
+                        <Building2 size={10} className="text-[#D4AF37] shrink-0" />
                         <span className="truncate">
                           {branchLabel}
                           {!isNameSameAsRole ? ` • ${roleName}` : ''}
@@ -288,15 +290,15 @@ export const TopBar: React.FC = () => {
                 </div>
 
                 {/* Quick Operational Links */}
-                <div className="mt-2 pt-2 border-t border-slate-100 space-y-0.5">
+                <div className="mt-1.5 pt-1.5 sm:mt-2 sm:pt-2 border-t border-slate-100 space-y-0.5">
                   {user?.customClaims?.role !== 'admin' && (
                     <Link
                       to="/attendance"
                       onClick={() => setShowProfileMenu(false)}
-                      className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-xl text-slate-700 hover:text-[#0B1F3A] hover:bg-slate-100 transition-colors"
+                      className="flex items-center gap-2 px-2.5 py-1.5 sm:px-3 sm:py-2 text-[11px] sm:text-xs font-semibold rounded-lg sm:rounded-xl text-slate-700 hover:text-[#0B1F3A] hover:bg-slate-100 transition-colors"
                     >
-                      <Clock size={14} className="text-slate-500" />
-                      <span>My Duty Timesheet & GPS</span>
+                      <Clock size={13} className="text-slate-500 shrink-0" />
+                      <span className="truncate">My Duty Timesheet & GPS</span>
                     </Link>
                   )}
 
@@ -305,39 +307,39 @@ export const TopBar: React.FC = () => {
                       <Link
                         to="/admin/staff-profiles"
                         onClick={() => setShowProfileMenu(false)}
-                        className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-xl text-slate-700 hover:text-[#0B1F3A] hover:bg-slate-100 transition-colors"
+                        className="flex items-center gap-2 px-2.5 py-1.5 sm:px-3 sm:py-2 text-[11px] sm:text-xs font-semibold rounded-lg sm:rounded-xl text-slate-700 hover:text-[#0B1F3A] hover:bg-slate-100 transition-colors"
                       >
-                        <UserCog size={14} className="text-[#0B1F3A]" />
-                        <span>Staff Profile Management</span>
+                        <UserCog size={13} className="text-[#0B1F3A] shrink-0" />
+                        <span className="truncate">Staff Profile Management</span>
                       </Link>
                       <Link
                         to="/admin/compensation"
                         onClick={() => setShowProfileMenu(false)}
-                        className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-xl text-slate-700 hover:text-[#0B1F3A] hover:bg-slate-100 transition-colors"
+                        className="flex items-center gap-2 px-2.5 py-1.5 sm:px-3 sm:py-2 text-[11px] sm:text-xs font-semibold rounded-lg sm:rounded-xl text-slate-700 hover:text-[#0B1F3A] hover:bg-slate-100 transition-colors"
                       >
-                        <DollarSign size={14} className="text-[#D4AF37]" />
-                        <span>Fix Role & Staff Pay</span>
+                        <DollarSign size={13} className="text-[#D4AF37] shrink-0" />
+                        <span className="truncate">Fix Role & Staff Pay</span>
                       </Link>
                     </>
                   ) : (
                     <Link
                       to="/my-payslips"
                       onClick={() => setShowProfileMenu(false)}
-                      className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-xl text-slate-700 hover:text-[#0B1F3A] hover:bg-slate-100 transition-colors"
+                      className="flex items-center gap-2 px-2.5 py-1.5 sm:px-3 sm:py-2 text-[11px] sm:text-xs font-semibold rounded-lg sm:rounded-xl text-slate-700 hover:text-[#0B1F3A] hover:bg-slate-100 transition-colors"
                     >
-                      <FileText size={14} className="text-[#D4AF37]" />
-                      <span>My Payslips & Downloads</span>
+                      <FileText size={13} className="text-[#D4AF37] shrink-0" />
+                      <span className="truncate">My Payslips & Downloads</span>
                     </Link>
                   )}
                 </div>
 
                 {/* Direct Sign Out Button */}
-                <div className="mt-2.5 pt-2 border-t border-slate-100">
+                <div className="mt-1.5 pt-1.5 sm:mt-2 sm:pt-2 border-t border-slate-100">
                   <button
                     onClick={handleLogout}
-                    className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold rounded-xl bg-slate-50 hover:bg-rose-50 text-slate-600 hover:text-rose-600 border border-slate-200/70 hover:border-rose-200 transition-all duration-200 cursor-pointer group active:scale-[0.99]"
+                    className="w-full flex items-center justify-center gap-2 px-3 py-1.5 sm:py-2 text-[11px] sm:text-xs font-bold rounded-lg sm:rounded-xl bg-slate-50 hover:bg-rose-50 text-slate-600 hover:text-rose-600 border border-slate-200/70 hover:border-rose-200 transition-all duration-200 cursor-pointer group active:scale-[0.99]"
                   >
-                    <LogOut size={13} className="text-slate-400 group-hover:text-rose-500 group-hover:-translate-x-0.5 transition-all" />
+                    <LogOut size={12} className="text-slate-400 group-hover:text-rose-500 group-hover:-translate-x-0.5 transition-all" />
                     <span>Sign out</span>
                   </button>
                 </div>

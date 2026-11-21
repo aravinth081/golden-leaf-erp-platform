@@ -56,27 +56,78 @@ class GoldLoanService {
               ? 'VAULT_LOCKED_PENDING_UTR'
               : l.status;
 
+            const rate22 = Number(this.rateMaster?.daily22KRatePerGram) || 5850;
+            const items = Array.isArray(l.items)
+              ? l.items.map((i: any) => {
+                  const gross = Number(i.grossWeightGrams) || 0;
+                  const stone = Number(i.stoneDeductionGrams) || 0;
+                  const net = Number(i.netWeightGrams) || Math.max(0, Math.round((gross - stone) * 1000) / 1000);
+                  const purity = i.caratPurity || '22K';
+                  const ratePerG = Number(i.ratePerGram) || (purity === '24K' ? Math.round(rate22 * (24 / 22)) : purity === '20K' ? Math.round(rate22 * (20 / 22)) : purity === '18K' ? Math.round(rate22 * (18 / 22)) : rate22);
+                  const mVal = Number(i.eligibleMarketValue) || Math.round(net * ratePerG);
+                  return {
+                    ...i,
+                    quantity: Number(i.quantity) || 1,
+                    grossWeightGrams: gross,
+                    stoneDeductionGrams: stone,
+                    netWeightGrams: net,
+                    caratPurity: purity,
+                    ratePerGram: ratePerG,
+                    eligibleMarketValue: mVal,
+                  };
+                })
+              : [];
+
+            const totalQty = Number(l.totalQuantity) || items.reduce((acc: number, it: any) => acc + (it.quantity || 1), 0) || 1;
+            const totalGross = Number(l.totalGrossWeightGrams) || items.reduce((acc: number, it: any) => acc + (it.grossWeightGrams || 0), 0);
+            const totalStone = Number(l.totalStoneDeductionGrams) || items.reduce((acc: number, it: any) => acc + (it.stoneDeductionGrams || 0), 0);
+            const totalNet = Number(l.totalNetWeightGrams) || items.reduce((acc: number, it: any) => acc + (it.netWeightGrams || 0), 0);
+
+            let totalAppraised = Number(l.totalAppraisedEligibleValue) || 0;
+            if (totalAppraised <= 0) {
+              const sumItems = items.reduce((acc: number, it: any) => acc + (it.eligibleMarketValue || 0), 0);
+              totalAppraised = sumItems > 0 ? sumItems : Math.round(totalNet * rate22);
+            }
+
+            let maxEligible = Number(l.maxEligibleLoanAmount) || 0;
+            if (maxEligible <= 0 && totalAppraised > 0) {
+              maxEligible = Math.round((totalAppraised * (this.rateMaster?.maxPermittedLtvPercent || 75)) / 100);
+            }
+
+            // Heal 0 sanction amount from maxEligible LTV cap
+            let sanctioned = Number(l.sanctionedLoanAmount) || 0;
+            if (sanctioned <= 0 && Number(l.loanAmount) > 0) {
+              sanctioned = Number(l.loanAmount);
+            }
+            if (sanctioned <= 0 && maxEligible > 0) {
+              sanctioned = maxEligible;
+            }
+
+            const interestRate = Number(l.interestRateAnnual) || 12.0;
+            let monthlyInterest = Number(l.monthlyInterestAmount) || 0;
+            if (monthlyInterest <= 0 && sanctioned > 0) {
+              monthlyInterest = Math.round((sanctioned * (interestRate / 100)) / 12);
+            }
+
+            let netDisbursed = Number(l.netDisbursedAmount) || 0;
+            if (netDisbursed <= 0 && sanctioned > 0) {
+              netDisbursed = Math.max(0, sanctioned - (Number(l.appraiserFeeAmount) || 500));
+            }
+
             return {
               ...l,
               status,
-              totalQuantity: Number(l.totalQuantity) || 0,
-              totalGrossWeightGrams: Number(l.totalGrossWeightGrams) || 0,
-              totalStoneDeductionGrams: Number(l.totalStoneDeductionGrams) || 0,
-              totalNetWeightGrams: Number(l.totalNetWeightGrams) || 0,
-              totalAppraisedEligibleValue: Number(l.totalAppraisedEligibleValue) || 0,
-              maxEligibleLoanAmount: Number(l.maxEligibleLoanAmount) || 0,
-              sanctionedLoanAmount: Number(l.sanctionedLoanAmount) || 0,
-              items: Array.isArray(l.items)
-                ? l.items.map((i: any) => ({
-                    ...i,
-                    quantity: Number(i.quantity) || 1,
-                    grossWeightGrams: Number(i.grossWeightGrams) || 0,
-                    stoneDeductionGrams: Number(i.stoneDeductionGrams) || 0,
-                    netWeightGrams: Number(i.netWeightGrams) || 0,
-                    ratePerGram: Number(i.ratePerGram) || 0,
-                    eligibleMarketValue: Number(i.eligibleMarketValue) || 0,
-                  }))
-                : [],
+              totalQuantity: totalQty,
+              totalGrossWeightGrams: totalGross,
+              totalStoneDeductionGrams: totalStone,
+              totalNetWeightGrams: totalNet,
+              totalAppraisedEligibleValue: totalAppraised,
+              maxEligibleLoanAmount: maxEligible,
+              sanctionedLoanAmount: sanctioned,
+              monthlyInterestAmount: monthlyInterest,
+              netDisbursedAmount: netDisbursed,
+              interestRateAnnual: interestRate,
+              items,
             };
           })
         : [];
@@ -298,14 +349,35 @@ class GoldLoanService {
       liveOrnamentTrayPhotoUrl: data.liveOrnamentTrayPhotoUrl,
       liveCustomerCounterPhotoUrl: data.liveCustomerCounterPhotoUrl,
 
-      maxEligibleLoanAmount: Number(data.maxEligibleLoanAmount) || 0,
-      sanctionedLoanAmount: Number(data.sanctionedLoanAmount) || 0,
+      maxEligibleLoanAmount: (() => {
+        const m = Number(data.maxEligibleLoanAmount) || 0;
+        if (m > 0) return m;
+        const appVal = Number(data.totalAppraisedEligibleValue) || 0;
+        return appVal > 0 ? Math.round(appVal * 0.75) : 0;
+      })(),
+      sanctionedLoanAmount: (() => {
+        const s = Number(data.sanctionedLoanAmount) || 0;
+        if (s > 0) return s;
+        const m = Number(data.maxEligibleLoanAmount) || (Number(data.totalAppraisedEligibleValue) ? Math.round(Number(data.totalAppraisedEligibleValue) * 0.75) : 0);
+        return m > 0 ? m : 0;
+      })(),
       repaymentScheme: data.repaymentScheme || 'Monthly Interest Servicing',
       tenureMonths: data.tenureMonths || 12,
       interestRateAnnual: data.interestRateAnnual || 12.0,
-      monthlyInterestAmount: data.monthlyInterestAmount || 0,
+      monthlyInterestAmount: (() => {
+        const mi = Number(data.monthlyInterestAmount) || 0;
+        if (mi > 0) return mi;
+        const s = Number(data.sanctionedLoanAmount) || Number(data.maxEligibleLoanAmount) || 0;
+        const r = Number(data.interestRateAnnual) || 12.0;
+        return s > 0 ? Math.round((s * (r / 100)) / 12) : 0;
+      })(),
       appraiserFeeAmount: data.appraiserFeeAmount || 500,
-      netDisbursedAmount: data.netDisbursedAmount || 0,
+      netDisbursedAmount: (() => {
+        const nd = Number(data.netDisbursedAmount) || 0;
+        if (nd > 0) return nd;
+        const s = Number(data.sanctionedLoanAmount) || Number(data.maxEligibleLoanAmount) || 0;
+        return Math.max(0, s - (Number(data.appraiserFeeAmount) || 500));
+      })(),
       maturityDate: data.maturityDate || new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 10),
 
       tamperProofPacketSerialNo: pktNo,
@@ -370,6 +442,23 @@ class GoldLoanService {
       adminUtrReference: utr,
       disbursedAt: new Date().toLocaleString('en-IN'),
       disbursedByAdminName: adminName,
+    });
+  }
+
+  // Update or Fix Sanction Amount
+  public updateLoanSanctionAmount(loanId: string, sanctionedAmount: number): GoldLoanRecord {
+    const loan = this.getLoanById(loanId);
+    if (!loan) throw new Error('Gold loan not found');
+
+    const cleanAmount = Math.max(0, Number(sanctionedAmount) || 0);
+    const monthlyInt = Math.round((cleanAmount * (Number(loan.interestRateAnnual || 12) / 100)) / 12);
+    const netDisb = Math.max(0, cleanAmount - (Number(loan.appraiserFeeAmount) || 500));
+
+    return this.updateLoan(loanId, {
+      sanctionedLoanAmount: cleanAmount,
+      monthlyInterestAmount: monthlyInt,
+      netDisbursedAmount: netDisb,
+      updatedAt: new Date().toLocaleString('en-IN'),
     });
   }
 

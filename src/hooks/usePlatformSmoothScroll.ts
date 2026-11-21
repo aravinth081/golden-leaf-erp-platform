@@ -10,9 +10,14 @@ export function usePlatformSmoothScroll() {
   const hoveredElementRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    // ── 1. Track element currently under cursor ──────────────────────────
+    // ── 1. Track element currently under cursor (Throttled with rAF for 0 CPU lag) ──
+    let rafId: number | null = null;
     const handleMouseMove = (e: MouseEvent) => {
-      hoveredElementRef.current = e.target as HTMLElement | null;
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        hoveredElementRef.current = e.target as HTMLElement | null;
+        rafId = null;
+      });
     };
     window.addEventListener('mousemove', handleMouseMove, { passive: true });
 

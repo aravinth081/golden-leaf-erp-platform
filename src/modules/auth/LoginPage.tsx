@@ -118,6 +118,31 @@ export const LoginPage: React.FC = () => {
   const [staffError, setStaffError] = useState('');
   const [isAuthenticatingStaff, setIsAuthenticatingStaff] = useState(false);
 
+  // Security: Brute-Force Rate Limiting & Account Protection
+  const [failedAttempts, setFailedAttempts] = useState<number>(() => {
+    try {
+      return parseInt(sessionStorage.getItem('glf_failed_login_attempts') || '0', 10) || 0;
+    } catch {
+      return 0;
+    }
+  });
+  const [lockoutSeconds, setLockoutSeconds] = useState<number>(0);
+
+  // Lockout countdown timer
+  useEffect(() => {
+    if (lockoutSeconds <= 0) return;
+    const timer = setInterval(() => {
+      setLockoutSeconds((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [lockoutSeconds]);
+
   // If already authenticated, redirect immediately to dashboard
   useEffect(() => {
     if (isAuthenticated && user) {
@@ -150,6 +175,7 @@ export const LoginPage: React.FC = () => {
 
     setTimeout(() => {
       setUser(authUser);
+      useUIStore.getState().setSelectedBranchId(isCompanyWide ? null : 'BR-01');
       addToast({
         type: 'success',
         title: `Welcome, ${profile.title}!`,
@@ -165,6 +191,11 @@ export const LoginPage: React.FC = () => {
     e.preventDefault();
     setStaffError('');
 
+    if (lockoutSeconds > 0) {
+      setStaffError(`Security Protection: Please wait ${lockoutSeconds}s before attempting to sign in again.`);
+      return;
+    }
+
     if (!staffUsername.trim()) {
       setStaffError('Please enter your username.');
       return;
@@ -177,7 +208,16 @@ export const LoginPage: React.FC = () => {
     setIsAuthenticatingStaff(true);
     try {
       const result = await authenticateStaffCredentials(staffUsername, staffPassword);
+      // Reset failed attempts counter on success
+      setFailedAttempts(0);
+      try {
+        sessionStorage.removeItem('glf_failed_login_attempts');
+      } catch {}
+
       setUser(result.authUser);
+      if (result.authUser.customClaims?.branchId) {
+        useUIStore.getState().setSelectedBranchId(result.authUser.customClaims.branchId);
+      }
       addToast({
         type: 'success',
         title: `Welcome, ${result.profile.fullName}!`,
@@ -188,7 +228,22 @@ export const LoginPage: React.FC = () => {
       });
       navigate(result.landingPath, { replace: true });
     } catch (err: any) {
-      setStaffError(err.message || 'Login failed. Please verify your credentials.');
+      const nextAttempts = failedAttempts + 1;
+      setFailedAttempts(nextAttempts);
+      try {
+        sessionStorage.setItem('glf_failed_login_attempts', String(nextAttempts));
+      } catch {}
+
+      // Clear password field for security
+      setStaffPassword('');
+
+      if (nextAttempts >= 5) {
+        setLockoutSeconds(60);
+        setStaffError('Security Alert: 5 consecutive failed sign-in attempts. Login temporarily locked for 60 seconds.');
+      } else {
+        const remaining = 5 - nextAttempts;
+        setStaffError(`${err.message || 'Login failed. Please verify your credentials.'} (${remaining} attempt${remaining === 1 ? '' : 's'} remaining)`);
+      }
     } finally {
       setIsAuthenticatingStaff(false);
     }
@@ -281,7 +336,7 @@ export const LoginPage: React.FC = () => {
 
         <button
           type="submit"
-          disabled={isAuthenticatingStaff}
+          disabled={isAuthenticatingStaff || lockoutSeconds > 0}
           className="w-full h-[52px] sm:h-auto py-3.5 sm:py-3.5 px-4 rounded-2xl sm:rounded-xl bg-gradient-to-r from-[#0B1F3A] via-[#122A4E] to-[#0B1F3A] hover:from-[#0F284B] hover:to-[#163563] active:scale-[0.99] text-white text-[15px] sm:text-sm font-bold tracking-[0.05em] uppercase transition-all shadow-[0_4px_16px_rgba(11,31,58,0.25)] hover:shadow-[0_6px_22px_rgba(212,175,55,0.35)] border border-[#D4AF37]/60 flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-50 mt-3 sm:mt-2"
         >
           {isAuthenticatingStaff ? (
@@ -289,7 +344,13 @@ export const LoginPage: React.FC = () => {
           ) : (
             <Key size={18} className="text-[#D4AF37]" />
           )}
-          <span>{isAuthenticatingStaff ? 'Signing In...' : 'Sign In'}</span>
+          <span>
+            {lockoutSeconds > 0
+              ? `Locked (${lockoutSeconds}s)`
+              : isAuthenticatingStaff
+              ? 'Signing In...'
+              : 'Sign In'}
+          </span>
         </button>
       </motion.form>
     </div>

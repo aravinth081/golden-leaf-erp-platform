@@ -2,6 +2,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { GOLDEN_LEAF_LOGO_DATA_URL } from './logoDataUrl';
 import type { EODSettlementRecord } from '../services/eodService';
+import type { GoldLoanRecord } from '../types/goldLoan.types';
 
 export interface PDFReportOptions {
   title: string;
@@ -1961,5 +1962,417 @@ export async function generateConsolidatedEODPDF(
   });
 
   doc.save(`Consolidated_EOD_Report_${dateStr}.pdf`);
+}
+
+// ──────────────────────────────────────────────────
+// 6. OFFICIAL GOLD LOAN PAWN TICKET & ORNAMENT PLEDGE RECEIPT
+// Statutory Sample 12 Part A Compliant • Standalone High-Precision A4 PDF
+// ──────────────────────────────────────────────────
+
+export function buildGoldLoanPawnTicketPDFDoc(loan: GoldLoanRecord, logoBase64?: string): jsPDF {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth(); // 210mm
+  const margin = 14;
+  const contentWidth = pageWidth - margin * 2; // 182mm
+
+  const safeLocation = loan.safeVaultLocation || {
+    safeNumber: 'SAFE-01',
+    rackCabinet: 'RACK-B',
+    traySlot: 'TRAY-04',
+  };
+  const dualSign = loan.dualCustodySignoff || {
+    isCreditManagerAppraised: false,
+    isBranchManagerVaultLocked: false,
+  };
+  const items = Array.isArray(loan.items) ? loan.items : [];
+
+  // 1. TOP CORPORATE HEADER (Deep Navy #0B1F3A + Gold #D4AF37 Accent)
+  doc.setFillColor(11, 31, 58);
+  doc.rect(0, 0, pageWidth, 32, 'F');
+
+  // Gold accent stripe
+  doc.setFillColor(212, 175, 55);
+  doc.rect(0, 32, pageWidth, 1.2, 'F');
+
+  // Official Logo Badge (X = 14, Y = 4, W = 24, H = 24)
+  const activeLogo = logoBase64 || GOLDEN_LEAF_LOGO_DATA_URL;
+  doc.setFillColor(255, 255, 255);
+  doc.roundedRect(margin, 4, 24, 24, 2, 2, 'F');
+  doc.setDrawColor(212, 175, 55);
+  doc.setLineWidth(0.4);
+  doc.roundedRect(margin, 4, 24, 24, 2, 2, 'S');
+
+  try {
+    doc.addImage(activeLogo, 'PNG', margin + 1.5, 5.5, 21, 21);
+  } catch {
+    doc.addImage(GOLDEN_LEAF_LOGO_DATA_URL, 'PNG', margin + 1.5, 5.5, 21, 21);
+  }
+
+  // Company Corporate Titles
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(15);
+  doc.setTextColor(255, 255, 255);
+  doc.text('GOLDENLEAF FINANCE LIMITED', 43, 11);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(212, 175, 55);
+  doc.text('OFFICIAL GOLD LOAN PAWN TICKET & ORNAMENT PLEDGE RECEIPT', 43, 17);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(203, 213, 225);
+  doc.text(`Branch: ${loan.branchName || 'Main Branch'} (${loan.branchId}) | Regd Office: Anna Nagar, Chennai`, 43, 22);
+  doc.text(`Statutory Form GL-PLG-12A • TN Pawn Brokers Act Compliant • Vault: ${safeLocation.safeNumber}`, 43, 26.5);
+
+  // Right Header Badge (Pawn Ticket No & Packet No)
+  const badgeW = 54;
+  const badgeX = pageWidth - margin - badgeW;
+  doc.setFillColor(254, 243, 199); // Amber-100
+  doc.roundedRect(badgeX, 4.5, badgeW, 23, 2, 2, 'F');
+  doc.setDrawColor(245, 158, 11); // Amber-500
+  doc.setLineWidth(0.3);
+  doc.roundedRect(badgeX, 4.5, badgeW, 23, 2, 2, 'S');
+
+  // Tag
+  doc.setFillColor(11, 31, 58);
+  doc.roundedRect(badgeX + 2, 6, badgeW - 4, 4.5, 1, 1, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6.5);
+  doc.setTextColor(255, 255, 255);
+  doc.text('PART A: PLEDGE RECEIPT', badgeX + badgeW / 2, 9.3, { align: 'center' });
+
+  // Loan ID
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  doc.setTextColor(11, 31, 58);
+  doc.text(loan.id, badgeX + badgeW / 2, 17, { align: 'center' });
+
+  // Pouch Serial
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(146, 64, 14); // Amber-800
+  doc.text(`Pouch: ${loan.tamperProofPacketSerialNo}`, badgeX + badgeW / 2, 23, { align: 'center' });
+
+  // 2. BORROWER & VAULT METADATA BOX (Y = 37)
+  let curY = 37;
+  const colW = (contentWidth - 4) / 2;
+
+  // Left Box: Pawn & Safe Storage Details
+  doc.setFillColor(248, 250, 252);
+  doc.roundedRect(margin, curY, colW, 27, 2, 2, 'F');
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(margin, curY, colW, 27, 2, 2, 'S');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(11, 31, 58);
+  doc.text('VAULT STORAGE & PAWN RECORD', margin + 3, curY + 4.5);
+
+  const drawField = (label: string, val: string, x: number, y: number, maxW: number = 55) => {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(label, x, y);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text(val, x + 31, y, { maxWidth: maxW });
+  };
+
+  drawField('Pawn Issue Date:', loan.createdAt ? loan.createdAt.slice(0, 10) : new Date().toLocaleDateString('en-IN'), margin + 3, curY + 9.5);
+  drawField('Tamper Pouch:', loan.tamperProofPacketSerialNo, margin + 3, curY + 14.5);
+  drawField('Vault Safe Slot:', `${safeLocation.safeNumber} / ${safeLocation.rackCabinet} / ${safeLocation.traySlot}`, margin + 3, curY + 19.5);
+  drawField('Vault Custody:', 'Double-Custody Locked & Sealed', margin + 3, curY + 24.5);
+
+  // Right Box: Borrower & Nominee Details
+  const rightX = margin + colW + 4;
+  doc.setFillColor(248, 250, 252);
+  doc.roundedRect(rightX, curY, colW, 27, 2, 2, 'F');
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(rightX, curY, colW, 27, 2, 2, 'S');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(11, 31, 58);
+  doc.text('BORROWER & NOMINEE INFORMATION', rightX + 3, curY + 4.5);
+
+  drawField('Borrower Name:', loan.customerName, rightX + 3, curY + 9.5, colW - 35);
+  drawField('Mobile Number:', `+91 ${loan.customerMobile.replace('+91', '').trim()}`, rightX + 3, curY + 14.5);
+  drawField('Nominee Details:', `${loan.nomineeName || 'Nominee'} (${loan.nomineeRelationship || 'Family'})`, rightX + 3, curY + 19.5, colW - 35);
+  drawField('Borrower Place:', (loan.customerAddress || 'Tamil Nadu').slice(0, 32), rightX + 3, curY + 24.5, colW - 35);
+
+  curY += 31;
+
+  // 3. PLEDGED ORNAMENTS ITEMIZATION TABLE
+  const tableHeaders = [
+    ['#', 'Pledged Ornament Description', 'Qty', 'Gross Wt', 'Stone/Less', 'Net Gold Wt', 'Purity', 'Appraised Value (Rs.)'],
+  ];
+
+  const tableRows = items.map((item, idx) => [
+    idx + 1,
+    item.ornamentType + (item.conditionRemarks ? ` (${item.conditionRemarks})` : ''),
+    item.quantity,
+    `${Number(item.grossWeightGrams || 0).toFixed(3)} g`,
+    `-${Number(item.stoneDeductionGrams || 0).toFixed(3)} g`,
+    `${Number(item.netWeightGrams || 0).toFixed(3)} g`,
+    item.caratPurity,
+    `Rs. ${Number(item.eligibleMarketValue || 0).toLocaleString('en-IN')}`,
+  ]);
+
+  // Total summary row
+  tableRows.push([
+    '',
+    'TOTAL ORNAMENTS IN SEALED PACKET',
+    `${loan.totalQuantity} Pcs`,
+    `${Number(loan.totalGrossWeightGrams || 0).toFixed(3)} g`,
+    `-${Number(loan.totalStoneDeductionGrams || 0).toFixed(3)} g`,
+    `${Number(loan.totalNetWeightGrams || 0).toFixed(3)} g`,
+    'LTV 75%',
+    `Rs. ${Number(loan.totalAppraisedEligibleValue || 0).toLocaleString('en-IN')}`,
+  ]);
+
+  autoTable(doc, {
+    startY: curY,
+    head: tableHeaders,
+    body: tableRows,
+    margin: { left: margin, right: margin },
+    theme: 'grid',
+    styles: {
+      fontSize: 7.5,
+      cellPadding: 2,
+      font: 'helvetica',
+      textColor: [15, 23, 42],
+      lineColor: [203, 213, 225],
+      lineWidth: 0.2,
+    },
+    headStyles: {
+      fillColor: [11, 31, 58],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 7.5,
+      halign: 'left',
+    },
+    columnStyles: {
+      0: { cellWidth: 8, halign: 'center' },
+      1: { cellWidth: 'auto', fontStyle: 'bold' },
+      2: { cellWidth: 14, halign: 'center', fontStyle: 'bold' },
+      3: { cellWidth: 22, halign: 'right' },
+      4: { cellWidth: 20, halign: 'right', textColor: [185, 28, 28] },
+      5: { cellWidth: 24, halign: 'right', fontStyle: 'bold', textColor: [6, 95, 70] },
+      6: { cellWidth: 16, halign: 'center', fontStyle: 'bold' },
+      7: { cellWidth: 28, halign: 'right', fontStyle: 'bold', textColor: [11, 31, 58] },
+    },
+    didParseCell: (data) => {
+      if (data.row.index === tableRows.length - 1) {
+        data.cell.styles.fillColor = [254, 243, 199];
+        data.cell.styles.fontStyle = 'bold';
+        data.cell.styles.textColor = [11, 31, 58];
+        if (data.column.index === 5) {
+          data.cell.styles.textColor = [6, 95, 70];
+          data.cell.styles.fontSize = 8;
+        }
+        if (data.column.index === 7) {
+          data.cell.styles.fontSize = 8;
+        }
+      }
+    },
+  });
+
+  curY = (doc as any).lastAutoTable.finalY + 4;
+
+  // 4. LOAN SANCTION & FINANCIAL TERMS (Strip box)
+  doc.setFillColor(239, 246, 255); // Blue-50
+  doc.roundedRect(margin, curY, contentWidth, 18, 2, 2, 'F');
+  doc.setDrawColor(191, 219, 254);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(margin, curY, contentWidth, 18, 2, 2, 'S');
+
+  const termColW = contentWidth / 4;
+
+  // Col 1: Sanctioned Principal
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text('SANCTIONED LOAN PRINCIPAL', margin + 3, curY + 4.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10.5);
+  doc.setTextColor(6, 95, 70); // Emerald-800
+  doc.text(`Rs. ${Number(loan.sanctionedLoanAmount || 0).toLocaleString('en-IN')}`, margin + 3, curY + 10.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(5.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text(toIndianCurrencyWords(loan.sanctionedLoanAmount || 0), margin + 3, curY + 15, { maxWidth: termColW - 4 });
+
+  // Col 2: Repayment Scheme
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text('REPAYMENT SCHEME', margin + termColW + 2, curY + 4.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(11, 31, 58);
+  doc.text(loan.repaymentScheme || 'Monthly Interest Servicing', margin + termColW + 2, curY + 10.5, { maxWidth: termColW - 4 });
+
+  // Col 3: Interest Rate & Monthly Dues
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text('INTEREST RATE & DUES', margin + termColW * 2 + 2, curY + 4.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(30, 58, 138); // Blue-900
+  doc.text(`${loan.interestRateAnnual || 12}% p.a.`, margin + termColW * 2 + 2, curY + 10);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.text(`(Rs. ${Number(loan.monthlyInterestAmount || 0).toLocaleString('en-IN')}/month)`, margin + termColW * 2 + 2, curY + 14.5);
+
+  // Col 4: Maturity Date
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text('MATURITY DUE DATE', margin + termColW * 3 + 2, curY + 4.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(185, 28, 28); // Red-700
+  doc.text(loan.maturityDate || '12 Months', margin + termColW * 3 + 2, curY + 10.5);
+
+  curY += 21;
+
+  // 5. STATUTORY TERMS & CONDITIONS OF PLEDGE
+  doc.setFillColor(248, 250, 252);
+  doc.roundedRect(margin, curY, contentWidth, 14, 1.5, 1.5, 'F');
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.25);
+  doc.roundedRect(margin, curY, contentWidth, 14, 1.5, 1.5, 'S');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text('STATUTORY TERMS OF PLEDGE (SECTION 176 INDIAN CONTRACT ACT 1872):', margin + 3, curY + 3.8);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6);
+  doc.setTextColor(100, 116, 139);
+  doc.text(
+    '1) Original Pawn Ticket must be surrendered in person during redemption. 2) Monthly interest must be serviced regularly. Overdue loans attract reminder notices and statutory auction intimation under Section 176 of the Indian Contract Act 1872. 3) Ornaments are secured in dual-custody fireproof vault in a sealed pouch and returned in identical condition upon full settlement.',
+    margin + 3,
+    curY + 7.5,
+    { maxWidth: contentWidth - 6 }
+  );
+
+  curY += 17;
+
+  // 6. THREE OFFICIAL SIGNATURE BLOCKS
+  const sigColW = (contentWidth - 8) / 3;
+  const sigH = 24;
+
+  // Sig 1: Borrower
+  doc.setFillColor(250, 250, 250);
+  doc.roundedRect(margin, curY, sigColW, sigH, 1.5, 1.5, 'F');
+  doc.setDrawColor(203, 213, 225);
+  doc.setLineWidth(0.25);
+  doc.roundedRect(margin, curY, sigColW, sigH, 1.5, 1.5, 'S');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text('BORROWER PLEDGE SIGNATURE', margin + sigColW / 2, curY + 4.5, { align: 'center' });
+
+  doc.setDrawColor(148, 163, 184);
+  doc.setLineDashPattern([1, 1], 0);
+  doc.line(margin + 5, curY + 14, margin + sigColW - 5, curY + 14);
+  doc.setLineDashPattern([], 0);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(11, 31, 58);
+  doc.text(loan.customerName, margin + sigColW / 2, curY + 19, { align: 'center' });
+
+  // Sig 2: Appraiser / Credit Manager
+  const sig2X = margin + sigColW + 4;
+  doc.setFillColor(250, 250, 250);
+  doc.roundedRect(sig2X, curY, sigColW, sigH, 1.5, 1.5, 'F');
+  doc.setDrawColor(203, 213, 225);
+  doc.setLineWidth(0.25);
+  doc.roundedRect(sig2X, curY, sigColW, sigH, 1.5, 1.5, 'S');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text('APPRAISER / CREDIT MANAGER', sig2X + sigColW / 2, curY + 4.5, { align: 'center' });
+
+  doc.setFillColor(219, 234, 254);
+  doc.roundedRect(sig2X + sigColW / 2 - 16, curY + 8, 32, 4.5, 1, 1, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6);
+  doc.setTextColor(30, 58, 138);
+  doc.text('PURITY & WT VERIFIED', sig2X + sigColW / 2, curY + 11.2, { align: 'center' });
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(15, 23, 42);
+  doc.text(dualSign.creditManagerName || 'Credit Manager', sig2X + sigColW / 2, curY + 19, { align: 'center' });
+
+  // Sig 3: Branch Manager / Custodian
+  const sig3X = margin + (sigColW + 4) * 2;
+  doc.setFillColor(255, 251, 235); // Amber-50
+  doc.roundedRect(sig3X, curY, sigColW, sigH, 1.5, 1.5, 'F');
+  doc.setDrawColor(11, 31, 58);
+  doc.setLineWidth(0.4);
+  doc.roundedRect(sig3X, curY, sigColW, sigH, 1.5, 1.5, 'S');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6.5);
+  doc.setTextColor(11, 31, 58);
+  doc.text('BRANCH MANAGER / CUSTODIAN', sig3X + sigColW / 2, curY + 4.5, { align: 'center' });
+
+  doc.setFillColor(209, 250, 229);
+  doc.roundedRect(sig3X + sigColW / 2 - 18, curY + 8, 36, 4.5, 1, 1, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6);
+  doc.setTextColor(6, 95, 70);
+  doc.text('SEALED & VAULT LOCKED', sig3X + sigColW / 2, curY + 11.2, { align: 'center' });
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(11, 31, 58);
+  doc.text(dualSign.branchManagerName || 'Branch Manager', sig3X + sigColW / 2, curY + 19, { align: 'center' });
+
+  curY += sigH + 3;
+
+  // 7. FOOTER
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.2);
+  doc.line(margin, curY, pageWidth - margin, curY);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.setTextColor(148, 163, 184);
+  doc.text('Golden Leaf Finance Pvt. Ltd. • Official Pawn Ticket & Pledge Receipt • Computer Generated Security Record', margin, curY + 4);
+  doc.text(`Generated: ${new Date().toLocaleString('en-IN')} | Page 1 of 1`, pageWidth - margin, curY + 4, { align: 'right' });
+
+  return doc;
+}
+
+export async function generateGoldLoanPawnTicketPDF(loan: GoldLoanRecord, fileName?: string) {
+  const logo = await getLogoBase64();
+  const doc = buildGoldLoanPawnTicketPDFDoc(loan, logo);
+  const name = fileName || `Pawn_Ticket_${loan.id}_${(loan.customerName || 'Borrower').replace(/\s+/g, '_')}.pdf`;
+  doc.save(name);
+}
+
+export async function generateGoldLoanPawnTicketPDFBlobUrl(loan: GoldLoanRecord): Promise<string> {
+  const logo = await getLogoBase64();
+  const doc = buildGoldLoanPawnTicketPDFDoc(loan, logo);
+  const blob = doc.output('blob');
+  return URL.createObjectURL(blob);
 }
 

@@ -25,11 +25,19 @@ import {
 import {
   getStoredBranches, type DetailedBranch
 } from '../../services/branchService';
-import { useUIStore } from '../../store';
+import { useAuthStore, useUIStore } from '../../store';
+import { normalizeBranchId, matchBranchId } from '../../services/creditManagerService';
 
 export const BranchDashboardPage: React.FC = () => {
   const { branchId } = useParams<{ branchId: string }>();
   const navigate = useNavigate();
+  const user = useAuthStore((s) => s.user);
+  const rawRole = (user?.customClaims?.role || (user as any)?.role || 'admin').toString().toLowerCase();
+  const isAdmin = rawRole === 'admin' || rawRole === 'super_admin';
+  const userBranchClaim = user?.customClaims?.branchId || (user as any)?.branchId;
+  const userBranchNameClaim = user?.customClaims?.branchName || (user as any)?.branchName;
+  const isBranchScoped = !isAdmin;
+
   const [branches, setBranches] = useState<DetailedBranch[]>([]);
   const [selectedBranch, setSelectedBranch] = useState<DetailedBranch | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -40,25 +48,57 @@ export const BranchDashboardPage: React.FC = () => {
   useEffect(() => {
     setIsLoading(true);
     const list = getStoredBranches();
-    setBranches(list);
 
-    // Prioritize URL param, then stored selectedBranchId, then first branch
-    const targetId = branchId || selectedBranchId;
     let found: DetailedBranch | undefined;
 
-    if (targetId) {
-      found = list.find((b) => b.id === targetId || b.code === targetId);
+    // 1. If branch scoped, strictly prioritize userBranchClaim
+    if (isBranchScoped) {
+      const claim = userBranchClaim || userBranchNameClaim;
+      if (claim) {
+        found = list.find((b) => matchBranchId(claim, b.id) || matchBranchId(claim, b.name) || matchBranchId(claim, b.code));
+      }
+      if (!found && userBranchNameClaim) {
+        const claimName = userBranchNameClaim.toLowerCase();
+        found = list.find((b) => b.name.toLowerCase().includes(claimName) || claimName.includes(b.name.toLowerCase()));
+      }
+      if (!found && list.length > 0) {
+        found = list.find((b) => b.name.toLowerCase().includes('gobi') || (b.code && b.code.toLowerCase().includes('6805'))) || list[0];
+      }
+    } else {
+      const targetId = branchId || selectedBranchId;
+      if (targetId) {
+        found = list.find((b) => b.id === targetId || b.code === targetId || matchBranchId(targetId, b.id));
+      }
+      if (!found && list.length > 0) {
+        found = list[0];
+      }
     }
+
+    // 2. Prioritize URL param, then stored selectedBranchId
+    if (!found) {
+      const targetId = branchId || (!isBranchScoped ? selectedBranchId : undefined);
+      if (targetId) {
+        found = list.find((b) => b.id === targetId || b.code === targetId);
+      }
+    }
+
     if (!found && list.length > 0) {
       found = list[0];
     }
 
     if (found) {
       setSelectedBranch(found);
-      setSelectedBranchId(found.id);
+      if (selectedBranchId !== found.id) {
+        setSelectedBranchId(found.id);
+      }
+      if (isBranchScoped) {
+        setBranches([found]);
+      } else {
+        setBranches(list);
+      }
     }
     setIsLoading(false);
-  }, [branchId]);
+  }, [branchId, user, userBranchClaim, isBranchScoped]);
 
   const handleBranchSelect = (id: string) => {
     setIsLoading(true);
@@ -133,23 +173,25 @@ export const BranchDashboardPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Branch Switcher Dropdown */}
-          <div className="flex items-center gap-2.5">
-            <span className="text-xs font-semibold text-slate-300 uppercase hidden sm:inline font-sans">
-              Switch Branch:
-            </span>
-            <select
-              value={b.id}
-              onChange={(e) => handleBranchSelect(e.target.value)}
-              className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-[#142B4E] border border-[#243E66] text-xs font-bold text-white focus:outline-none focus:border-[#D4AF37] cursor-pointer shadow-xs"
-            >
-              {branches.map((br) => (
-                <option key={br.id} value={br.id}>
-                  {br.name} {br.status === 'Disabled' ? '(Disabled)' : ''}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Branch Switcher: Hidden for Branch Manager, Selector for Admin */}
+          {!isBranchScoped && branches.length > 1 && (
+            <div className="flex items-center gap-2.5">
+              <span className="text-xs font-semibold text-slate-300 uppercase hidden sm:inline font-sans">
+                Switch Branch:
+              </span>
+              <select
+                value={b.id}
+                onChange={(e) => handleBranchSelect(e.target.value)}
+                className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-[#142B4E] border border-[#243E66] text-xs font-bold text-white focus:outline-none focus:border-[#D4AF37] cursor-pointer shadow-xs"
+              >
+                {branches.map((br) => (
+                  <option key={br.id} value={br.id}>
+                    {br.name} {br.status === 'Disabled' ? '(Disabled)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         {/* Branch Metadata Bar */}
