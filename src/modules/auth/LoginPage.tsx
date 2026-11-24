@@ -261,9 +261,16 @@ export const LoginPage: React.FC = () => {
         const secret = new OTPAuth.Secret({ size: 20 });
         const base32Secret = secret.base32;
 
+        const roleName = result.authUser.customClaims?.role === 'admin' ? 'Super Admin' : 'Branch Manager';
+        const rawPhone = (result.profile.mobile || '').replace(/\D/g, '').slice(-10);
+        const formattedPhone = rawPhone ? `+91 ${rawPhone}` : '';
+        const authLabel = formattedPhone
+          ? `${result.profile.fullName} (${formattedPhone} • ${roleName})`
+          : `${result.profile.fullName} (${roleName})`;
+
         const totp = new OTPAuth.TOTP({
           issuer: 'Golden Leaf Finance',
-          label: result.profile.email || result.profile.username || result.authUser.displayName || 'Staff',
+          label: authLabel,
           algorithm: 'SHA1',
           digits: 6,
           period: 30,
@@ -327,9 +334,16 @@ export const LoginPage: React.FC = () => {
 
     setIsVerifyingOtp(true);
     try {
+      const roleName = pendingAuthResult.authUser.customClaims?.role === 'admin' ? 'Super Admin' : 'Branch Manager';
+      const rawPhone = (pendingAuthResult.profile.mobile || '').replace(/\D/g, '').slice(-10);
+      const formattedPhone = rawPhone ? `+91 ${rawPhone}` : '';
+      const authLabel = formattedPhone
+        ? `${pendingAuthResult.profile.fullName} (${formattedPhone} • ${roleName})`
+        : `${pendingAuthResult.profile.fullName} (${roleName})`;
+
       const totp = new OTPAuth.TOTP({
         issuer: 'Golden Leaf Finance',
-        label: pendingAuthResult.profile.email || pendingAuthResult.profile.username || 'Staff',
+        label: authLabel,
         algorithm: 'SHA1',
         digits: 6,
         period: 30,
@@ -601,10 +615,26 @@ export const LoginPage: React.FC = () => {
             <h2 className="text-[22px] font-black text-[#0B1F3A] tracking-[0.04em] uppercase font-serif text-center">
               Setup Google Authenticator
             </h2>
-            <p className="text-xs text-slate-600 text-center mt-1 mb-3">
-              Scan QR code in Google Authenticator app for{' '}
-              <strong className="text-[#0B1F3A]">{pendingAuthResult?.profile.fullName}</strong>
-            </p>
+
+            {/* Account & Mobile Identification Badge */}
+            <div className="w-full bg-gradient-to-br from-amber-50 to-orange-50/50 border border-[#D4AF37]/40 rounded-xl p-2.5 my-2.5 text-center shadow-xs">
+              <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase bg-[#0B1F3A] text-[#D4AF37] mb-1">
+                {pendingAuthResult?.authUser.customClaims?.role === 'admin' ? 'Super Admin' : 'Branch Manager'}
+              </span>
+              <p className="text-[14px] font-black text-[#0B1F3A] leading-tight">
+                {pendingAuthResult?.profile.fullName}
+              </p>
+              <div className="flex items-center justify-center gap-1.5 mt-1 text-xs font-semibold text-slate-700">
+                <Smartphone size={13} className="text-[#0B1F3A]" />
+                <span>Registered Phone:</span>
+                <span className="font-mono font-bold text-[#0B1F3A]">
+                  {pendingAuthResult?.profile.mobile ? `+91 ${pendingAuthResult.profile.mobile.replace(/\D/g, '').slice(-10)}` : 'Not Set'}
+                </span>
+              </div>
+              <p className="text-[10px] text-amber-800 font-medium mt-0.5">
+                Scan with Google Authenticator on this registered phone.
+              </p>
+            </div>
 
             {/* QR Code Container */}
             <div className="p-2.5 bg-white rounded-2xl border-2 border-[#D4AF37]/40 shadow-sm flex flex-col items-center mb-3">
@@ -706,16 +736,32 @@ export const LoginPage: React.FC = () => {
             className="w-full flex flex-col items-center"
           >
             {/* Header */}
-            <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-[#D4AF37]/40 flex items-center justify-center text-[#D4AF37] mb-3 shadow-sm">
+            <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-[#D4AF37]/40 flex items-center justify-center text-[#D4AF37] mb-2 shadow-sm">
               <Smartphone size={30} />
             </div>
             <h2 className="text-[23px] font-black text-[#0B1F3A] tracking-[0.04em] uppercase font-serif text-center">
               Security Verification
             </h2>
-            <p className="text-xs text-slate-600 text-center mt-1.5 mb-4 max-w-[320px]">
-              Open <strong className="text-[#0B1F3A]">Google Authenticator</strong> on your phone and enter the 6-digit code for{' '}
-              <strong className="text-[#0B1F3A]">{pendingAuthResult?.profile.fullName}</strong>.
-            </p>
+
+            {/* Account & Mobile Identification Badge */}
+            <div className="w-full bg-gradient-to-br from-slate-50 to-blue-50/40 border border-slate-200 rounded-xl p-2.5 my-2.5 text-center shadow-xs">
+              <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase bg-[#0B1F3A] text-[#D4AF37] mb-1">
+                {pendingAuthResult?.authUser.customClaims?.role === 'admin' ? 'Super Admin' : 'Branch Manager'}
+              </span>
+              <p className="text-[14px] font-black text-[#0B1F3A] leading-tight">
+                {pendingAuthResult?.profile.fullName}
+              </p>
+              <div className="flex items-center justify-center gap-1.5 mt-1 text-xs font-semibold text-slate-700">
+                <Smartphone size={13} className="text-[#0B1F3A]" />
+                <span>Registered Mobile:</span>
+                <span className="font-mono font-bold text-[#0B1F3A]">
+                  {pendingAuthResult?.profile.mobile ? `+91 ${pendingAuthResult.profile.mobile.replace(/\D/g, '').slice(-10)}` : 'Not Set'}
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-500 font-medium mt-0.5">
+                Enter code from Google Authenticator on your registered phone.
+              </p>
+            </div>
 
             {/* Verification Form */}
             <form onSubmit={handleVerifyLoginOtp} className="w-full space-y-4">
