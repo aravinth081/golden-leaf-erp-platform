@@ -111,13 +111,13 @@ export const RolesPermissionsPage: React.FC = () => {
     try {
       const storedProfiles = getStoredStaffProfiles();
       if (storedProfiles && storedProfiles.length > 0) {
-        return storedProfiles.map((p) => ({
+        const mapped = storedProfiles.map((p) => ({
           id: p.id,
           name: p.fullName,
           username: p.username,
           role: staffRoleToUserRole(p.role) as UserRoleType,
           branchName: p.branchName || 'Main Branch (Chennai)',
-          status: p.status === 'inactive' ? 'on_hold' : 'active',
+          status: (p.status === 'inactive' ? 'on_hold' : 'active') as 'active' | 'on_hold',
           isOnline: p.status === 'active',
           lastSeen: 'Registered record',
           createdAt: new Date(p.createdAt).toLocaleDateString('en-IN', {
@@ -128,6 +128,18 @@ export const RolesPermissionsPage: React.FC = () => {
           phone: `+91 ${p.mobile}`,
           email: p.email,
         }));
+
+        // Deduplicate accounts by clean username
+        const unique: UserAccount[] = [];
+        const seen = new Set<string>();
+        mapped.forEach((acc) => {
+          const key = (acc.username || '').trim().toLowerCase();
+          if (!seen.has(key)) {
+            seen.add(key);
+            unique.push(acc);
+          }
+        });
+        return unique;
       }
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) return JSON.parse(saved);
@@ -167,7 +179,7 @@ export const RolesPermissionsPage: React.FC = () => {
             username: p.username,
             role: staffRoleToUserRole(p.role) as UserRoleType,
             branchName: p.branchName || 'Main Branch (Chennai)',
-            status: p.status === 'inactive' ? 'on_hold' : 'active',
+            status: (p.status === 'inactive' ? 'on_hold' : 'active') as 'active' | 'on_hold',
             isOnline: p.status === 'active',
             lastSeen: 'Registered record',
             createdAt: new Date(p.createdAt).toLocaleDateString('en-IN', {
@@ -178,7 +190,19 @@ export const RolesPermissionsPage: React.FC = () => {
             phone: `+91 ${p.mobile}`,
             email: p.email,
           }));
-          setAccounts(mappedAccounts);
+
+          // Deduplicate by clean username to prevent duplicate cards
+          const uniqueAccounts: UserAccount[] = [];
+          const seen = new Set<string>();
+          mappedAccounts.forEach((acc) => {
+            const key = (acc.username || '').trim().toLowerCase();
+            if (!seen.has(key)) {
+              seen.add(key);
+              uniqueAccounts.push(acc);
+            }
+          });
+
+          setAccounts(uniqueAccounts);
         }
       });
     };
@@ -425,11 +449,12 @@ export const RolesPermissionsPage: React.FC = () => {
         status: editingAccount.status,
       }, currentUser || { uid: 'admin', email: 'admin@goldenleaf.finance', displayName: 'Administrator', photoURL: null, phoneNumber: null, emailVerified: true, customClaims: { role: 'admin', companyId: 'default' } });
 
-      setAccounts((prev) =>
-        prev.map((a) =>
-          a.id === editingAccount.id
+      setAccounts((prev) => {
+        const updated = prev.map((a) =>
+          a.id === editingAccount.id || a.username.toLowerCase() === cleanUsername
             ? {
                 ...a,
+                id: editingAccount.id,
                 name: editForm.name.trim(),
                 username: cleanUsername,
                 role: editForm.role,
@@ -438,8 +463,15 @@ export const RolesPermissionsPage: React.FC = () => {
                 email: editForm.email.trim() || a.email,
               }
             : a
-        )
-      );
+        );
+        const seen = new Set<string>();
+        return updated.filter((item) => {
+          const key = (item.username || '').trim().toLowerCase();
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+      });
       window.dispatchEvent(new CustomEvent('glf-staff-updated'));
 
       addToast({
@@ -541,11 +573,13 @@ export const RolesPermissionsPage: React.FC = () => {
       setAccountToDelete(null);
       return;
     }
+    const removedId = accountToDelete.id;
     const removedName = accountToDelete.name;
     const removedUsername = accountToDelete.username;
     try {
       deleteStaffProfile(accountToDelete.id, currentUser || { uid: 'admin', email: 'admin@goldenleaf.finance', displayName: 'Administrator', photoURL: null, phoneNumber: null, emailVerified: true, customClaims: { role: 'admin', companyId: 'default' } });
-      setAccounts((prev) => prev.filter((a) => a.id !== accountToDelete.id));
+      setAccounts((prev) => prev.filter((a) => a.id !== removedId && a.username.toLowerCase() !== removedUsername.toLowerCase()));
+      window.dispatchEvent(new CustomEvent('glf-staff-updated'));
       addToast({
         type: 'info',
         title: 'Account Removed',

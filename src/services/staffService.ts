@@ -813,36 +813,40 @@ export function deleteStaffProfile(id: string, actor: AuthUser): void {
   assertAdminRole(actor);
 
   const profiles = getStoredStaffProfiles();
-  const targetIndex = profiles.findIndex((p) => p.id === id && p.deletedAt === null);
-  if (targetIndex === -1) {
-    throw new Error('404 Not Found: Staff profile not found.');
+  const targetIndex = profiles.findIndex((p) => (p.id === id || p.username.toLowerCase() === id.toLowerCase()) && p.deletedAt === null);
+  const existing = targetIndex >= 0 ? profiles[targetIndex] : null;
+
+  const now = new Date().toISOString();
+  if (existing) {
+    existing.deletedAt = now;
+    existing.updatedAt = now;
+    profiles[targetIndex] = existing;
   }
 
-  const existing = profiles[targetIndex];
-  existing.deletedAt = new Date().toISOString();
-  existing.updatedAt = new Date().toISOString();
-
-  profiles[targetIndex] = existing;
-  writeStorage(STORAGE_KEY_PROFILES, profiles);
+  // Remove from active profiles in storage
+  const activeOnly = profiles.filter((p) => p.id !== id && p.username.toLowerCase() !== id.toLowerCase());
+  writeStorage(STORAGE_KEY_PROFILES, activeOnly);
 
   // Sync soft-delete to Supabase
   if (isSupabaseConfigured() && supabase) {
     try {
       supabase.from('staff_users').update({
-        deleted_at: existing.deletedAt,
-        updated_at: existing.updatedAt,
-      }).eq('id', existing.id).then();
+        deleted_at: now,
+        updated_at: now,
+      }).or(`id.eq.${id},username.eq.${id}`).then();
 
       supabase.from('documents').update({
         is_deleted: true,
-        updated_at: existing.updatedAt,
-      }).eq('collection', 'staff_users').eq('id', existing.id).then();
+        updated_at: now,
+      }).eq('collection', 'staff_users').eq('id', id).then();
     } catch (err) {
       console.warn('[Supabase] Staff delete sync error:', err);
     }
   }
 
-  appendStaffAuditLog(actor, 'DELETE', existing.id, existing.username, { fullName: existing.fullName }, { deletedAt: existing.deletedAt });
+  if (existing) {
+    appendStaffAuditLog(actor, 'DELETE', existing.id, existing.username, { fullName: existing.fullName }, { deletedAt: now });
+  }
 }
 
 // ─── Authentication Support for Staff Credential Login ───
@@ -949,7 +953,28 @@ export async function fetchStaffUsersFromSupabase(): Promise<StaffProfile[]> {
     }
   });
 
-  const finalProfiles = Array.from(mergedMap.values());
+  // Deduplicate by clean username, keeping the latest / updated profile
+  const deduplicatedByUsername = new Map<string, StaffProfile>();
+  mergedMap.forEach((profile) => {
+    const key = (profile.username || '').trim().toLowerCase();
+    if (!key) {
+      deduplicatedByUsername.set(profile.id, profile);
+      return;
+    }
+    const existing = deduplicatedByUsername.get(key);
+    if (!existing) {
+      deduplicatedByUsername.set(key, profile);
+    } else {
+      // Prioritize the more recently updated record
+      const existingTime = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
+      const profileTime = new Date(profile.updatedAt || profile.createdAt || 0).getTime();
+      if (profileTime >= existingTime) {
+        deduplicatedByUsername.set(key, profile);
+      }
+    }
+  });
+
+  const finalProfiles = Array.from(deduplicatedByUsername.values());
   writeStorage(STORAGE_KEY_PROFILES, finalProfiles);
   return finalProfiles;
 }
@@ -985,18 +1010,28 @@ export async function createOrUpdateStaffAccount(
 
   const existingProfiles = getStoredStaffProfiles();
 
+  // Find target by ID or existing cleanUsername
+  let targetIndex = -1;
   if (input.id) {
-    // ── UPDATE EXISTING ACCOUNT ──
-    const targetIndex = existingProfiles.findIndex((p) => p.id === input.id);
-    const existing = targetIndex >= 0 ? existingProfiles[targetIndex] : null;
+    targetIndex = existingProfiles.findIndex((p) => p.id === input.id && p.deletedAt === null);
+  }
+  if (targetIndex === -1 && cleanUsername) {
+    targetIndex = existingProfiles.findIndex((p) => p.username.toLowerCase() === cleanUsername && p.deletedAt === null);
+  }
 
+  const existing = targetIndex >= 0 ? existingProfiles[targetIndex] : null;
+  const isUpdate = !!(input.id || existing);
+
+  if (isUpdate) {
+    // ── UPDATE EXISTING ACCOUNT ──
+    const targetId = input.id || existing?.id || `STF-${Date.now().toString().slice(-6)}-${Math.random().toString(36).substring(2, 6)}`;
     let newPasswordHash = existing?.passwordHash || (await hashPassword('golden@123'));
     if (input.password && input.password.trim()) {
       newPasswordHash = await hashPassword(input.password.trim());
     }
 
     const updatedProfile: StaffProfile = {
-      id: input.id,
+      id: targetId,
       fullName: input.name.trim(),
       employeeId: existing?.employeeId || `EMP-${Date.now().toString().slice(-4)}`,
       email: cleanEmail,
@@ -1014,12 +1049,12 @@ export async function createOrUpdateStaffAccount(
       deletedAt: null,
     };
 
-    if (targetIndex >= 0) {
-      existingProfiles[targetIndex] = updatedProfile;
-    } else {
-      existingProfiles.unshift(updatedProfile);
-    }
-    writeStorage(STORAGE_KEY_PROFILES, existingProfiles);
+    // Remove any older duplicate entry with the same ID or same username
+    const remainingProfiles = existingProfiles.filter(
+      (p) => p.id !== targetId && p.username.toLowerCase() !== cleanUsername
+    );
+    remainingProfiles.unshift(updatedProfile);
+    writeStorage(STORAGE_KEY_PROFILES, remainingProfiles);
 
     if (isSupabaseConfigured() && supabase) {
       try {
@@ -1041,6 +1076,16 @@ export async function createOrUpdateStaffAccount(
           deleted_at: null,
         });
 
+        // Soft-delete any older duplicate in Supabase staff_users with the same username but different ID
+        await supabase
+          .from('staff_users')
+          .update({
+            deleted_at: now,
+            updated_at: now,
+          })
+          .eq('username', updatedProfile.username)
+          .neq('id', updatedProfile.id);
+
         await supabase.from('documents').upsert({
           collection: 'staff_users',
           id: updatedProfile.id,
@@ -1056,6 +1101,11 @@ export async function createOrUpdateStaffAccount(
     return updatedProfile;
   } else {
     // ── CREATE NEW ACCOUNT ──
+    // Double check to prevent duplicate username creation
+    const duplicateIdx = existingProfiles.findIndex((p) => p.username.toLowerCase() === cleanUsername && p.deletedAt === null);
+    if (duplicateIdx >= 0) {
+      return createOrUpdateStaffAccount({ ...input, id: existingProfiles[duplicateIdx].id }, actor);
+    }
     const cleanPassword = input.password && input.password.trim() ? input.password.trim() : 'golden@123';
     const passwordHash = await hashPassword(cleanPassword);
     const newId = `STF-${Date.now().toString().slice(-6)}-${Math.random().toString(36).substring(2, 6)}`;
