@@ -8,7 +8,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   X, CheckCircle2, AlertTriangle, Printer, RotateCcw,
   CheckSquare, ArrowRight, ShieldCheck, DollarSign,
-  FileText, Store, User, Building, MapPin, Receipt, Award
+  FileText, Store, User, Building, MapPin, Receipt, Award,
+  RefreshCw, Clock
 } from 'lucide-react';
 import {
   type BusinessLoanRecord,
@@ -37,12 +38,18 @@ export const BusinessLoanDetailModal: React.FC<BusinessLoanDetailModalProps> = (
   onOpenNOC,
 }) => {
   const currentUser = useAuthStore((s) => s.user);
-  const userRole = currentUser?.customClaims?.role || 'admin';
+  const rawRole = (currentUser?.customClaims?.role || '').toLowerCase();
+  const isCRO = rawRole === 'collection_agent' || rawRole === 'recovery_officer';
+  const isCM = rawRole === 'credit_manager' || rawRole === 'admin';
+  const isBM = rawRole === 'branch_manager' || rawRole === 'admin';
+  const isAdmin = rawRole === 'admin';
   const { addToast } = useUIStore();
 
   // Action states
   const [returnReason, setReturnReason] = useState('');
   const [isReturnInputOpen, setIsReturnInputOpen] = useState(false);
+  const [resubmitNotes, setResubmitNotes] = useState('');
+  const [isResubmitOpen, setIsResubmitOpen] = useState(false);
   const [utrInput, setUtrInput] = useState('');
   const [disbursementMode, setDisbursementMode] = useState<'NEFT' | 'IMPS' | 'RTGS' | 'CHEQUE'>('NEFT');
   const [isDisburseModalOpen, setIsDisburseModalOpen] = useState(false);
@@ -114,6 +121,22 @@ export const BusinessLoanDetailModal: React.FC<BusinessLoanDetailModalProps> = (
     addToast({ type: 'info', title: 'Application Returned to CRO', message: 'CRO notified with correction notes.' });
     onLoanUpdated(updated);
     setIsReturnInputOpen(false);
+  };
+
+  // CRO Resubmit Application with Corrections
+  const handleResubmitCro = () => {
+    if (!resubmitNotes.trim()) {
+      addToast({ type: 'warning', title: 'Correction Notes Required', message: 'Please specify the corrections made.' });
+      return;
+    }
+    const updated = businessLoanService.resubmitByCro(
+      loan.id,
+      resubmitNotes,
+      currentUser?.displayName || 'CRO'
+    );
+    addToast({ type: 'success', title: 'Application Resubmitted', message: 'Application sent back to Credit Manager for verification.' });
+    onLoanUpdated(updated);
+    setIsResubmitOpen(false);
   };
 
   // Credit Manager Approve Docs
@@ -441,8 +464,8 @@ export const BusinessLoanDetailModal: React.FC<BusinessLoanDetailModalProps> = (
 
             {/* Right: Operational Actions */}
             <div className="flex flex-wrap items-center gap-2">
-              {/* Credit Manager Verification */}
-              {loan.status === 'SUBMITTED_BY_CRO' && (
+              {/* Credit Manager Verification (Restricted to Credit Manager and Admin) */}
+              {loan.status === 'SUBMITTED_BY_CRO' && isCM && (
                 <>
                   <button
                     type="button"
@@ -463,8 +486,28 @@ export const BusinessLoanDetailModal: React.FC<BusinessLoanDetailModalProps> = (
                 </>
               )}
 
+              {/* Status info for CRO when submitted */}
+              {loan.status === 'SUBMITTED_BY_CRO' && isCRO && (
+                <div className="px-3.5 py-2 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 font-bold text-xs flex items-center gap-1.5">
+                  <Clock size={14} className="text-blue-600" />
+                  <span>Submitted • Under Credit Manager Review</span>
+                </div>
+              )}
+
+              {/* CRO Resubmit when Returned with Mistakes */}
+              {loan.status === 'RETURNED_TO_CRO' && (isCRO || isAdmin) && (
+                <button
+                  type="button"
+                  onClick={() => setIsResubmitOpen(true)}
+                  className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-xs animate-pulse"
+                >
+                  <RefreshCw size={14} />
+                  <span>Fix Mistakes & Resubmit to CM</span>
+                </button>
+              )}
+
               {/* Branch Manager Sanction */}
-              {loan.status === 'SUBMITTED_BY_CRO' && loan.cmReviewedBy && (
+              {loan.status === 'SUBMITTED_BY_CRO' && loan.cmReviewedBy && isBM && (
                 <button
                   type="button"
                   onClick={handleSanctionLoan}
@@ -476,7 +519,7 @@ export const BusinessLoanDetailModal: React.FC<BusinessLoanDetailModalProps> = (
               )}
 
               {/* Admin Disbursement */}
-              {loan.status === 'BRANCH_VERIFIED' && (
+              {loan.status === 'BRANCH_VERIFIED' && isAdmin && (
                 <button
                   type="button"
                   onClick={() => setIsDisburseModalOpen(true)}
@@ -488,7 +531,7 @@ export const BusinessLoanDetailModal: React.FC<BusinessLoanDetailModalProps> = (
               )}
 
               {/* Record Collection (When Active) */}
-              {loan.status === 'ACTIVE_COLLECTING' && (
+              {loan.status === 'ACTIVE_COLLECTING' && (isCRO || isBM || isAdmin) && (
                 <button
                   type="button"
                   onClick={() => setIsCollectionOpen(true)}
@@ -536,6 +579,38 @@ export const BusinessLoanDetailModal: React.FC<BusinessLoanDetailModalProps> = (
                   className="px-4 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs"
                 >
                   Confirm Return to CRO
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ─── RESUBMIT BY CRO SUB-DRAWER ─── */}
+          {isResubmitOpen && (
+            <div className="p-4 bg-amber-50 border-t border-amber-300 text-xs space-y-2">
+              <span className="font-bold text-amber-900 block">
+                Specify Corrections Made & Resubmit to Credit Manager:
+              </span>
+              <textarea
+                rows={2}
+                value={resubmitNotes}
+                onChange={(e) => setResubmitNotes(e.target.value)}
+                placeholder="e.g. Corrected shop address, verified Aadhaar UID, re-uploaded clear signboard photo..."
+                className="w-full p-2.5 bg-white border border-amber-300 rounded-xl text-xs font-medium outline-none"
+              />
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsResubmitOpen(false)}
+                  className="px-3 py-1.5 rounded-lg bg-gray-200 text-gray-700 font-bold text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResubmitCro}
+                  className="px-4 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs"
+                >
+                  Confirm Resubmit to Credit Manager
                 </button>
               </div>
             </div>

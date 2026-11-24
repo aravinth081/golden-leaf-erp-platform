@@ -15,7 +15,7 @@ import {
   Search, RotateCcw, AlertTriangle, ArrowRight, ShieldAlert,
   Building, Phone, MapPin, DollarSign, Calendar, ZoomIn, ZoomOut,
   RotateCw, ExternalLink, Maximize2, Minimize2, IndianRupee,
-  Image as ImageIcon
+  Image as ImageIcon, Edit2, Save
 } from 'lucide-react';
 import {
   creditManagerService,
@@ -23,6 +23,7 @@ import {
   type VerificationDocument,
   createPdfCompliantDocuments
 } from '../../services/creditManagerService';
+import { businessLoanService } from '../../services/businessLoanService';
 import { useUIStore, useAuthStore } from '../../store';
 import { Avatar } from '../../components/ui/Avatar';
 import {
@@ -107,6 +108,55 @@ export const CreditVerificationPage: React.FC = () => {
   const [remarksText, setRemarksText] = useState('');
   const [recommendAmount, setRecommendAmount] = useState<number>(0);
   const [recommendTenor, setRecommendTenor] = useState<number>(25);
+
+  // Edit / Correct Applicant Profile Modal
+  const [editModalApplicant, setEditModalApplicant] = useState<CreditApplicant | null>(null);
+  const [editFormData, setEditFormData] = useState<Partial<CreditApplicant>>({});
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  const handleOpenEditModal = (applicant: CreditApplicant) => {
+    setEditModalApplicant(applicant);
+    setEditFormData({
+      customerName: applicant.customerName || '',
+      fatherOrSpouseName: applicant.fatherOrSpouseName || '',
+      phone: applicant.phone || '',
+      alternatePhone: applicant.alternatePhone || '',
+      address: applicant.address || '',
+      city: applicant.city || '',
+      centerName: applicant.centerName || '',
+      groupName: applicant.groupName || '',
+      occupation: applicant.occupation || '',
+      monthlyIncome: applicant.monthlyIncome || 0,
+      monthlyExpenses: applicant.monthlyExpenses || 0,
+      loanAmount: applicant.loanAmount || 0,
+      tenorWeeks: applicant.tenorWeeks || 0,
+      proposedEmi: applicant.proposedEmi || 0,
+      loanPurpose: applicant.loanPurpose || '',
+    });
+  };
+
+  const handleSaveEditModal = () => {
+    if (!editModalApplicant) return;
+    setIsSavingEdit(true);
+    try {
+      creditManagerService.updateApplicant(editModalApplicant.id, editFormData);
+      addToast({
+        type: 'success',
+        title: 'Applicant Details Updated ✓',
+        message: `Successfully saved corrections for ${editFormData.customerName || editModalApplicant.customerName}.`,
+      });
+      setEditModalApplicant(null);
+      refreshList();
+    } catch (err: any) {
+      addToast({
+        type: 'error',
+        title: 'Save Failed',
+        message: err.message || 'Could not update applicant details.',
+      });
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
 
   const userRole = currentUser?.customClaims?.role ?? (currentUser as any)?.role;
   const isCreditManager = !userRole || userRole === 'credit_manager' || userRole === 'admin' || userRole === 'branch_manager';
@@ -267,12 +317,36 @@ export const CreditVerificationPage: React.FC = () => {
       return;
     }
 
+    const managerName = currentUser?.displayName || 'Credit Manager';
+    const finalRemarks = remarksText || (status === 'Verified' ? 'Customer profile verified by Credit Manager.' : 'Profile verification rejected.');
+
     creditManagerService.updateCustomerVerification(
       actionModal.applicant.id,
       status,
-      remarksText || (status === 'Verified' ? 'Customer profile verified by Credit Manager.' : 'Profile verification rejected.'),
-      currentUser?.displayName || 'Credit Manager'
+      finalRemarks,
+      managerName
     );
+
+    // Sync to Business Loan Service if this is a Business Loan
+    if (actionModal.applicant.customerId && actionModal.applicant.customerId.startsWith('GLF-BL-')) {
+      try {
+        if (status === 'Verified') {
+          businessLoanService.verifyByCreditManager(
+            actionModal.applicant.customerId,
+            managerName,
+            finalRemarks
+          );
+        } else if (status === 'Rejected') {
+          businessLoanService.returnToCro(
+            actionModal.applicant.customerId,
+            finalRemarks,
+            managerName
+          );
+        }
+      } catch (e) {
+        console.warn('Failed to sync business loan status on customer verify:', e);
+      }
+    }
 
     addToast({
       type: status === 'Verified' ? 'success' : 'error',
@@ -335,6 +409,27 @@ export const CreditVerificationPage: React.FC = () => {
       finalRemarks,
       managerName
     );
+
+    // Sync to Business Loan Service if this is a Business Loan
+    if (applicant.customerId && applicant.customerId.startsWith('GLF-BL-')) {
+      try {
+        if (status === 'Verified') {
+          businessLoanService.verifyByCreditManager(
+            applicant.customerId,
+            managerName,
+            finalRemarks
+          );
+        } else if (status === 'Rejected') {
+          businessLoanService.returnToCro(
+            applicant.customerId,
+            finalRemarks,
+            managerName
+          );
+        }
+      } catch (e) {
+        console.warn('Failed to sync business loan status on KYC verify:', e);
+      }
+    }
 
     addToast({
       type: status === 'Verified' ? 'success' : 'error',
@@ -660,12 +755,36 @@ export const CreditVerificationPage: React.FC = () => {
       return;
     }
 
+    const managerName = currentUser?.displayName || 'Credit Manager';
+    const finalRemarks = remarksText || (status === 'Approved' ? 'Customer approval completed and submitted to Branch Manager for final sanction.' : 'Customer approval rejected.');
+
     creditManagerService.finalizeCustomerApproval(
       app.id,
       status,
-      remarksText || (status === 'Approved' ? 'Customer approval completed and submitted to Branch Manager for final sanction.' : 'Customer approval rejected.'),
-      currentUser?.displayName || 'Credit Manager'
+      finalRemarks,
+      managerName
     );
+
+    // Sync to Business Loan Service if this is a Business Loan
+    if (app.customerId && app.customerId.startsWith('GLF-BL-')) {
+      try {
+        if (status === 'Approved') {
+          businessLoanService.verifyByCreditManager(
+            app.customerId,
+            managerName,
+            finalRemarks
+          );
+        } else if (status === 'Rejected') {
+          businessLoanService.returnToCro(
+            app.customerId,
+            finalRemarks,
+            managerName
+          );
+        }
+      } catch (e) {
+        console.warn('Failed to sync business loan status on final approval:', e);
+      }
+    }
 
     addToast({
       type: status === 'Approved' ? 'success' : 'info',
@@ -954,9 +1073,22 @@ export const CreditVerificationPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 shrink-0 w-full sm:w-auto self-end md:self-center">
+                <div className="flex items-center gap-2.5 shrink-0 w-full sm:w-auto self-end md:self-center flex-wrap sm:flex-nowrap">
                   <button
-                    onClick={() => openActionModal(app, 'customer_verify')}
+                    type="button"
+                    onClick={() => handleOpenEditModal(app)}
+                    className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-extrabold text-xs uppercase tracking-wider transition-all shadow-xs cursor-pointer min-h-[42px] flex items-center justify-center gap-1.5 touch-target active:scale-95"
+                    title="Edit or correct applicant details if a mistake was made"
+                  >
+                    <Edit2 size={13} className="text-amber-700" />
+                    <span>Edit Details</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openActionModal(app, 'customer_verify');
+                    }}
                     className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-[#0B1F3A] hover:bg-[#162D4A] text-white font-extrabold text-xs uppercase tracking-wider transition-all shadow-sm cursor-pointer min-h-[42px] flex items-center justify-center gap-1.5 touch-target active:scale-95"
                   >
                     <span>VERIFY CUSTOMER DETAILS →</span>
@@ -1211,7 +1343,11 @@ export const CreditVerificationPage: React.FC = () => {
                 {/* REVIEW KYC PROOFS Button */}
                 <div className="flex items-center gap-3 shrink-0 w-full sm:w-auto self-end md:self-center">
                   <button
-                    onClick={() => openActionModal(app, 'kyc_verify')}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openActionModal(app, 'kyc_verify');
+                    }}
                     className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-[#0B1F3A] hover:bg-[#162D4A] text-white font-extrabold text-xs uppercase tracking-wider transition-all shadow-sm cursor-pointer min-h-[42px] flex items-center justify-center gap-1.5 touch-target active:scale-95"
                   >
                     <span>REVIEW KYC PROOFS →</span>
@@ -1748,7 +1884,10 @@ export const CreditVerificationPage: React.FC = () => {
                     <div className="shrink-0 self-start sm:self-center w-full sm:w-auto">
                       <button
                         type="button"
-                        onClick={() => openActionModal(app, 'loan_recommend')}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openActionModal(app, 'loan_recommend');
+                        }}
                         className={`w-full sm:w-auto px-5 py-2.5 rounded-xl font-extrabold text-xs uppercase tracking-wider transition-all shadow-sm cursor-pointer min-h-[42px] flex items-center justify-center gap-2 active:scale-95 ${
                           isPending
                             ? 'bg-[#0B1F3A] hover:bg-[#162D4A] text-white'
@@ -2167,7 +2306,10 @@ export const CreditVerificationPage: React.FC = () => {
                       {isApproved ? (
                         <button
                           type="button"
-                          onClick={() => openActionModal(app, 'final_approval')}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openActionModal(app, 'final_approval');
+                          }}
                           className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-extrabold text-xs uppercase tracking-wider transition-all shadow-xs cursor-pointer flex items-center justify-center gap-2 min-h-[42px] active:scale-95"
                         >
                           <CheckCircle2 size={16} className="text-emerald-700 stroke-[2.5]" />
@@ -2176,7 +2318,10 @@ export const CreditVerificationPage: React.FC = () => {
                       ) : isPending && isReadyForApproval ? (
                         <button
                           type="button"
-                          onClick={() => openActionModal(app, 'final_approval')}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openActionModal(app, 'final_approval');
+                          }}
                           className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-[#0B1F3A] hover:bg-[#162D4A] text-white font-black text-xs uppercase tracking-wider transition-all shadow-md cursor-pointer flex items-center justify-center gap-2 min-h-[42px] active:scale-95 ring-2 ring-[#D4AF37]/50"
                         >
                           <CheckCircle2 size={16} className="text-[#D4AF37] stroke-[2.5]" />
@@ -2185,7 +2330,10 @@ export const CreditVerificationPage: React.FC = () => {
                       ) : isPending && !isReadyForApproval ? (
                         <button
                           type="button"
-                          onClick={() => openActionModal(app, 'final_approval')}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openActionModal(app, 'final_approval');
+                          }}
                           className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-white hover:bg-amber-50/50 text-amber-800 border-2 border-amber-300 font-extrabold text-xs uppercase tracking-wider transition-all shadow-xs cursor-pointer flex items-center justify-center gap-2 min-h-[42px] active:scale-95"
                         >
                           <AlertCircle size={16} className="text-amber-600" />
@@ -2194,7 +2342,10 @@ export const CreditVerificationPage: React.FC = () => {
                       ) : (
                         <button
                           type="button"
-                          onClick={() => openActionModal(app, 'final_approval')}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openActionModal(app, 'final_approval');
+                          }}
                           className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-extrabold text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 min-h-[42px] active:scale-95"
                         >
                           <X size={16} />
@@ -2441,13 +2592,19 @@ export const CreditVerificationPage: React.FC = () => {
       {/* ══════════════════════════════════════════════════════ */}
       {/* UNIVERSAL ACTION MODAL */}
       {/* ══════════════════════════════════════════════════════ */}
-      <AnimatePresence>
-        {actionModal.isOpen && actionModal.applicant && typeof document !== 'undefined' && createPortal(
-          <div
-            onClick={() => setActionModal({ isOpen: false, applicant: null, actionType: 'customer_verify' })}
-            className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-black/65 backdrop-blur-sm cursor-pointer"
-          >
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {actionModal.isOpen && actionModal.applicant && (
             <motion.div
+              key="universal-action-modal-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              onClick={() => setActionModal({ isOpen: false, applicant: null, actionType: 'customer_verify' })}
+              className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-black/65 backdrop-blur-sm cursor-pointer"
+            >
+              <motion.div
               onClick={(e) => e.stopPropagation()}
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -2483,14 +2640,31 @@ export const CreditVerificationPage: React.FC = () => {
                     </p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setActionModal({ isOpen: false, applicant: null, actionType: 'customer_verify' })}
-                  className="w-8 h-8 rounded-lg hover:bg-white/10 text-slate-300 hover:text-white transition-colors flex items-center justify-center touch-target"
-                  title="Close"
-                >
-                  <X size={18} />
-                </button>
+                <div className="flex items-center gap-2">
+                  {actionModal.applicant && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const app = actionModal.applicant;
+                        setActionModal({ isOpen: false, applicant: null, actionType: 'customer_verify' });
+                        if (app) handleOpenEditModal(app);
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-amber-400/20 hover:bg-amber-400/30 text-amber-300 text-xs font-bold transition-colors flex items-center gap-1 border border-amber-400/30 cursor-pointer"
+                      title="Correct any mistake in this applicant's profile"
+                    >
+                      <Edit2 size={12} />
+                      <span>Edit</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setActionModal({ isOpen: false, applicant: null, actionType: 'customer_verify' })}
+                    className="w-8 h-8 rounded-lg hover:bg-white/10 text-slate-300 hover:text-white transition-colors flex items-center justify-center touch-target"
+                    title="Close"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
               </div>
 
               {/* Modal Body */}
@@ -3244,7 +3418,7 @@ export const CreditVerificationPage: React.FC = () => {
                             Requested Amount
                           </span>
                           <strong className="text-[#0B1F3A] text-sm font-black block">
-                            ₹{actionModal.applicant.loanAmount.toLocaleString('en-IN')}
+                            ₹{(actionModal.applicant.loanAmount ?? 0).toLocaleString('en-IN')}
                           </strong>
                         </div>
 
@@ -3474,7 +3648,7 @@ export const CreditVerificationPage: React.FC = () => {
                             Requested Amount
                           </span>
                           <strong className="text-[#0B1F3A] text-sm font-black block">
-                            ₹{actionModal.applicant.loanAmount.toLocaleString('en-IN')}
+                            ₹{(actionModal.applicant.loanAmount ?? 0).toLocaleString('en-IN')}
                           </strong>
                         </div>
 
@@ -3781,10 +3955,11 @@ export const CreditVerificationPage: React.FC = () => {
                 })()}
               </div>
             </motion.div>
-          </div>,
-          document.body
+          </motion.div>
         )}
-      </AnimatePresence>
+      </AnimatePresence>,
+      document.body
+    )}
 
       {/* ══════════════════════════════════════════════════════ */}
       {/* ══════════════════════════════════════════════════════ */}
@@ -4149,6 +4324,201 @@ export const CreditVerificationPage: React.FC = () => {
                     <X size={14} /> Confirm Rejection
                   </button>
                 </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>,
+      document.body
+    )}
+
+    {/* ══════════════════════════════════════════════════════ */}
+    {/* EDIT APPLICANT MODAL (Make Corrections / Fix Mistakes) */}
+    {/* ══════════════════════════════════════════════════════ */}
+    {createPortal(
+      <AnimatePresence>
+        {editModalApplicant && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
+            onClick={() => setEditModalApplicant(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              {/* Header */}
+              <div className="bg-[#0B1F3A] px-5 py-4 text-white flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-[#D4AF37]/20 border border-[#D4AF37]/40 flex items-center justify-center text-[#D4AF37]">
+                    <Edit2 size={16} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-extrabold uppercase tracking-wide">
+                      Edit Applicant Details
+                    </h3>
+                    <p className="text-xs text-slate-300">
+                      {editModalApplicant.customerName} • <span className="font-mono text-[#D4AF37] font-bold">{editModalApplicant.customerId}</span> ({editModalApplicant.id})
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditModalApplicant(null)}
+                  className="p-1 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Form Body */}
+              <div className="p-5 space-y-4 overflow-y-auto flex-1 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="font-bold text-[#0B1F3A] uppercase block mb-1">Full Name</label>
+                    <input
+                      type="text"
+                      value={editFormData.customerName || ''}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, customerName: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-[#0B1F3A] focus:outline-none focus:border-[#D4AF37]"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-[#0B1F3A] uppercase block mb-1">Father / Spouse Name</label>
+                    <input
+                      type="text"
+                      value={editFormData.fatherOrSpouseName || ''}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, fatherOrSpouseName: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-[#0B1F3A] focus:outline-none focus:border-[#D4AF37]"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-[#0B1F3A] uppercase block mb-1">Primary Mobile</label>
+                    <input
+                      type="tel"
+                      maxLength={10}
+                      value={editFormData.phone || ''}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, phone: e.target.value.replace(/\D/g, '') }))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono font-bold text-[#0B1F3A] focus:outline-none focus:border-[#D4AF37]"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-[#0B1F3A] uppercase block mb-1">Alternate Phone</label>
+                    <input
+                      type="tel"
+                      maxLength={10}
+                      value={editFormData.alternatePhone || ''}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, alternatePhone: e.target.value.replace(/\D/g, '') }))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono text-[#0B1F3A] focus:outline-none focus:border-[#D4AF37]"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="font-bold text-[#0B1F3A] uppercase block mb-1">Residential Street Address</label>
+                    <input
+                      type="text"
+                      value={editFormData.address || ''}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, address: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-[#0B1F3A] focus:outline-none focus:border-[#D4AF37]"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-[#0B1F3A] uppercase block mb-1">City / Village</label>
+                    <input
+                      type="text"
+                      value={editFormData.city || ''}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, city: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-[#0B1F3A] focus:outline-none focus:border-[#D4AF37]"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-[#0B1F3A] uppercase block mb-1">Primary Occupation</label>
+                    <input
+                      type="text"
+                      value={editFormData.occupation || ''}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, occupation: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-[#0B1F3A] focus:outline-none focus:border-[#D4AF37]"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-[#0B1F3A] uppercase block mb-1">Monthly Income (₹)</label>
+                    <input
+                      type="number"
+                      value={editFormData.monthlyIncome || ''}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, monthlyIncome: Number(e.target.value) }))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-[#0B1F3A] focus:outline-none focus:border-[#D4AF37]"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-[#0B1F3A] uppercase block mb-1">Monthly Expenses (₹)</label>
+                    <input
+                      type="number"
+                      value={editFormData.monthlyExpenses || ''}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, monthlyExpenses: Number(e.target.value) }))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-[#0B1F3A] focus:outline-none focus:border-[#D4AF37]"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-[#0B1F3A] uppercase block mb-1">Requested Principal Loan (₹)</label>
+                    <input
+                      type="number"
+                      value={editFormData.loanAmount || ''}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, loanAmount: Number(e.target.value) }))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-[#D4AF37] focus:outline-none focus:border-[#D4AF37]"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-[#0B1F3A] uppercase block mb-1">Loan Tenor (Weeks)</label>
+                    <input
+                      type="number"
+                      value={editFormData.tenorWeeks || ''}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, tenorWeeks: Number(e.target.value) }))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-[#0B1F3A] focus:outline-none focus:border-[#D4AF37]"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-[#0B1F3A] uppercase block mb-1">Proposed Weekly EMI (₹)</label>
+                    <input
+                      type="number"
+                      value={editFormData.proposedEmi || ''}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, proposedEmi: Number(e.target.value) }))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-emerald-700 focus:outline-none focus:border-[#D4AF37]"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-[#0B1F3A] uppercase block mb-1">Loan Purpose</label>
+                    <input
+                      type="text"
+                      value={editFormData.loanPurpose || ''}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, loanPurpose: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-[#0B1F3A] focus:outline-none focus:border-[#D4AF37]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="bg-slate-50 px-5 py-3 border-t border-slate-200 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setEditModalApplicant(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isSavingEdit}
+                  onClick={handleSaveEditModal}
+                  className="px-5 py-2.5 rounded-xl bg-[#0B1F3A] hover:bg-[#162D4A] text-white text-xs font-extrabold uppercase tracking-wider transition-all shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Save size={14} />
+                  <span>{isSavingEdit ? 'Saving Changes...' : 'Save Corrections'}</span>
+                </button>
               </div>
             </motion.div>
           </motion.div>

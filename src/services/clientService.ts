@@ -63,7 +63,8 @@ export async function createClientEnrollment(
   try {
     const rawCusts = localStorage.getItem('glf_registered_customers_master');
     let custs = rawCusts ? JSON.parse(rawCusts) : [];
-    custs = custs.filter((c: any) => c.id !== docId);
+    const cleanAadhaar = formData.aadhaarNumber ? formData.aadhaarNumber.replace(/\D/g, '') : '';
+    custs = custs.filter((c: any) => c.id !== docId && (!cleanAadhaar || cleanAadhaar.length !== 12 || (c.kyc?.aadhaarNumber?.replace(/\D/g, '') !== cleanAadhaar && c.aadhaarNumber?.replace(/\D/g, '') !== cleanAadhaar)));
 
     const resolvedName = formData.fullName || formData.clientName || formData.name || 'New Client';
     const resolvedCenter = formData.centerName || formData.center || 'Main Center';
@@ -80,7 +81,7 @@ export async function createClientEnrollment(
       email: formData.email || '',
       dateOfBirth: formData.dob || '',
       gender: formData.gender || '',
-      address: formData.address || '',
+      address: formData.addressLine2 ? `${formData.address}, ${formData.addressLine2}` : (formData.address || ''),
       city: formData.city || 'Chennai',
       state: formData.state || 'Tamil Nadu',
       pincode: formData.pincode || '',
@@ -104,7 +105,7 @@ export async function createClientEnrollment(
     const rawMonitored = localStorage.getItem('glf_monitored_customers_master');
     let monitoredCusts = rawMonitored ? JSON.parse(rawMonitored) : [];
     if (Array.isArray(monitoredCusts)) {
-      monitoredCusts = monitoredCusts.filter((c: any) => c.id !== docId);
+      monitoredCusts = monitoredCusts.filter((c: any) => c.id !== docId && (!cleanAadhaar || cleanAadhaar.length !== 12 || (c.aadhaarNumber?.replace(/\D/g, '') !== cleanAadhaar && c.kyc?.aadhaarNumber?.replace(/\D/g, '') !== cleanAadhaar)));
       monitoredCusts.unshift({
         id: docId,
         name: resolvedName,
@@ -113,7 +114,7 @@ export async function createClientEnrollment(
         branchName: formData.branchName || 'Main Branch',
         centerName: resolvedCenter,
         groupName: resolvedGroup,
-        address: formData.address || '',
+        address: formData.addressLine2 ? `${formData.address}, ${formData.addressLine2}` : (formData.address || ''),
         city: formData.city || 'Chennai',
         state: formData.state || 'Tamil Nadu',
         pincode: formData.pincode || '',
@@ -144,7 +145,7 @@ export async function createClientEnrollment(
       customerName: resolvedName,
       phone: formData.phone || formData.mobile || '+91 98400 00000',
       alternatePhone: formData.alternatePhone,
-      address: formData.address || '',
+      address: formData.addressLine2 ? `${formData.address}, ${formData.addressLine2}` : (formData.address || ''),
       city: formData.city || 'Chennai',
       branchId: formData.branchId || 'BR-01',
       centerName: resolvedCenter,

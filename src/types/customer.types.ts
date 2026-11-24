@@ -21,6 +21,7 @@ export interface Customer extends Timestamps, SoftDelete {
 
   // Address
   address: string;
+  addressLine2?: string;
   city: string;
   state: string;
   pincode: string;
@@ -96,6 +97,7 @@ export interface CustomerFormData {
   dateOfBirth?: string;
   gender?: 'male' | 'female' | 'other';
   address: string;
+  addressLine2?: string;
   city: string;
   state: string;
   pincode: string;

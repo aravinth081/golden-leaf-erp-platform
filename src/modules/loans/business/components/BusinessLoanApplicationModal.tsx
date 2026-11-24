@@ -3,7 +3,7 @@
 // Neat 4-Box Layout • 5-Doc Checklist • Fast Repeat Customer Autofill
 // ──────────────────────────────────────────────────
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X, Check, Sparkles, Building, User, Store, Calculator,
@@ -22,6 +22,8 @@ import {
   type BusinessRepaymentFrequency,
 } from '../../../../types/businessLoan.types';
 import { useUIStore, useAuthStore } from '../../../../store';
+import { DobInput } from '../../../../components/ui';
+import { calculateAge, parseDobToDate } from '../../../../utils/dateUtils';
 
 interface BusinessLoanApplicationModalProps {
   isOpen: boolean;
@@ -41,7 +43,40 @@ export const BusinessLoanApplicationModal: React.FC<BusinessLoanApplicationModal
   const [customerName, setCustomerName] = useState('');
   const [fatherOrSpouseName, setFatherOrSpouseName] = useState('');
   const [dob, setDob] = useState('1990-05-15');
-  const [age, setAge] = useState(36);
+  const [age, setAge] = useState<number>(() => calculateAge('1990-05-15') || 34);
+
+  // Auto-calculate Age whenever DOB updates
+  useEffect(() => {
+    if (dob) {
+      const computed = calculateAge(dob);
+      if (computed > 0 && computed < 120 && computed !== age) {
+        setAge(computed);
+      }
+    }
+  }, [dob]);
+
+  const handleDobChange = (newDob: string) => {
+    setDob(newDob);
+    const computed = calculateAge(newDob);
+    if (computed > 0 && computed < 120) {
+      setAge(computed);
+    }
+  };
+
+  const handleAgeChange = (newAge: number) => {
+    setAge(newAge);
+    if (newAge >= 18 && newAge <= 100) {
+      const birthYear = new Date().getFullYear() - newAge;
+      const parsed = parseDobToDate(dob);
+      if (parsed) {
+        const d = String(parsed.getDate()).padStart(2, '0');
+        const m = String(parsed.getMonth() + 1).padStart(2, '0');
+        setDob(`${d}-${m}-${birthYear}`);
+      } else {
+        setDob(`01-01-${birthYear}`);
+      }
+    }
+  };
   const [gender, setGender] = useState<'Male' | 'Female' | 'Other'>('Male');
   const [primaryMobile, setPrimaryMobile] = useState('');
   const [alternateMobile, setAlternateMobile] = useState('');
@@ -72,10 +107,10 @@ export const BusinessLoanApplicationModal: React.FC<BusinessLoanApplicationModal
   const [existingMonthlyEmi, setExistingMonthlyEmi] = useState<number>(0);
 
   // Loan Terms
-  const [requestedAmount, setRequestedAmount] = useState<number>(100000);
+  const [requestedAmount, setRequestedAmount] = useState<number | ''>(25000);
   const [collectionFrequency, setCollectionFrequency] = useState<BusinessRepaymentFrequency>('Daily');
   const [tenureUnits, setTenureUnits] = useState<number>(100);
-  const [interestRate, setInterestRate] = useState<number>(24);
+  const [interestRate, setInterestRate] = useState<number | ''>(24);
   const [interestType, setInterestType] = useState<'FLAT' | 'REDUCING'>('FLAT');
   const [processingFeePercent, setProcessingFeePercent] = useState<number>(2.0); // 2%
   const [docCharges, setDocCharges] = useState<number>(1000);
@@ -144,7 +179,8 @@ export const BusinessLoanApplicationModal: React.FC<BusinessLoanApplicationModal
 
   // Calculations
   const calculations = useMemo(() => {
-    const principal = requestedAmount;
+    const principal = typeof requestedAmount === 'number' ? requestedAmount : (parseFloat(String(requestedAmount)) || 0);
+    const rate = typeof interestRate === 'number' ? interestRate : (parseFloat(String(interestRate)) || 0);
     const procFee = Math.round((principal * processingFeePercent) / 100);
     const totalDeductions = procFee + docCharges + insuranceCharges;
     const netDisbursal = Math.max(0, principal - totalDeductions);
@@ -159,16 +195,20 @@ export const BusinessLoanApplicationModal: React.FC<BusinessLoanApplicationModal
       else if (collectionFrequency === 'Weekly') tenureFractionOfYear = tenureUnits / 52;
       else tenureFractionOfYear = tenureUnits / 12;
 
-      totalInterest = Math.round(principal * (interestRate / 100) * tenureFractionOfYear);
+      totalInterest = Math.round(principal * (rate / 100) * tenureFractionOfYear);
       totalRepayable = principal + totalInterest;
-      exactEmi = Math.ceil(totalRepayable / tenureUnits);
+      exactEmi = tenureUnits > 0 ? Math.ceil(totalRepayable / tenureUnits) : 0;
     } else {
       // Reducing Balance approximation
-      const r = interestRate / 12 / 100;
+      const r = rate / 12 / 100;
       const n = collectionFrequency === 'Monthly' ? tenureUnits : Math.ceil(tenureUnits / 30);
-      exactEmi = Math.round((principal * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1));
+      if (r > 0 && n > 0) {
+        exactEmi = Math.round((principal * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1));
+      } else {
+        exactEmi = n > 0 ? Math.round(principal / n) : 0;
+      }
       totalRepayable = exactEmi * n;
-      totalInterest = totalRepayable - principal;
+      totalInterest = Math.max(0, totalRepayable - principal);
     }
 
     return {
@@ -192,12 +232,15 @@ export const BusinessLoanApplicationModal: React.FC<BusinessLoanApplicationModal
 
   // Convert number to words helper
   const amountInWords = useMemo(() => {
-    const num = requestedAmount;
+    const num = typeof requestedAmount === 'number' ? requestedAmount : (parseFloat(String(requestedAmount)) || 0);
     if (num >= 100000) {
       const lakhs = num / 100000;
       return `${lakhs.toLocaleString('en-IN')} Lakh Rupees`;
     }
-    return `${(num / 1000).toLocaleString('en-IN')} Thousand Rupees`;
+    if (num > 0) {
+      return `${(num / 1000).toLocaleString('en-IN')} Thousand Rupees`;
+    }
+    return '₹0';
   }, [requestedAmount]);
 
   // Fast Auto-Fill for Repeat Customer
@@ -330,11 +373,11 @@ export const BusinessLoanApplicationModal: React.FC<BusinessLoanApplicationModal
       existingMonthlyEmiAmount: hasExistingLoan ? existingMonthlyEmi : undefined,
       isRepeatCustomer: !!businessLoanService.findRepeatCustomerByMobile(primaryMobile),
 
-      requestedAmount,
-      sanctionedAmount: requestedAmount,
+      requestedAmount: typeof requestedAmount === 'number' ? requestedAmount : (parseFloat(String(requestedAmount)) || 10000),
+      sanctionedAmount: typeof requestedAmount === 'number' ? requestedAmount : (parseFloat(String(requestedAmount)) || 10000),
       collectionFrequency,
       tenureUnits,
-      interestRateAnnual: interestRate,
+      interestRateAnnual: typeof interestRate === 'number' ? interestRate : (parseFloat(String(interestRate)) || 24),
       interestType,
       processingFeeAmount: calculations.procFee,
       documentChargesAmount: docCharges,
@@ -507,19 +550,24 @@ export const BusinessLoanApplicationModal: React.FC<BusinessLoanApplicationModal
                   <div>
                     <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1">DOB & Age (21-60)</label>
                     <div className="flex gap-1.5">
-                      <input
-                        type="date"
+                      <DobInput
                         value={dob}
-                        onChange={(e) => setDob(e.target.value)}
-                        className="w-2/3 px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-lg font-medium text-[11px]"
+                        onChange={(e) => handleDobChange(e.target.value)}
+                        onAgeCalculated={(newAge) => {
+                          if (newAge > 0 && newAge < 120) setAge(newAge);
+                        }}
+                        containerClassName="w-2/3 !gap-0"
+                        className="!px-2 !py-1.5 !bg-gray-50 !border-gray-200 !rounded-lg !font-medium !text-[11px]"
+                        placeholder="DD-MM-YYYY"
                       />
                       <input
                         type="number"
-                        min="21"
-                        max="60"
-                        value={age}
-                        onChange={(e) => setAge(parseInt(e.target.value) || 21)}
+                        min="18"
+                        max="100"
+                        value={age || ''}
+                        onChange={(e) => handleAgeChange(parseInt(e.target.value) || 0)}
                         className="w-1/3 px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-lg font-bold text-center"
+                        title="Applicant Age (Auto-calculated from DOB or editable)"
                       />
                     </div>
                   </div>
@@ -823,18 +871,51 @@ export const BusinessLoanApplicationModal: React.FC<BusinessLoanApplicationModal
 
                 <div className="grid grid-cols-2 gap-2.5">
                   <div className="col-span-2">
-                    <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1">
-                      Requested Loan Principal (₹25,000 to ₹5,00,000) *
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[10px] font-bold text-gray-600 uppercase">
+                        Requested Loan Principal (₹10,000 to ₹5,00,000) *
+                      </label>
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                        Min ₹10k for Small Shops
+                      </span>
+                    </div>
                     <input
                       type="number"
-                      min="25000"
+                      min="10000"
                       max="500000"
-                      step="5000"
+                      step="1000"
+                      placeholder="e.g. 25000"
                       value={requestedAmount}
-                      onChange={(e) => setRequestedAmount(parseFloat(e.target.value) || 25000)}
-                      className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl font-black text-emerald-900 text-sm"
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setRequestedAmount(val === '' ? '' : parseFloat(val) || 0);
+                      }}
+                      onBlur={() => {
+                        if (requestedAmount === '' || Number(requestedAmount) < 10000) {
+                          setRequestedAmount(Math.max(10000, Number(requestedAmount) || 10000));
+                        }
+                      }}
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl font-black text-emerald-900 text-sm focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
                     />
+
+                    {/* Quick Select Buttons */}
+                    <div className="flex items-center gap-1.5 flex-wrap mt-2">
+                      <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Quick Select:</span>
+                      {[10000, 15000, 20000, 25000, 50000, 75000, 100000, 200000].map((amt) => (
+                        <button
+                          key={amt}
+                          type="button"
+                          onClick={() => setRequestedAmount(amt)}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                            Number(requestedAmount) === amt
+                              ? 'bg-emerald-700 text-white shadow-xs'
+                              : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200'
+                          }`}
+                        >
+                          ₹{amt >= 100000 ? `${amt / 100000}L` : `${amt / 1000}k`}
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
                   <div>
@@ -879,9 +960,20 @@ export const BusinessLoanApplicationModal: React.FC<BusinessLoanApplicationModal
                     <input
                       type="number"
                       step="0.5"
+                      min="0"
+                      max="100"
+                      placeholder="e.g. 24"
                       value={interestRate}
-                      onChange={(e) => setInterestRate(parseFloat(e.target.value) || 0)}
-                      className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg font-bold text-blue-900"
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setInterestRate(val === '' ? '' : parseFloat(val) || 0);
+                      }}
+                      onBlur={() => {
+                        if (interestRate === '' || isNaN(Number(interestRate))) {
+                          setInterestRate(24);
+                        }
+                      }}
+                      className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg font-bold text-blue-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
                     />
                   </div>
 

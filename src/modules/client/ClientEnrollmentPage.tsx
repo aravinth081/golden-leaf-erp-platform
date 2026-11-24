@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Save, Trash2, RotateCcw } from 'lucide-react';
-import { Input, Select, Button, Card, Modal, SearchableSelect } from '../../components/ui';
+import { Input, Select, Button, Card, Modal, SearchableSelect, DobInput } from '../../components/ui';
+import { calculateAge } from '../../utils/dateUtils';
 import { getCenters, type Center } from '../../services/centerService';
 import { createClientEnrollment, deleteClientEnrollment } from '../../services/clientService';
 const STORAGE_KEY = 'clientEnrollmentDraft';
@@ -539,8 +540,8 @@ const ClientEnrollmentPage: React.FC = () => {
           <Input label="State" className="bg-[#F3F4F6] text-gray-600" readOnly />
 
           <Input label="Country" className="bg-[#F3F4F6] text-gray-600" readOnly />
-          <Input label="Date of Birth" name="dob" type="date" value={formData.dob} onChange={handleFormChange} />
-          <Input label="Age" className="bg-[#F3F4F6] text-gray-600" readOnly />
+          <DobInput label="Date of Birth" name="dob" value={formData.dob} onChange={handleFormChange} />
+          <Input label="Age" value={calculateAge(formData.dob) ? `${calculateAge(formData.dob)} Years` : ''} className="bg-[#F3F4F6] text-gray-600 font-semibold" readOnly />
           <Select label="Gender" name="gender" value={formData.gender} onChange={handleFormChange} options={[
             { value: 'select', label: '-- SELECT --' },
             { value: 'male', label: 'MALE' },
@@ -645,8 +646,8 @@ const ClientEnrollmentPage: React.FC = () => {
             { value: 'female', label: 'FEMALE' },
             { value: 'other', label: 'OTHER' }
           ]} />
-          <Input label="Date of Birth" name="nomineeDob" type="date" value={formData.nomineeDob} onChange={handleFormChange} />
-          <Input label="Age" readOnly />
+          <DobInput label="Date of Birth" name="nomineeDob" value={formData.nomineeDob} onChange={handleFormChange} />
+          <Input label="Age" value={calculateAge(formData.nomineeDob) ? `${calculateAge(formData.nomineeDob)} Years` : ''} className="bg-[#F3F4F6] text-gray-600 font-semibold" readOnly />
           <SearchableSelect 
             label="Relation With Client" 
             name="nomineeRelation" 

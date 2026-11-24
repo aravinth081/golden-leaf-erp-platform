@@ -11,21 +11,8 @@ export const DEFAULT_RATE_SLABS = [
   { id: 'slab-4', label: '36+ Months', minDays: 1096, maxDays: 99999, baseRate: 9.75, isActive: true },
 ];
 
-export function calculateAge(dobString: string): number {
-  if (!dobString) return 0;
-  const today = new Date();
-  const birth = new Date(dobString);
-  let age = today.getFullYear() - birth.getFullYear();
-  const m = today.getMonth() - birth.getMonth();
-  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
-    age--;
-  }
-  return Math.max(0, age);
-}
-
-export function isSeniorCitizen(dobString: string): boolean {
-  return calculateAge(dobString) >= 60;
-}
+import { calculateAge, isSeniorCitizen } from './dateUtils';
+export { calculateAge, isSeniorCitizen };
 
 export function addTenureToDate(
   startDateStr: string,

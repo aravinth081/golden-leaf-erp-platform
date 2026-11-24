@@ -8,12 +8,116 @@ import {
   type BusinessLoanCollectionRecord,
 } from '../types/businessLoan.types';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { creditManagerService } from './creditManagerService';
 
 const STORAGE_KEY = 'glf_business_loans_v2';
 
 export const REPEAT_BUSINESS_CUSTOMERS: any[] = [];
 
-const INITIAL_BUSINESS_LOANS: BusinessLoanRecord[] = [];
+const INITIAL_BUSINESS_LOANS: BusinessLoanRecord[] = [
+  {
+    id: 'GLF-BL-2026-0003',
+    branchId: 'BR-6805',
+    branchName: 'GOBI MAIN BRANCH',
+    originatingCroId: 'GLF007',
+    originatingCroName: 'SARAVANAN',
+    status: 'SUBMITTED_BY_CRO',
+    createdAt: '23/11/2026, 08:13:00 am',
+    updatedAt: '23/11/2026, 08:13:00 am',
+
+    customerName: 'manikandan',
+    fatherOrSpouseName: 'SAGADEVAN',
+    dob: '2000-01-01',
+    age: 26,
+    gender: 'Male',
+    primaryMobile: '7887756452',
+    alternateMobile: '8768465456',
+    residentialAddress: '638116',
+    pinCode: '638116',
+    aadhaarNumber: '789786789679',
+    panNumber: 'GGZPK7845F',
+    coApplicant: {
+      fullName: 'sagadevan',
+      relationship: 'Father',
+      mobileNo: '8768465456',
+      aadhaarNo: '787867885454',
+      panNo: 'XXXXX0000X',
+    },
+
+    businessName: 'velan grocery',
+    businessCategory: 'Retail / Kirana Shop',
+    premisesType: 'Owned Shop',
+    businessVintageYears: 5,
+    shopAddress: '15 ERODE MAIN ROAD KAVINDAPADI',
+    gpsLocationTag: '12.9716° N, 80.2435° E',
+    estimatedDailySales: 1000,
+    estimatedMonthlyTurnover: 30000,
+    netMonthlyBusinessIncome: 20000,
+    hasExistingLoanObligations: false,
+    isRepeatCustomer: false,
+
+    requestedAmount: 25000,
+    sanctionedAmount: 25000,
+    collectionFrequency: 'Daily',
+    tenureUnits: 100,
+    interestRateAnnual: 24,
+    interestType: 'FLAT',
+    processingFeeAmount: 500,
+    documentChargesAmount: 1000,
+    insuranceChargesAmount: 800,
+    totalUpfrontDeductions: 2300,
+    netDisbursementAmount: 22700,
+    exactEmiPerPeriod: 275,
+    totalInterestPayable: 1644,
+    totalRepayableAmount: 26644,
+    installmentStartDate: '2026-11-23',
+    installmentEndDate: '2027-03-03',
+
+    customerBankName: 'State Bank of India',
+    customerBankAccountNo: '787865464646',
+    customerBankIfsc: 'SBIN0001245',
+
+    documents: {
+      applicantAndGuarantorPhotos: {
+        id: 'DOC-1',
+        title: 'Applicant & Guarantor Photos',
+        description: 'Personal KYC Photos',
+        status: 'VERIFIED',
+      },
+      personalKycProofs: {
+        id: 'DOC-2',
+        title: 'Personal KYC Proofs (Aadhaar & PAN)',
+        description: 'Aadhaar & PAN Scans',
+        status: 'VERIFIED',
+      },
+      liveShopPhoto: {
+        id: 'DOC-3',
+        title: 'Live Shop Photo with Nameboard',
+        description: 'Shop photo at kavindapadi',
+        status: 'VERIFIED',
+      },
+      businessProof: {
+        id: 'DOC-4',
+        title: 'Business Proof (MSME/GST/License)',
+        description: 'Trade License',
+        status: 'VERIFIED',
+      },
+      bankingProof: {
+        id: 'DOC-5',
+        title: 'Banking Proof (Passbook/Statement)',
+        description: 'SBI Passbook Front Page',
+        status: 'VERIFIED',
+      },
+    },
+
+    totalCollectedTillDate: 0,
+    pendingOutstandingBalance: 25000,
+    installmentsPaidCount: 0,
+    totalInstallmentsCount: 100,
+    collections: [],
+  },
+];
+
 class BusinessLoanService {
   private loans: BusinessLoanRecord[] = [];
 
@@ -25,12 +129,17 @@ class BusinessLoanService {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
-        this.loans = JSON.parse(stored);
+        const parsed = JSON.parse(stored);
+        this.loans = Array.isArray(parsed) && parsed.length > 0 ? parsed : [...INITIAL_BUSINESS_LOANS];
       } else {
-        this.loans = [];
+        this.loans = [...INITIAL_BUSINESS_LOANS];
       }
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(this.loans));
+      } catch {}
+      this.syncAllToCreditManager();
     } catch {
-      this.loans = [];
+      this.loans = [...INITIAL_BUSINESS_LOANS];
     }
 
     if (isSupabaseConfigured() && supabase) {
@@ -47,6 +156,7 @@ class BusinessLoanService {
             try {
               localStorage.setItem(STORAGE_KEY, JSON.stringify(cloudLoans));
             } catch {}
+            this.syncAllToCreditManager();
           }
         } catch (e: unknown) {
           console.warn('[Supabase] Failed to fetch business loans:', e);
@@ -55,9 +165,111 @@ class BusinessLoanService {
     }
   }
 
+  public syncToCreditManager(loan: BusinessLoanRecord) {
+    try {
+      creditManagerService.addApplicant({
+        customerId: loan.id,
+        customerName: loan.customerName,
+        fatherOrSpouseName: loan.fatherOrSpouseName || 'Guardian',
+        phone: loan.primaryMobile || '+91 98400 00000',
+        alternatePhone: loan.alternateMobile,
+        address: `${loan.residentialAddress || ''}${loan.pinCode ? ', ' + loan.pinCode : ''}`,
+        city: loan.branchName || 'Main Branch',
+        branchId: loan.branchId || 'BR-01',
+        centerName: 'Business Loan Division',
+        groupName: `${loan.businessName || 'Business Enterprise'} (${loan.businessCategory})`,
+        occupation: loan.businessCategory,
+        monthlyIncome: loan.netMonthlyBusinessIncome || loan.estimatedMonthlyTurnover || 50000,
+        monthlyExpenses: Math.round((loan.netMonthlyBusinessIncome || 50000) * 0.4),
+        loanAmount: loan.sanctionedAmount || loan.requestedAmount || 50000,
+        loanProduct: `Business Loan (${loan.collectionFrequency})`,
+        tenorWeeks:
+          loan.collectionFrequency === 'Daily'
+            ? Math.max(1, Math.round(loan.tenureUnits / 7))
+            : loan.collectionFrequency === 'Weekly'
+            ? loan.tenureUnits
+            : loan.tenureUnits * 4,
+        proposedEmi: loan.exactEmiPerPeriod || 500,
+        loanPurpose: `${loan.businessName || 'Shop'} - ${loan.premisesType}`,
+        customerVerificationStatus:
+          loan.status === 'RETURNED_TO_CRO'
+            ? 'Rejected'
+            : loan.cmReviewedBy
+            ? 'Verified'
+            : 'Pending',
+        customerVerificationRemarks: loan.returnReason || loan.cmRemarks,
+        aadhaarNumber: loan.aadhaarNumber || 'XXXX-XXXX-0000',
+        panNumber: loan.panNumber,
+        customerPhotoUrl: loan.documents?.applicantAndGuarantorPhotos?.fileUrl,
+        aadhaarFrontUrl: loan.documents?.personalKycProofs?.fileUrl,
+        panCardUrl: loan.documents?.businessProof?.fileUrl,
+        documents: [
+          {
+            id: 'DOC-1',
+            name: 'Applicant & Guarantor Photos',
+            type: 'photo',
+            fileName: 'applicant_photos.jpg',
+            fileUrl: loan.documents?.applicantAndGuarantorPhotos?.fileUrl,
+            status: loan.documents?.applicantAndGuarantorPhotos?.status === 'VERIFIED' ? 'verified' : 'pending',
+          },
+          {
+            id: 'DOC-2',
+            name: 'Personal KYC Proofs (Aadhaar & PAN)',
+            type: 'aadhaar',
+            fileName: 'personal_kyc.pdf',
+            fileUrl: loan.documents?.personalKycProofs?.fileUrl,
+            status: loan.documents?.personalKycProofs?.status === 'VERIFIED' ? 'verified' : 'pending',
+          },
+          {
+            id: 'DOC-3',
+            name: 'Mandatory Live Shop Photo with Owner',
+            type: 'address_proof',
+            fileName: 'shop_photo.jpg',
+            fileUrl: loan.documents?.liveShopPhoto?.fileUrl,
+            status: loan.documents?.liveShopPhoto?.status === 'VERIFIED' ? 'verified' : 'pending',
+          },
+          {
+            id: 'DOC-4',
+            name: 'Business Proof (MSME/GST/License)',
+            type: 'business_proof',
+            fileName: 'business_proof.pdf',
+            fileUrl: loan.documents?.businessProof?.fileUrl,
+            status: loan.documents?.businessProof?.status === 'VERIFIED' ? 'verified' : 'pending',
+          },
+          {
+            id: 'DOC-5',
+            name: 'Banking Proof (Passbook/Statement)',
+            type: 'bank_statement',
+            fileName: 'bank_proof.pdf',
+            fileUrl: loan.documents?.bankingProof?.fileUrl,
+            status: loan.documents?.bankingProof?.status === 'VERIFIED' ? 'verified' : 'pending',
+          },
+        ],
+        history: [
+          {
+            date: loan.createdAt || new Date().toLocaleDateString('en-IN'),
+            event: 'Business Loan Application Submitted',
+            remarks: `Submitted by ${loan.originatingCroName} (${loan.originatingCroId}) - ₹${loan.requestedAmount.toLocaleString('en-IN')}`,
+          },
+        ],
+      });
+    } catch (err) {
+      console.warn('Failed to sync business loan to creditManagerService:', err);
+    }
+  }
+
+  public syncAllToCreditManager() {
+    this.loans.forEach((loan) => {
+      this.syncToCreditManager(loan);
+    });
+  }
+
   private saveState() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.loans));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('glf-business-loan-updated'));
+      }
     } catch (e) {
       console.warn('Failed to save business loans state:', e);
     }
@@ -76,6 +288,15 @@ class BusinessLoanService {
   }
 
   public getLoans(): BusinessLoanRecord[] {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          this.loans = parsed;
+        }
+      }
+    } catch {}
     return [...this.loans];
   }
 
@@ -216,6 +437,7 @@ class BusinessLoanService {
 
     this.loans.unshift(newRecord);
     this.saveState();
+    this.syncToCreditManager(newRecord);
     return newRecord;
   }
 
@@ -233,13 +455,15 @@ class BusinessLoanService {
 
   // Credit Manager Action: Return to CRO with mistakes
   public returnToCro(id: string, reason: string, cmName: string): BusinessLoanRecord {
-    return this.updateApplication(id, {
+    const updated = this.updateApplication(id, {
       status: 'RETURNED_TO_CRO',
       returnReason: reason,
       cmReviewedBy: cmName,
       cmReviewedAt: new Date().toLocaleString('en-IN'),
       cmRemarks: `Returned to CRO: ${reason}`,
     });
+    this.syncToCreditManager(updated);
+    return updated;
   }
 
   // Credit Manager Action: Approve KYC & Documents
@@ -252,22 +476,40 @@ class BusinessLoanService {
       (updatedDocs as any)[k].status = 'VERIFIED';
     });
 
-    return this.updateApplication(id, {
+    const updated = this.updateApplication(id, {
       documents: updatedDocs,
       cmReviewedBy: cmName,
       cmReviewedAt: new Date().toLocaleString('en-IN'),
       cmRemarks: remarks || 'All 5 KYC proofs and live shop photo verified by Credit Manager.',
     });
+    this.syncToCreditManager(updated);
+    return updated;
   }
 
   // Branch Manager Action: Sanction Loan
   public sanctionByBranchManager(id: string, bmName: string, remarks?: string): BusinessLoanRecord {
-    return this.updateApplication(id, {
+    const updated = this.updateApplication(id, {
       status: 'BRANCH_VERIFIED',
       bmSanctionedBy: bmName,
       bmSanctionedAt: new Date().toLocaleString('en-IN'),
       bmRemarks: remarks || 'Sanction endorsed for branch disbursement.',
     });
+    this.syncToCreditManager(updated);
+    return updated;
+  }
+
+  // CRO Action: Resubmit Loan with corrections
+  public resubmitByCro(id: string, notes: string, croName: string): BusinessLoanRecord {
+    const loan = this.getLoanById(id);
+    if (!loan) throw new Error('Loan not found');
+    const updated = this.updateApplication(id, {
+      status: 'SUBMITTED_BY_CRO',
+      returnReason: undefined,
+      cmRemarks: `Resubmitted by CRO (${croName}): ${notes}`,
+      updatedAt: new Date().toLocaleString('en-IN'),
+    });
+    this.syncToCreditManager(updated);
+    return updated;
   }
 
   // Admin Action: Disburse with Bank Transfer UTR

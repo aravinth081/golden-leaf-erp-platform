@@ -157,14 +157,14 @@ export const FDReferralPage: React.FC = () => {
           {/* Optional notes */}
           <div>
             <label className="block text-xs font-bold text-[#475569] mb-1.5 uppercase tracking-wider">
-              Customer Deposit Interest / Notes (Optional)
+              Comments / Remarks (Optional)
             </label>
             <textarea
               rows={2}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="e.g. Interested in Rs. 3 Lakhs 2-year deposit; requested branch manager call tomorrow"
-              className="w-full px-3.5 py-2 rounded-xl border border-[#CBD5E1] text-xs text-[#0B1F3A] outline-none resize-none"
+              placeholder="e.g. Interested in ₹3 Lakhs FD for 2 years; requested branch manager call tomorrow"
+              className="w-full px-3.5 py-2 rounded-xl border border-[#CBD5E1] text-xs text-[#0B1F3A] outline-none resize-none focus:border-[#D4AF37]"
             />
           </div>
 

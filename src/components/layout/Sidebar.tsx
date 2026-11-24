@@ -64,6 +64,7 @@ const navItems: NavItem[] = [
     roles: ['admin'],
     subItems: [
       { path: '/admin/loans', label: 'Group Loans', roles: ['admin'] },
+      { path: '/admin/loans/rate-slabs', label: 'Group Loan Interest Slabs', roles: ['admin'] },
       { path: '/loans/gold', label: 'Gold Loans', roles: ['admin'] },
       { path: '/loans/business', label: 'Business Loans', roles: ['admin'] },
     ],

@@ -255,7 +255,197 @@ export function matchBranchId(filterBranchId?: string | null, appBranchId?: stri
 
 const STORAGE_KEY = 'glf_credit_manager_applicants_v5';
 
-export const DEFAULT_APPLICANTS: CreditApplicant[] = [];
+export const DEFAULT_APPLICANTS: CreditApplicant[] = [
+  {
+    id: 'APP-2024-001',
+    customerId: 'GLF-C-21975',
+    customerName: 'DEVI',
+    fatherOrSpouseName: 'RAMASAMY',
+    phone: '6380755445',
+    address: 'D NO 248 KOTTUPULLAMPALAYAM',
+    city: 'Chennai',
+    branchId: 'BR-01',
+    centerName: 'Center 01 - Anna Nagar',
+    groupName: 'GRP-002 (ANNAMALAIYAR SHG)',
+    occupation: 'Retail Shop',
+    monthlyIncome: 25000,
+    monthlyExpenses: 12000,
+    existingLoans: 0,
+    existingMonthlyEmi: 0,
+    creditScore: 720,
+    riskTier: 'Low Risk (Prime)',
+    loanAmount: 25000,
+    loanProduct: 'Weekly Micro-Loan (JLG)',
+    tenorWeeks: 25,
+    proposedEmi: 1250,
+    loanPurpose: 'Livestock / Business expansion',
+    customerVerificationStatus: 'Pending',
+    aadhaarNumber: '789456123012',
+    panNumber: 'ABCDE1234F',
+    customerPhotoUrl: '',
+    aadhaarFrontUrl: '',
+    panCardUrl: '',
+    kycStatus: 'Pending',
+    documentStatus: 'Pending',
+    recommendationStatus: 'Pending',
+    finalApprovalStatus: 'Pending',
+    branchManagerApprovalStatus: 'Not Reached',
+    appliedDate: '23-11-2026',
+    documents: [
+      { id: 'd1', name: 'Applicant Photo', type: 'photo', fileName: 'photo.jpg', status: 'verified' },
+      { id: 'd2', name: 'Aadhaar Card Front', type: 'aadhaar_front', fileName: 'aadhaar_front.jpg', status: 'verified' },
+      { id: 'd3', name: 'Aadhaar Card Back', type: 'aadhaar_back', fileName: 'aadhaar_back.jpg', status: 'verified' },
+      { id: 'd4', name: 'PAN Card', type: 'pan', fileName: 'pan.jpg', status: 'verified' },
+    ],
+    history: [
+      {
+        date: '23/11/2026',
+        event: 'Customer Registration Completed',
+        remarks: 'Enrolled via Customer Relationship Officer (CRO) - Saravanan',
+      },
+    ],
+  },
+  {
+    id: 'APP-2024-003',
+    customerId: 'GLF-C-37716',
+    customerName: 'GOMATHY',
+    fatherOrSpouseName: 'MURUGESAN',
+    phone: '9944890549',
+    address: '15 BHAG',
+    city: 'Chennai',
+    branchId: 'BR-01',
+    centerName: 'Main Center',
+    groupName: 'GRP-001 (DAVE HOUSE)',
+    occupation: 'Small Enterprise',
+    monthlyIncome: 30000,
+    monthlyExpenses: 14000,
+    existingLoans: 0,
+    existingMonthlyEmi: 0,
+    creditScore: 740,
+    riskTier: 'Low Risk (Prime)',
+    loanAmount: 35000,
+    loanProduct: 'Weekly Micro-Loan (JLG)',
+    tenorWeeks: 25,
+    proposedEmi: 1750,
+    loanPurpose: 'Textile stock purchase',
+    customerVerificationStatus: 'Pending',
+    aadhaarNumber: '987654321098',
+    panNumber: 'FGHIJ5678K',
+    kycStatus: 'Pending',
+    documentStatus: 'Pending',
+    recommendationStatus: 'Pending',
+    finalApprovalStatus: 'Pending',
+    branchManagerApprovalStatus: 'Not Reached',
+    appliedDate: '23-11-2026',
+    documents: [
+      { id: 'd1', name: 'Applicant Photo', type: 'photo', fileName: 'photo.jpg', status: 'verified' },
+      { id: 'd2', name: 'Aadhaar Card Front', type: 'aadhaar_front', fileName: 'aadhaar_front.jpg', status: 'verified' },
+      { id: 'd3', name: 'Aadhaar Card Back', type: 'aadhaar_back', fileName: 'aadhaar_back.jpg', status: 'verified' },
+      { id: 'd4', name: 'PAN Card', type: 'pan', fileName: 'pan.jpg', status: 'verified' },
+    ],
+    history: [
+      {
+        date: '23/11/2026',
+        event: 'Customer Registration Completed',
+        remarks: 'Enrolled via Customer Relationship Officer (CRO) - Saravanan',
+      },
+    ],
+  },
+  {
+    id: 'APP-2024-011',
+    customerId: 'GLF-C-71893',
+    customerName: 'MAILAVATHI',
+    fatherOrSpouseName: 'SELVAM',
+    phone: '9362011433',
+    address: 'NO 1 PERUMAL KOVIL STREET, KUGALUR',
+    city: 'Chennai',
+    branchId: 'BR-01',
+    centerName: 'Main Center',
+    groupName: 'GRP-002 (ANNAMALAIYAR SHG)',
+    occupation: 'Tailoring / Garments',
+    monthlyIncome: 28000,
+    monthlyExpenses: 13000,
+    existingLoans: 0,
+    existingMonthlyEmi: 0,
+    creditScore: 710,
+    riskTier: 'Low Risk (Prime)',
+    loanAmount: 25000,
+    loanProduct: 'Weekly Micro-Loan (JLG)',
+    tenorWeeks: 25,
+    proposedEmi: 1250,
+    loanPurpose: 'Sewing machinery & materials',
+    customerVerificationStatus: 'Pending',
+    aadhaarNumber: '891234567890',
+    panNumber: 'KLMNO9012P',
+    kycStatus: 'Pending',
+    documentStatus: 'Pending',
+    recommendationStatus: 'Pending',
+    finalApprovalStatus: 'Pending',
+    branchManagerApprovalStatus: 'Not Reached',
+    appliedDate: '23-11-2026',
+    documents: [
+      { id: 'd1', name: 'Applicant Photo', type: 'photo', fileName: 'photo.jpg', status: 'verified' },
+      { id: 'd2', name: 'Aadhaar Card Front', type: 'aadhaar_front', fileName: 'aadhaar_front.jpg', status: 'verified' },
+      { id: 'd3', name: 'Aadhaar Card Back', type: 'aadhaar_back', fileName: 'aadhaar_back.jpg', status: 'verified' },
+      { id: 'd4', name: 'PAN Card', type: 'pan', fileName: 'pan.jpg', status: 'verified' },
+    ],
+    history: [
+      {
+        date: '23/11/2026',
+        event: 'Customer Registration Completed',
+        remarks: 'Enrolled via Customer Relationship Officer (CRO) - Saravanan',
+      },
+    ],
+  },
+  {
+    id: 'APP-2024-020',
+    customerId: 'GLF-BL-2026-0003',
+    customerName: 'manikandan',
+    fatherOrSpouseName: 'SAGADEVAN',
+    phone: '7887756452',
+    alternatePhone: '8768465456',
+    address: '15 ERODE MAIN ROAD KAVINDAPADI, 638116',
+    city: 'GOBI MAIN BRANCH',
+    branchId: 'BR-6805',
+    centerName: 'Business Loan Division',
+    groupName: 'velan grocery (Retail / Kirana Shop)',
+    occupation: 'Retail / Kirana Shop',
+    monthlyIncome: 50000,
+    monthlyExpenses: 20000,
+    existingLoans: 0,
+    existingMonthlyEmi: 0,
+    creditScore: 735,
+    riskTier: 'Low Risk (Prime)',
+    loanAmount: 25000,
+    loanProduct: 'Business Loan (Daily)',
+    tenorWeeks: 14,
+    proposedEmi: 275,
+    loanPurpose: 'velan grocery - Owned Shop',
+    customerVerificationStatus: 'Pending',
+    aadhaarNumber: '789786789679',
+    panNumber: 'GGZPK7845F',
+    kycStatus: 'Pending',
+    documentStatus: 'Pending',
+    recommendationStatus: 'Pending',
+    finalApprovalStatus: 'Pending',
+    branchManagerApprovalStatus: 'Not Reached',
+    appliedDate: '23-11-2026',
+    documents: [
+      { id: 'DOC-1', name: 'Applicant & Guarantor Photos', type: 'photo', fileName: 'applicant_photos.jpg', status: 'verified' },
+      { id: 'DOC-2', name: 'Personal KYC Proofs (Aadhaar & PAN)', type: 'aadhaar', fileName: 'personal_kyc.pdf', status: 'verified' },
+      { id: 'DOC-3', name: 'Mandatory Live Shop Photo with Owner', type: 'address_proof', fileName: 'shop_photo.jpg', status: 'verified' },
+      { id: 'DOC-4', name: 'Business Proof (MSME/GST/License)', type: 'business_proof', fileName: 'business_proof.pdf', status: 'verified' },
+      { id: 'DOC-5', name: 'Banking Proof (Passbook/Statement)', type: 'bank_statement', fileName: 'bank_proof.pdf', status: 'verified' },
+    ],
+    history: [
+      {
+        date: '23/11/2026',
+        event: 'Business Loan Application Submitted',
+        remarks: 'Submitted by SARAVANAN (GLF007) - ₹25,000',
+      },
+    ],
+  },
+];
 
 class CreditManagerService {
   private applicants: CreditApplicant[] = [];
@@ -269,12 +459,15 @@ class CreditManagerService {
       const data = localStorage.getItem(STORAGE_KEY);
       if (data) {
         const parsed: CreditApplicant[] = JSON.parse(data);
-        this.applicants = Array.isArray(parsed) ? parsed : [];
+        this.applicants = Array.isArray(parsed) && parsed.length > 0 ? this.deduplicateApplicants(parsed) : [...DEFAULT_APPLICANTS];
       } else {
-        this.applicants = [];
+        this.applicants = [...DEFAULT_APPLICANTS];
       }
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(this.applicants));
+      } catch {}
     } catch {
-      this.applicants = [];
+      this.applicants = [...DEFAULT_APPLICANTS];
     }
 
     if (isSupabaseConfigured() && supabase) {
@@ -287,9 +480,9 @@ class CreditManagerService {
             .eq('is_deleted', false);
           if (!error && Array.isArray(rows) && rows.length > 0) {
             const cloudApplicants = rows.map((r: any) => r.data).filter(Boolean);
-            this.applicants = cloudApplicants;
+            this.applicants = this.deduplicateApplicants(cloudApplicants);
             try {
-              localStorage.setItem(STORAGE_KEY, JSON.stringify(cloudApplicants));
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(this.applicants));
             } catch {}
             this.notifyListeners();
           }
@@ -298,6 +491,33 @@ class CreditManagerService {
         }
       })();
     }
+  }
+
+  // Ensures strict 1 customer = 1 applicant entry
+  public deduplicateApplicants(applicants: CreditApplicant[]): CreditApplicant[] {
+    const seenCustIds = new Set<string>();
+    const seenAadhaar = new Set<string>();
+    const deduplicated: CreditApplicant[] = [];
+
+    for (const app of applicants) {
+      const cId = (app.customerId || '').trim().toUpperCase();
+      const aId = app.aadhaarNumber ? app.aadhaarNumber.replace(/\D/g, '') : '';
+
+      // Skip duplicate customerId
+      if (cId && seenCustIds.has(cId)) {
+        continue;
+      }
+      // Skip duplicate 12-digit Aadhaar UID
+      if (aId && aId.length === 12 && seenAadhaar.has(aId)) {
+        continue;
+      }
+
+      if (cId) seenCustIds.add(cId);
+      if (aId && aId.length === 12) seenAadhaar.add(aId);
+      deduplicated.push(app);
+    }
+
+    return deduplicated;
   }
 
   private listeners: Set<() => void> = new Set();
@@ -324,7 +544,8 @@ class CreditManagerService {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
-        this.applicants = JSON.parse(stored);
+        const parsed = JSON.parse(stored);
+        this.applicants = Array.isArray(parsed) ? this.deduplicateApplicants(parsed) : [];
         this.notifyListeners();
       }
     } catch (e) {
@@ -333,6 +554,7 @@ class CreditManagerService {
   }
 
   private saveState() {
+    this.applicants = this.deduplicateApplicants(this.applicants);
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.applicants));
       this.notifyListeners();
@@ -354,7 +576,7 @@ class CreditManagerService {
   }
 
   public getApplicants(): CreditApplicant[] {
-    return [...this.applicants];
+    return this.deduplicateApplicants([...this.applicants]);
   }
 
   public getApplicantById(id: string): CreditApplicant | undefined {
@@ -576,8 +798,63 @@ class CreditManagerService {
     return this.getApplicantById(id)!;
   }
 
+  // Update applicant profile fields (for corrections & edits)
+  public updateApplicant(id: string, updates: Partial<CreditApplicant>): CreditApplicant {
+    const cleanId = id.trim();
+    this.applicants = this.applicants.map(app => {
+      if (app.id === cleanId || app.customerId === cleanId) {
+        return {
+          ...app,
+          ...updates,
+          id: app.id,
+          customerId: app.customerId,
+          history: [
+            {
+              date: new Date().toLocaleDateString('en-GB').replace(/\//g, '-'),
+              event: 'Applicant Details Corrected',
+              remarks: 'Applicant profile details modified and saved.',
+            },
+            ...(app.history || []),
+          ],
+        };
+      }
+      return app;
+    });
+    this.saveState();
+    return this.getApplicantById(cleanId)!;
+  }
+
   // Add new applicant dynamically from customer registration / loan creation
   public addApplicant(applicantData: Partial<CreditApplicant> & { customerName: string; customerId: string }): CreditApplicant {
+    const cleanAadhaar = applicantData.aadhaarNumber ? applicantData.aadhaarNumber.replace(/\D/g, '') : '';
+    const cleanCustId = (applicantData.customerId || '').trim().toUpperCase();
+
+    // Prevent duplicate applicant: Check if customerId or Aadhaar UID already exists
+    const existingIndex = this.applicants.findIndex(a => {
+      const aCustId = (a.customerId || '').trim().toUpperCase();
+      const aAadhaar = a.aadhaarNumber ? a.aadhaarNumber.replace(/\D/g, '') : '';
+      if (cleanCustId && aCustId === cleanCustId) return true;
+      if (cleanAadhaar && cleanAadhaar.length === 12 && aAadhaar === cleanAadhaar) return true;
+      return false;
+    });
+
+    if (existingIndex !== -1) {
+      // Customer already exists! Merge/update existing record rather than creating duplicate
+      const existing = this.applicants[existingIndex];
+      const updatedApplicant: CreditApplicant = {
+        ...existing,
+        ...applicantData,
+        id: existing.id, // Preserve original APP-ID
+        customerId: existing.customerId,
+        customerVerificationStatus: existing.customerVerificationStatus !== 'Pending' ? existing.customerVerificationStatus : (applicantData.customerVerificationStatus || existing.customerVerificationStatus),
+        kycStatus: existing.kycStatus !== 'Pending' ? existing.kycStatus : (applicantData.kycStatus || existing.kycStatus),
+      };
+      this.applicants[existingIndex] = updatedApplicant;
+      this.applicants = this.deduplicateApplicants(this.applicants);
+      this.saveState();
+      return updatedApplicant;
+    }
+
     const newId = `APP-2024-${String(this.applicants.length + 1).padStart(3, '0')}`;
     const newApplicant: CreditApplicant = {
       id: newId,
@@ -630,6 +907,7 @@ class CreditManagerService {
     };
 
     this.applicants.unshift(newApplicant);
+    this.applicants = this.deduplicateApplicants(this.applicants);
     this.saveState();
     return newApplicant;
   }

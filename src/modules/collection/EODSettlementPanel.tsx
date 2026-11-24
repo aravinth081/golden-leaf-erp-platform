@@ -58,6 +58,17 @@ import {
 } from '../../utils/pdfGenerator';
 import { getMonitoredCollections } from '../../services/monitoringDataService';
 
+const EMPTY_DENOMINATIONS: DenominationBreakdown = {
+  notes2000: 0,
+  notes500: 0,
+  notes200: 0,
+  notes100: 0,
+  notes50: 0,
+  notes20: 0,
+  notes10: 0,
+  coins: 0,
+};
+
 export const EODSettlementPanel: React.FC = () => {
   const user = useAuthStore((s) => s.user);
   const addToast = useUIStore((s) => s.addToast);
@@ -84,17 +95,8 @@ export const EODSettlementPanel: React.FC = () => {
     isCRO ? 'cro_entry' : isBranchManager ? 'bm_verifications' : 'admin_audit'
   );
 
-  // CRO Denomination Form State (Prominently includes 500, 2000, 100, 50 as requested)
-  const [denominations, setDenominations] = useState<DenominationBreakdown>({
-    notes2000: 0,
-    notes500: 0,
-    notes200: 0,
-    notes100: 0,
-    notes50: 0,
-    notes20: 0,
-    notes10: 0,
-    coins: 0,
-  });
+  // CRO Denomination Form State (Prominently includes 500, 200, 100, 50 as requested)
+  const [denominations, setDenominations] = useState<DenominationBreakdown>({ ...EMPTY_DENOMINATIONS });
 
   const [centersCovered, setCentersCovered] = useState('');
   const [upiCount, setUpiCount] = useState<number>(0);
@@ -259,8 +261,12 @@ export const EODSettlementPanel: React.FC = () => {
         message: 'Cash note counts submitted. Awaiting Branch Manager physical verification & safe deposit.',
       });
 
-      // Reset form
+      // Reset form denominations & fields to 0
+      setDenominations({ ...EMPTY_DENOMINATIONS });
       setCroRemarks('');
+      setCentersCovered('');
+      setUpiCount(0);
+      setUpiAmount(0);
     } catch (err) {
       console.error('Failed to submit EOD:', err);
       addToast({
@@ -627,7 +633,7 @@ export const EODSettlementPanel: React.FC = () => {
               </div>
             </div>
 
-            {/* PRIMARY REQUIRED DENOMINATIONS: ₹500, ₹100, ₹50 */}
+            {/* PRIMARY REQUIRED DENOMINATIONS: ₹500, ₹200, ₹100 */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-4 mt-4 sm:mt-6">
               {/* ₹500 Notes Card */}
               <div className="p-3.5 sm:p-4 rounded-2xl border-2 border-emerald-300 bg-emerald-50/40 hover:bg-emerald-50/70 transition-all flex flex-col justify-between shadow-2xs">
@@ -676,6 +682,61 @@ export const EODSettlementPanel: React.FC = () => {
                         type="button"
                         onClick={() => updateNoteCount('notes500', step)}
                         className="flex-1 py-1 rounded-lg bg-white/90 hover:bg-white text-[11px] font-bold text-emerald-800 border border-emerald-200 shadow-2xs transition-all active:scale-95 cursor-pointer touch-target min-h-[30px]"
+                      >
+                        +{step}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* ₹200 Notes Card */}
+              <div className="p-3.5 sm:p-4 rounded-2xl border-2 border-orange-300 bg-orange-50/40 hover:bg-orange-50/70 transition-all flex flex-col justify-between shadow-2xs">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="px-2.5 py-1 rounded-lg bg-orange-600 text-white font-extrabold text-xs font-mono tracking-wide shrink-0">
+                    ₹200 NOTE
+                  </span>
+                  <span className="text-xs font-bold text-orange-900 font-mono text-right truncate">
+                    = ₹{((denominations.notes200 || 0) * 200).toLocaleString('en-IN')}
+                  </span>
+                </div>
+                <div className="mt-3">
+                  <label className="text-[11px] font-bold text-slate-600 block mb-1.5">
+                    Number of ₹200 Notes
+                  </label>
+                  <div className="flex items-center gap-1.5 sm:gap-2 w-full">
+                    <button
+                      type="button"
+                      onClick={() => updateNoteCount('notes200', -1)}
+                      className="w-8 h-8 sm:w-9 sm:h-9 shrink-0 rounded-xl bg-white border border-slate-300 text-slate-700 flex items-center justify-center font-bold hover:bg-slate-100 active:scale-95 transition-all cursor-pointer touch-target min-w-[32px]"
+                      title="Decrease ₹200 notes"
+                    >
+                      <Minus size={14} />
+                    </button>
+                    <input
+                      type="number"
+                      min="0"
+                      value={denominations.notes200 || ''}
+                      onChange={(e) => setNoteDirect('notes200', e.target.value)}
+                      placeholder="0"
+                      className="flex-1 min-w-0 h-9 px-2 sm:px-3 rounded-xl bg-white border border-slate-300 text-center font-extrabold text-slate-900 text-sm focus:outline-none focus:border-orange-600 shadow-2xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => updateNoteCount('notes200', 1)}
+                      className="w-8 h-8 sm:w-9 sm:h-9 shrink-0 rounded-xl bg-white border border-slate-300 text-slate-700 flex items-center justify-center font-bold hover:bg-slate-100 active:scale-95 transition-all cursor-pointer touch-target min-w-[32px]"
+                      title="Increase ₹200 notes"
+                    >
+                      <Plus size={14} />
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-2.5">
+                    {[5, 10, 20].map((step) => (
+                      <button
+                        key={step}
+                        type="button"
+                        onClick={() => updateNoteCount('notes200', step)}
+                        className="flex-1 py-1 rounded-lg bg-white/90 hover:bg-white text-[11px] font-bold text-orange-800 border border-orange-200 shadow-2xs transition-all active:scale-95 cursor-pointer touch-target min-h-[30px]"
                       >
                         +{step}
                       </button>
@@ -738,81 +799,26 @@ export const EODSettlementPanel: React.FC = () => {
                   </div>
                 </div>
               </div>
-
-              {/* ₹50 Notes Card */}
-              <div className="p-3.5 sm:p-4 rounded-2xl border-2 border-teal-300 bg-teal-50/40 hover:bg-teal-50/70 transition-all flex flex-col justify-between shadow-2xs">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="px-2.5 py-1 rounded-lg bg-teal-700 text-white font-extrabold text-xs font-mono tracking-wide shrink-0">
-                    ₹50 NOTE
-                  </span>
-                  <span className="text-xs font-bold text-teal-900 font-mono text-right truncate">
-                    = ₹{((denominations.notes50 || 0) * 50).toLocaleString('en-IN')}
-                  </span>
-                </div>
-                <div className="mt-3">
-                  <label className="text-[11px] font-bold text-slate-600 block mb-1.5">
-                    Number of ₹50 Notes
-                  </label>
-                  <div className="flex items-center gap-1.5 sm:gap-2 w-full">
-                    <button
-                      type="button"
-                      onClick={() => updateNoteCount('notes50', -1)}
-                      className="w-8 h-8 sm:w-9 sm:h-9 shrink-0 rounded-xl bg-white border border-slate-300 text-slate-700 flex items-center justify-center font-bold hover:bg-slate-100 active:scale-95 transition-all cursor-pointer touch-target min-w-[32px]"
-                      title="Decrease ₹50 notes"
-                    >
-                      <Minus size={14} />
-                    </button>
-                    <input
-                      type="number"
-                      min="0"
-                      value={denominations.notes50 || ''}
-                      onChange={(e) => setNoteDirect('notes50', e.target.value)}
-                      placeholder="0"
-                      className="flex-1 min-w-0 h-9 px-2 sm:px-3 rounded-xl bg-white border border-slate-300 text-center font-extrabold text-slate-900 text-sm focus:outline-none focus:border-teal-600 shadow-2xs"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => updateNoteCount('notes50', 1)}
-                      className="w-8 h-8 sm:w-9 sm:h-9 shrink-0 rounded-xl bg-white border border-slate-300 text-slate-700 flex items-center justify-center font-bold hover:bg-slate-100 active:scale-95 transition-all cursor-pointer touch-target min-w-[32px]"
-                      title="Increase ₹50 notes"
-                    >
-                      <Plus size={14} />
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-1.5 mt-2.5">
-                    {[5, 10, 20].map((step) => (
-                      <button
-                        key={step}
-                        type="button"
-                        onClick={() => updateNoteCount('notes50', step)}
-                        className="flex-1 py-1 rounded-lg bg-white/90 hover:bg-white text-[11px] font-bold text-teal-800 border border-teal-200 shadow-2xs transition-all active:scale-95 cursor-pointer touch-target min-h-[30px]"
-                      >
-                        +{step}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
             </div>
 
-            {/* SECONDARY DENOMINATIONS: ₹200, ₹20, ₹10, COINS */}
+            {/* SECONDARY DENOMINATIONS: ₹50, ₹20, ₹10, COINS */}
             <div className="mt-4 pt-4 border-t border-slate-200/80">
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-3">
-                Other Currency Denominations (₹200, ₹20, ₹10, Coins)
+                Other Currency Denominations (₹50, ₹20, ₹10, Coins)
               </span>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {/* ₹200 */}
+                {/* ₹50 */}
                 <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
                   <div className="flex items-center justify-between text-xs font-bold text-slate-700 mb-1">
-                    <span>₹200 Note</span>
-                    <span className="font-mono text-orange-700">₹{((denominations.notes200 || 0) * 200).toLocaleString()}</span>
+                    <span>₹50 Note</span>
+                    <span className="font-mono text-teal-700">₹{((denominations.notes50 || 0) * 50).toLocaleString()}</span>
                   </div>
                   <input
                     type="number"
                     min="0"
-                    value={denominations.notes200 || ''}
-                    onChange={(e) => setNoteDirect('notes200', e.target.value)}
+                    value={denominations.notes50 || ''}
+                    onChange={(e) => setNoteDirect('notes50', e.target.value)}
                     placeholder="Count"
                     className="w-full min-w-0 h-8 px-2.5 rounded-lg bg-white border border-slate-300 text-xs font-bold text-slate-800 focus:outline-none focus:border-[#D4AF37]"
                   />
@@ -936,7 +942,13 @@ export const EODSettlementPanel: React.FC = () => {
               <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => setDenominations({ notes2000: 0, notes500: 0, notes200: 0, notes100: 0, notes50: 0, notes20: 0, notes10: 0, coins: 0 })}
+                  onClick={() => {
+                    setDenominations({ ...EMPTY_DENOMINATIONS });
+                    setCroRemarks('');
+                    setCentersCovered('');
+                    setUpiCount(0);
+                    setUpiAmount(0);
+                  }}
                   className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-600 text-xs font-bold hover:bg-slate-100 transition-colors cursor-pointer"
                 >
                   Reset Counts

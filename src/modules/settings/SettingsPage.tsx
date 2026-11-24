@@ -220,13 +220,22 @@ export const SettingsPage: React.FC = () => {
                       <h3 className="text-base font-bold text-[#0B1F3A]">Standard Loan Products</h3>
                       <p className="text-xs text-gray-500 mt-0.5">Define pre-configured loan amounts, weekly EMI schedules, and interest rates</p>
                     </div>
-                    <button
-                      onClick={() => setShowAddPlanModal(true)}
-                      className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#0B1F3A] hover:bg-[#15345E] text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
-                    >
-                      <Plus size={14} className="text-[#D4AF37]" />
-                      Add New Loan Plan
-                    </button>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        onClick={() => navigate('/admin/loans/rate-slabs')}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-[#D4AF37] text-xs font-bold text-[#0B1F3A] hover:bg-amber-50/50 transition-all shadow-sm cursor-pointer"
+                      >
+                        <Sliders size={14} className="text-[#D4AF37]" />
+                        Group Loan Rate Slabs & Fees
+                      </button>
+                      <button
+                        onClick={() => setShowAddPlanModal(true)}
+                        className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#0B1F3A] hover:bg-[#15345E] text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
+                      >
+                        <Plus size={14} className="text-[#D4AF37]" />
+                        Add New Loan Plan
+                      </button>
+                    </div>
                   </div>
 
                   <div className="overflow-x-auto">

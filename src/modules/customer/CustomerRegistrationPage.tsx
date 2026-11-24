@@ -11,7 +11,7 @@ import {
   ArrowRight, ArrowLeft, CheckCircle2, User, Shield, Users,
   UploadCloud, FileText, Check, RotateCcw, Save, Lock, AlertCircle,
   CreditCard, Landmark, DollarSign, Calculator, Eye, Trash2, CheckCircle,
-  ChevronDown, Loader2, FileSpreadsheet, FileCheck2, Paperclip
+  ChevronDown, Loader2, FileSpreadsheet, FileCheck2, Paperclip, Home
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useUIStore, useAuthStore } from '../../store';
@@ -20,6 +20,10 @@ import { creditManagerService } from '../../services/creditManagerService';
 import { getCenters } from '../../services/centerService';
 import { getBranchCollectionGroups } from '../../services/monitoringDataService';
 import { uploadCustomerPhoto, uploadKYCDocument, uploadImage } from '../../services/cloudinary';
+import { DobInput, Modal } from '../../components/ui';
+import { calculateAge } from '../../utils/dateUtils';
+import { calculateGroupLoanFees, getGroupLoanSlabForWeeks } from '../../services/groupLoanSlabService';
+import { checkKycDuplicates, type DuplicateCheckResult } from '../../services/kycDuplicateCheckService';
 
 interface StepDef {
   id: string;
@@ -37,6 +41,16 @@ const steps: StepDef[] = [
 ];
 
 const QUICK_AMOUNTS = [15000, 20000, 25000, 30000, 40000, 50000, 75000, 100000];
+
+export const TENOR_PRESETS = [
+  { value: '15', label: '15 Weeks (~3.5 Months)' },
+  { value: '18', label: '18 Weeks (~4.2 Months)' },
+  { value: '20', label: '20 Weeks (~4.5 Months)' },
+  { value: '25', label: '25 Weeks (~6 Months)' },
+  { value: '28', label: '28 Weeks (~6.5 Months)' },
+  { value: '30', label: '30 Weeks (~7 Months)' },
+  { value: '50', label: '50 Weeks (~12 Months)' },
+];
 
 export const OCCUPATION_OPTIONS = [
   { value: 'Agri & Dairy Livestock', label: 'Agri & Dairy Livestock', icon: '🌾' },
@@ -144,11 +158,31 @@ const CustomerRegistrationPage: React.FC = () => {
   const navigate = useNavigate();
   const { addToast } = useUIStore();
   const currentUser = useAuthStore((s) => s.user);
+  const rawRole = (currentUser?.customClaims?.role || (currentUser as any)?.role || 'cro').toString().toLowerCase();
+  const userRole = rawRole === 'bm' ? 'branch_manager' : rawRole === 'cm' ? 'credit_manager' : rawRole;
+  const isCRE = userRole === 'cro' || userRole === 'collection_agent' || userRole === 'agent' || userRole === 'field_officer';
+  const canFixInterest = userRole === 'admin' || userRole === 'branch_manager' || userRole === 'credit_manager' || userRole === 'area_manager';
+  const canViewCustomers = userRole === 'admin' || userRole === 'branch_manager' || userRole === 'credit_manager' || userRole === 'area_manager';
 
+  interface EnrolledSuccessDetails {
+    clientId: string;
+    fullName: string;
+    centerName: string;
+    groupId: string;
+    loanAmount: number;
+    weeklyEMI: number;
+    tenorWeeks: number;
+    repaymentFrequency: string;
+  }
+
+  const [enrolledSuccessData, setEnrolledSuccessData] = useState<EnrolledSuccessDetails | null>(null);
+  const [duplicateKycMatch, setDuplicateKycMatch] = useState<DuplicateCheckResult | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
   const [maxCompletedStep, setMaxCompletedStep] = useState(-1);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRegisteredCompleted, setIsRegisteredCompleted] = useState(false);
+  const submitLockRef = useRef(false);
 
   // Combobox states for Dropdown + Manual Entry
   const [isOccupationOpen, setIsOccupationOpen] = useState(false);
@@ -160,6 +194,7 @@ const CustomerRegistrationPage: React.FC = () => {
   const [isGuarantorRelationOpen, setIsGuarantorRelationOpen] = useState(false);
   const [isLoanPurposeOpen, setIsLoanPurposeOpen] = useState(false);
   const [isLoanProductOpen, setIsLoanProductOpen] = useState(false);
+  const [isCustomTenor, setIsCustomTenor] = useState(false);
 
   const occupationRef = useRef<HTMLDivElement>(null);
   const houseRef = useRef<HTMLDivElement>(null);
@@ -284,6 +319,7 @@ const CustomerRegistrationPage: React.FC = () => {
     houseOwnership: '',
     yearsInResidence: '',
     address: '',
+    addressLine2: '',
     landmark: '',
     city: '',
     district: '',
@@ -335,15 +371,12 @@ const CustomerRegistrationPage: React.FC = () => {
   });
 
   // Calculate Age from DOB
-  const handleDobChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDobChange = (e: { target: { name: string; value: string } } | React.ChangeEvent<HTMLInputElement>) => {
     const dobVal = e.target.value;
     let computedAge = formData.age;
     if (dobVal) {
-      const birthDate = new Date(dobVal);
-      const diff = Date.now() - birthDate.getTime();
-      const ageDate = new Date(diff);
-      const calc = Math.abs(ageDate.getUTCFullYear() - 1970);
-      if (!isNaN(calc) && calc > 0 && calc < 100) {
+      const calc = calculateAge(dobVal);
+      if (!isNaN(calc) && calc > 0 && calc < 120) {
         computedAge = String(calc);
       }
     }
@@ -357,8 +390,30 @@ const CustomerRegistrationPage: React.FC = () => {
     if (typeof val === 'string') {
       if (name === 'aadhaarNumber') {
         val = val.replace(/\D/g, '').slice(0, 12);
+        if (val.length === 12) {
+          const dup = checkKycDuplicates({ aadhaarNumber: val, currentClientId: formData.clientId });
+          if (dup.isDuplicate) {
+            setDuplicateKycMatch(dup);
+            setErrors(prev => ({ ...prev, aadhaarNumber: dup.message || 'Aadhaar UID is already registered!' }));
+          } else {
+            setDuplicateKycMatch(null);
+          }
+        } else {
+          setDuplicateKycMatch(null);
+        }
       } else if (name === 'panNumber') {
         val = val.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
+        if (val.length === 10) {
+          const dup = checkKycDuplicates({ panNumber: val, currentClientId: formData.clientId });
+          if (dup.isDuplicate) {
+            setDuplicateKycMatch(dup);
+            setErrors(prev => ({ ...prev, panNumber: dup.message || 'PAN Card is already registered!' }));
+          } else {
+            setDuplicateKycMatch(null);
+          }
+        } else {
+          setDuplicateKycMatch(null);
+        }
       } else if (name === 'phone' || name === 'nomineePhone' || name === 'guarantorPhone') {
         val = val.replace(/\D/g, '').slice(0, 10);
       } else if (name === 'pincode') {
@@ -563,28 +618,47 @@ const CustomerRegistrationPage: React.FC = () => {
     }
   };
 
-  // Dynamic EMI Calculation
+  // Dynamic Loan, EMI & Fee Slabs Calculation
   const loanCalculations = useMemo(() => {
     const P = Number(formData.requestedAmount) || 0;
     const weeks = Number(formData.tenorWeeks) || 0;
-    const annualRate = Number(formData.interestRateAnnual) || 18;
-    
-    // Flat / Weekly interest computation
-    const totalInterest = (weeks > 0 && annualRate > 0) ? Math.round((P * (annualRate / 100) * (weeks / 52))) : 0;
-    const totalPayable = P + totalInterest;
-    const weeklyEMI = weeks > 0 ? Math.ceil(totalPayable / weeks) : 0;
-    const weeklyPrincipal = weeks > 0 ? Math.round(P / weeks) : 0;
-    const weeklyInterest = weeks > 0 ? Math.round(totalInterest / weeks) : 0;
+    // For CRE: interest rate is strictly derived from policy slab (cannot override)
+    // For Admin/BM/CM: allow custom rate override if entered in formData.interestRateAnnual
+    const customRate = isCRE ? undefined : formData.interestRateAnnual;
+    return calculateGroupLoanFees(P, weeks, customRate);
+  }, [formData.requestedAmount, formData.tenorWeeks, formData.interestRateAnnual, isCRE]);
 
-    return {
-      principal: P,
-      totalInterest,
-      totalPayable,
-      weeklyEMI,
-      weeklyPrincipal,
-      weeklyInterest,
+  // Automatically adjust interest rate based on loan tenor weeks according to Admin Slabs
+  useEffect(() => {
+    const weeks = Number(formData.tenorWeeks);
+    if (weeks > 0) {
+      const slab = getGroupLoanSlabForWeeks(weeks);
+      if (isCRE || !formData.interestRateAnnual) {
+        setFormData(prev => ({
+          ...prev,
+          interestRateAnnual: String(slab.interestRate),
+        }));
+      }
+    }
+  }, [formData.tenorWeeks, isCRE]);
+
+  // Real-time listener for slab changes configured in Admin console
+  useEffect(() => {
+    const handleSlabsUpdated = () => {
+      const weeks = Number(formData.tenorWeeks);
+      if (weeks > 0) {
+        const slab = getGroupLoanSlabForWeeks(weeks);
+        if (isCRE) {
+          setFormData(prev => ({
+            ...prev,
+            interestRateAnnual: String(slab.interestRate),
+          }));
+        }
+      }
     };
-  }, [formData.requestedAmount, formData.tenorWeeks, formData.interestRateAnnual]);
+    window.addEventListener('glf-group-loan-slabs-updated', handleSlabsUpdated);
+    return () => window.removeEventListener('glf-group-loan-slabs-updated', handleSlabsUpdated);
+  }, [formData.tenorWeeks, isCRE]);
 
   // Step Validation Logic
   const validateStep = (stepIdx: number): boolean => {
@@ -629,6 +703,23 @@ const CustomerRegistrationPage: React.FC = () => {
       if (formData.panNumber && formData.panNumber.trim().length !== 10) {
         newErrors.panNumber = 'PAN Card must be exactly 10 alphanumeric characters';
       }
+
+      // Strict KYC Duplicate Check: Do not allow already registered KYC numbers
+      const dupCheck = checkKycDuplicates({
+        aadhaarNumber: formData.aadhaarNumber,
+        panNumber: formData.panNumber,
+        currentClientId: formData.clientId,
+      });
+
+      if (dupCheck.isDuplicate) {
+        setDuplicateKycMatch(dupCheck);
+        if (dupCheck.matchedField === 'aadhaar') {
+          newErrors.aadhaarNumber = `Already registered! Linked to ${dupCheck.existingRecord?.customerName} (${dupCheck.existingRecord?.customerId}).`;
+        } else if (dupCheck.matchedField === 'pan') {
+          newErrors.panNumber = `Already registered! Linked to ${dupCheck.existingRecord?.customerName} (${dupCheck.existingRecord?.customerId}).`;
+        }
+      }
+
       if (!formData.accountNumber.trim() || formData.accountNumber.trim().length < 8) {
         newErrors.accountNumber = 'Valid Bank Account Number is required';
       }
@@ -744,7 +835,7 @@ const CustomerRegistrationPage: React.FC = () => {
         clientId: `GLF-C-${Math.floor(10000 + Math.random() * 90000)}`,
         fullName: '', guardianName: '', phone: '', alternatePhone: '', email: '', dob: '', age: '',
         gender: '', maritalStatus: '', occupation: '', monthlyIncome: '',
-        monthlyExpenses: '', houseOwnership: '', yearsInResidence: '', address: '',
+        monthlyExpenses: '', houseOwnership: '', yearsInResidence: '', address: '', addressLine2: '',
         landmark: '', city: '', district: '', state: '', pincode: '',
         branchId: '', centerName: '', groupId: '',
         aadhaarNumber: '', panNumber: '', voterId: '', rationCard: '', bankName: '',
@@ -772,16 +863,93 @@ const CustomerRegistrationPage: React.FC = () => {
       setOtherDocTitle('');
       setOtherPreview(null);
       setErrors({});
+      setIsCustomTenor(false);
       setMaxCompletedStep(-1);
       setCurrentStep(0);
+      setDuplicateKycMatch(null);
+      setIsRegisteredCompleted(false);
+      submitLockRef.current = false;
       addToast({ type: 'info', title: 'Form Reset', message: 'All inputs have been cleared.' });
     }
+  };
+
+  // Clean reset for next customer registration process (generates new ID and resets to Step 1)
+  const resetForNextCustomer = () => {
+    setFormData({
+      clientId: `GLF-C-${Math.floor(10000 + Math.random() * 90000)}`,
+      fullName: '', guardianName: '', phone: '', alternatePhone: '', email: '', dob: '', age: '',
+      gender: '', maritalStatus: '', occupation: '', monthlyIncome: '',
+      monthlyExpenses: '', houseOwnership: '', yearsInResidence: '', address: '', addressLine2: '',
+      landmark: '', city: '', district: '', state: '', pincode: '',
+      branchId: '', centerName: '', groupId: '',
+      aadhaarNumber: '', panNumber: '', voterId: '', rationCard: '', bankName: '',
+      accountNumber: '', confirmAccountNumber: '', ifscCode: '', accountHolderName: '',
+      nomineeName: '', nomineeRelation: '', nomineePhone: '', nomineeAadhaar: '', nomineeAge: '',
+      nomineeSameAddress: false, nomineeAddress: '', guarantorName: '', guarantorRelation: '',
+      guarantorPhone: '', guarantorAadhaar: '', guarantorIncome: '', groupGuaranteeConsent: false,
+      loanProduct: '', requestedAmount: '', tenorWeeks: '', repaymentFrequency: '',
+      interestRateAnnual: '', loanPurpose: '',
+      physicalVisitDone: false, originalDocsVerified: false, groupConsentVerified: false,
+      officerRemarks: '',
+    });
+    setPhotoPreview(null);
+    setAadhaarDocName(null);
+    setAadhaarPreview(null);
+    setPanDocName(null);
+    setPanPreview(null);
+    setVoterDocName(null);
+    setVoterPreview(null);
+    setSmartCardDocName(null);
+    setSmartCardPreview(null);
+    setPassbookDocName(null);
+    setPassbookPreview(null);
+    setOtherDocName(null);
+    setOtherDocTitle('');
+    setOtherPreview(null);
+    setErrors({});
+    setIsCustomTenor(false);
+    setMaxCompletedStep(-1);
+    setCurrentStep(0);
+    setEnrolledSuccessData(null);
+    setDuplicateKycMatch(null);
+    setIsRegisteredCompleted(false);
+    submitLockRef.current = false;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    addToast({
+      type: 'info',
+      title: 'Ready for Next Customer',
+      message: 'Registration form is fresh and ready for the next applicant.',
+    });
   };
 
   // Submit and Store Registration
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitLockRef.current || isSubmitting || isRegisteredCompleted) {
+      return;
+    }
+    submitLockRef.current = true;
+
     if (!validateStep(0) || !validateStep(1) || !validateStep(2) || !validateStep(3) || !validateStep(4)) {
+      submitLockRef.current = false;
+      return;
+    }
+
+    // Strict KYC duplicate validation: prevent duplicate customer entries
+    const dupCheck = checkKycDuplicates({
+      aadhaarNumber: formData.aadhaarNumber,
+      panNumber: formData.panNumber,
+      currentClientId: formData.clientId,
+    });
+
+    if (dupCheck.isDuplicate) {
+      submitLockRef.current = false;
+      setDuplicateKycMatch(dupCheck);
+      addToast({
+        type: 'error',
+        title: 'Customer Already Registered!',
+        message: dupCheck.message || 'This customer KYC is already registered. Duplicate entries are blocked.',
+      });
       return;
     }
 
@@ -821,6 +989,11 @@ const CustomerRegistrationPage: React.FC = () => {
 
       await createClientEnrollment(kycData, {
         ...formData,
+        interestRateAnnual: loanCalculations.interestRate,
+        insuranceFee: loanCalculations.insuranceFee,
+        documentFee: loanCalculations.documentFee,
+        totalDeductions: loanCalculations.totalDeductions,
+        netDisbursement: loanCalculations.netDisbursement,
         calculatedEMI: loanCalculations.weeklyEMI,
         totalPayable: loanCalculations.totalPayable,
         registeredBy: currentUser?.displayName || 'Subash (Field Officer)',
@@ -834,7 +1007,7 @@ const CustomerRegistrationPage: React.FC = () => {
         fatherOrSpouseName: formData.guardianName || 'Guardian',
         phone: formData.phone,
         alternatePhone: formData.alternatePhone,
-        address: formData.address || 'Chennai',
+        address: formData.addressLine2 ? `${formData.address}, ${formData.addressLine2}` : (formData.address || 'Chennai'),
         city: formData.city,
         centerName: formData.centerName,
         groupName: formData.groupId,
@@ -862,14 +1035,27 @@ const CustomerRegistrationPage: React.FC = () => {
         otherDocTitle: otherDocTitle || 'Supporting Document',
       });
 
+      const enrolledInfo: EnrolledSuccessDetails = {
+        clientId: formData.clientId,
+        fullName: formData.fullName,
+        centerName: formData.centerName || 'Assigned Center',
+        groupId: formData.groupId || 'Group',
+        loanAmount: loanCalculations.principal,
+        weeklyEMI: loanCalculations.weeklyEMI,
+        tenorWeeks: Number(formData.tenorWeeks) || 0,
+        repaymentFrequency: formData.repaymentFrequency || 'Weekly',
+      };
+
+      setEnrolledSuccessData(enrolledInfo);
+      setIsRegisteredCompleted(true);
+
       addToast({
         type: 'success',
         title: 'Customer Onboarded Successfully!',
-        message: `${formData.fullName} (ID: ${formData.clientId}) successfully enrolled in ${formData.centerName}!`,
+        message: `${formData.fullName} (ID: ${formData.clientId}) successfully enrolled in ${formData.centerName || 'Assigned Center'}!`,
       });
-
-      navigate('/client/enrollment');
     } catch (err: any) {
+      submitLockRef.current = false;
       console.error('Registration failed:', err);
       addToast({
         type: 'error',
@@ -891,8 +1077,17 @@ const CustomerRegistrationPage: React.FC = () => {
       <div className="bg-[#FFFFFF] rounded-2xl border border-[#E5E7EB] shadow-[0_2px_10px_rgba(11,31,58,0.04)] overflow-hidden">
         <div className="bg-[#0B1F3A] px-4 sm:px-6 lg:px-8 py-4 sm:py-5 border-b border-[#E5E7EB]/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-3">
-              <div className="w-1.5 h-4 bg-[#D4AF37] rounded-full"></div>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <button
+                type="button"
+                onClick={() => navigate('/dashboard')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold tracking-wide transition-colors border border-white/15 cursor-pointer shadow-xs active:scale-95"
+                title="Return to Main Dashboard"
+              >
+                <Home size={14} className="text-[#D4AF37]" />
+                <span>Main Page</span>
+              </button>
+              <div className="w-1.5 h-4 bg-[#D4AF37] rounded-full hidden sm:block"></div>
               <h1 className="text-base font-bold text-white tracking-wide uppercase font-body">
                 Customer Registration & KYC Portal
               </h1>
@@ -1089,12 +1284,14 @@ const CustomerRegistrationPage: React.FC = () => {
                         Date of Birth / Age
                       </label>
                       <div className="grid grid-cols-3 gap-2">
-                        <input
-                          type="date"
+                        <DobInput
                           name="dob"
                           value={formData.dob}
                           onChange={handleDobChange}
-                          className="col-span-2 px-3 py-3 rounded-xl bg-white border border-gray-200 text-xs text-[#0B1F3A] font-body focus:outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] shadow-sm"
+                          onAgeCalculated={(age) => setFormData(prev => ({ ...prev, age: String(age) }))}
+                          containerClassName="col-span-2 !gap-0"
+                          className="!py-3 !text-xs sm:!text-sm"
+                          placeholder="DD-MM-YYYY"
                         />
                         <input
                           type="number"
@@ -1386,17 +1583,17 @@ const CustomerRegistrationPage: React.FC = () => {
                     <Landmark size={14} className="text-[#D4AF37]" /> C. Residential Address & Center Allocation
                   </h4>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                    {/* Street Address */}
+                    {/* Street Address Line 1 */}
                     <div className="flex flex-col gap-1.5 md:col-span-2">
                       <label className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wider">
-                        Residential Door No & Street Address *
+                        Residential Door No & Street Address (Line 1) *
                       </label>
                       <input
                         type="text"
                         name="address"
                         value={formData.address}
                         onChange={handleChange}
-                        placeholder="Door No. 14, 2nd Street, Malar Colony"
+                        placeholder="Door No. 14, 2nd Street"
                         className={`w-full px-4 py-3 rounded-xl bg-white border text-sm text-[#0B1F3A] font-body focus:outline-none focus:ring-1 shadow-sm ${
                           errors.address ? 'border-red-400 focus:ring-red-200 bg-red-50/20' : 'border-gray-200 focus:border-[#D4AF37] focus:ring-[#D4AF37]'
                         }`}
@@ -1415,6 +1612,22 @@ const CustomerRegistrationPage: React.FC = () => {
                         value={formData.landmark}
                         onChange={handleChange}
                         placeholder="Near Mariamman Temple"
+                        className="w-full px-4 py-3 rounded-xl bg-white border border-gray-200 text-sm text-[#0B1F3A] font-body focus:outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] shadow-sm"
+                      />
+                    </div>
+
+                    {/* Street Address Line 2 (Non-mandatory / Optional) */}
+                    <div className="flex flex-col gap-1.5 md:col-span-3">
+                      <label className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wider flex items-center justify-between">
+                        <span>Residential Address Line 2</span>
+                        <span className="text-[11px] font-normal text-gray-400 lowercase">(optional)</span>
+                      </label>
+                      <input
+                        type="text"
+                        name="addressLine2"
+                        value={formData.addressLine2}
+                        onChange={handleChange}
+                        placeholder="Apartment, suite, unit, building, floor, area (optional)"
                         className="w-full px-4 py-3 rounded-xl bg-white border border-gray-200 text-sm text-[#0B1F3A] font-body focus:outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] shadow-sm"
                       />
                     </div>
@@ -1780,6 +1993,54 @@ const CustomerRegistrationPage: React.FC = () => {
                         className="w-full px-4 py-3 rounded-xl bg-white border border-gray-200 text-sm text-[#0B1F3A] font-body focus:outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] shadow-sm"
                       />
                     </div>
+
+                    {/* Duplicate KYC Record Warning Banner */}
+                    {duplicateKycMatch && duplicateKycMatch.isDuplicate && (
+                      <div className="md:col-span-2 p-4 rounded-2xl bg-red-50 border-2 border-red-300 text-red-950 shadow-sm space-y-3 mt-2">
+                        <div className="flex items-center justify-between">
+                          <span className="flex items-center gap-2 font-black text-xs uppercase tracking-wider text-red-700">
+                            <AlertCircle size={18} className="text-red-600 shrink-0" />
+                            KYC Record Already Registered in System
+                          </span>
+                          <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-red-200 text-red-900 border border-red-300">
+                            Duplicate Blocked
+                          </span>
+                        </div>
+                        <p className="text-xs text-red-800 font-semibold">
+                          {duplicateKycMatch.message}
+                        </p>
+                        <div className="bg-white p-3.5 rounded-xl border border-red-200 text-xs flex flex-wrap items-center justify-between gap-3 shadow-xs">
+                          <div>
+                            <span className="text-gray-400 block text-[10px] font-bold uppercase tracking-wider">Existing Borrower</span>
+                            <strong className="text-[#0B1F3A] font-bold text-sm">
+                              {duplicateKycMatch.existingRecord?.customerName}
+                            </strong>
+                            <span className="ml-2 font-mono text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                              {duplicateKycMatch.existingRecord?.customerId}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-gray-400 block text-[10px] font-bold uppercase tracking-wider">Center / Group</span>
+                            <span className="font-semibold text-gray-800">
+                              {duplicateKycMatch.existingRecord?.centerName} ({duplicateKycMatch.existingRecord?.groupName})
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-gray-400 block text-[10px] font-bold uppercase tracking-wider">Status</span>
+                            <span className="font-bold text-emerald-700">
+                              {duplicateKycMatch.existingRecord?.status || 'Active'}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/customers/${duplicateKycMatch.existingRecord?.customerId}`)}
+                            className="px-3.5 py-2 rounded-xl bg-[#0B1F3A] hover:bg-[#162D4A] text-white text-xs font-bold transition-all shadow-sm cursor-pointer flex items-center gap-1.5 active:scale-95"
+                          >
+                            <span>View / Edit Existing Record →</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -2861,22 +3122,100 @@ const CustomerRegistrationPage: React.FC = () => {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                       {/* Tenor in Weeks */}
                       <div className="flex flex-col gap-1.5">
-                        <label className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wider">
-                          Loan Tenor (Weeks) *
-                        </label>
-                        <select
-                          name="tenorWeeks"
-                          value={formData.tenorWeeks}
-                          onChange={handleChange}
-                          className="w-full px-4 py-3 rounded-xl bg-white border border-gray-200 text-sm text-[#0B1F3A] font-body focus:outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] shadow-sm"
-                        >
-                          <option value="">-- Select Loan Tenor --</option>
-                          <option value="15">15 Weeks (~3.5 Months)</option>
-                          <option value="20">20 Weeks (~4.5 Months)</option>
-                          <option value="25">25 Weeks (~6 Months)</option>
-                          <option value="30">30 Weeks (~7 Months)</option>
-                          <option value="50">50 Weeks (~12 Months)</option>
-                        </select>
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wider">
+                            Loan Tenor (Weeks) *
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setIsCustomTenor(prev => !prev)}
+                            className="text-[11px] font-bold text-[#D4AF37] hover:text-[#0B1F3A] transition-colors flex items-center gap-1"
+                          >
+                            {isCustomTenor ? '📋 Presets' : '✏️ Manual Entry'}
+                          </button>
+                        </div>
+
+                        {isCustomTenor ? (
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min="1"
+                              max="104"
+                              name="tenorWeeks"
+                              value={formData.tenorWeeks}
+                              onChange={handleChange}
+                              placeholder="Enter weeks (e.g. 18, 28)"
+                              className={`w-full px-4 py-3 rounded-xl bg-white border text-sm font-bold text-[#0B1F3A] font-body focus:outline-none focus:ring-1 shadow-sm ${
+                                errors.tenorWeeks ? 'border-red-400 focus:ring-red-200 bg-red-50/20' : 'border-gray-200 focus:border-[#D4AF37] focus:ring-[#D4AF37]'
+                              }`}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setIsCustomTenor(false)}
+                              className="px-3 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-xs font-bold text-[#0B1F3A] whitespace-nowrap transition-colors"
+                              title="Switch back to preset list"
+                            >
+                              List ▾
+                            </button>
+                          </div>
+                        ) : (
+                          <select
+                            name="tenorWeeks"
+                            value={formData.tenorWeeks}
+                            onChange={(e) => {
+                              if (e.target.value === 'custom') {
+                                setIsCustomTenor(true);
+                              } else {
+                                handleChange(e);
+                              }
+                            }}
+                            className={`w-full px-4 py-3 rounded-xl bg-white border text-sm text-[#0B1F3A] font-body focus:outline-none focus:ring-1 shadow-sm ${
+                              errors.tenorWeeks ? 'border-red-400 focus:ring-red-200 bg-red-50/20' : 'border-gray-200 focus:border-[#D4AF37] focus:ring-[#D4AF37]'
+                            }`}
+                          >
+                            <option value="">-- Select Loan Tenor --</option>
+                            {TENOR_PRESETS.map((t) => (
+                              <option key={t.value} value={t.value}>
+                                {t.label}
+                              </option>
+                            ))}
+                            <option value="custom">✏️ Enter Custom Weeks (Manual)...</option>
+                          </select>
+                        )}
+                        {errors.tenorWeeks && <span className="text-[11px] text-red-500 font-semibold flex items-center gap-1"><AlertCircle size={12} /> {errors.tenorWeeks}</span>}
+
+                        {/* Quick Tenor Chips */}
+                        <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                          <span className="text-[10px] font-bold text-gray-400">Quick:</span>
+                          {TENOR_PRESETS.map((t) => (
+                            <button
+                              key={t.value}
+                              type="button"
+                              onClick={() => {
+                                setFormData(prev => ({ ...prev, tenorWeeks: t.value }));
+                                setIsCustomTenor(false);
+                              }}
+                              className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-all ${
+                                formData.tenorWeeks === t.value && !isCustomTenor
+                                  ? 'bg-[#0B1F3A] text-white shadow-sm'
+                                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                              }`}
+                            >
+                              {t.value}w
+                            </button>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => setIsCustomTenor(true)}
+                            className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-all ${
+                              isCustomTenor
+                                ? 'bg-[#D4AF37] text-[#0B1F3A] shadow-sm'
+                                : 'bg-amber-50 text-amber-800 hover:bg-amber-100'
+                            }`}
+                          >
+                            + Custom
+                          </button>
+                        </div>
                       </div>
 
                       {/* Repayment Frequency */}
@@ -2897,20 +3236,45 @@ const CustomerRegistrationPage: React.FC = () => {
                         </select>
                       </div>
 
-                      {/* Interest Rate */}
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wider">
-                          Interest Rate (% p.a.)
-                        </label>
-                        <input
-                          type="number"
-                          name="interestRateAnnual"
-                          value={formData.interestRateAnnual}
-                          onChange={handleChange}
-                          placeholder="e.g. 18"
-                          className="w-full px-4 py-3 rounded-xl bg-white border border-gray-200 text-sm text-[#0B1F3A] font-body focus:outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] shadow-sm"
-                        />
-                      </div>
+                      {/* Interest Rate - Hidden for CRE / Field Officers; Configurable only by Admin, BM, CM */}
+                      {canFixInterest ? (
+                        <div className="flex flex-col gap-1.5">
+                          <div className="flex items-center justify-between">
+                            <label className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wider">
+                              Interest Rate (% p.a.)
+                            </label>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                              Admin / BM / CM Control
+                            </span>
+                          </div>
+                          <div className="relative">
+                            <input
+                              type="number"
+                              name="interestRateAnnual"
+                              value={formData.interestRateAnnual}
+                              onChange={handleChange}
+                              placeholder={`Slab: ${loanCalculations.slab.interestRate}%`}
+                              className="w-full px-4 py-3 rounded-xl bg-white border border-gray-200 text-sm text-[#0B1F3A] font-bold font-body focus:outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] shadow-sm"
+                            />
+                            {formData.interestRateAnnual && Number(formData.interestRateAnnual) !== loanCalculations.slab.interestRate && (
+                              <button
+                                type="button"
+                                onClick={() => setFormData(prev => ({ ...prev, interestRateAnnual: String(loanCalculations.slab.interestRate) }))}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1 text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors"
+                                title="Reset to standard slab rate"
+                              >
+                                Reset to Slab ({loanCalculations.slab.interestRate}%)
+                              </button>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-gray-500">
+                            Institutional Slab Policy: {loanCalculations.slab.interestRate}% p.a. for {loanCalculations.slab.label}
+                          </span>
+                        </div>
+                      ) : (
+                        /* For CRE / CRO: Rate is auto-locked to institutional slabs and hidden from CRE view */
+                        <input type="hidden" name="interestRateAnnual" value={formData.interestRateAnnual} />
+                      )}
                     </div>
 
                     {/* Purpose of Loan */}
@@ -3005,18 +3369,28 @@ const CustomerRegistrationPage: React.FC = () => {
                         </span>
                       </div>
 
-                      <div className="space-y-3 mt-4">
+                      <div className="space-y-2.5 mt-4">
                         <div className="flex justify-between items-center text-xs">
                           <span className="text-gray-500">Requested Principal:</span>
                           <span className="font-bold text-[#0B1F3A]">₹{loanCalculations.principal.toLocaleString('en-IN')}</span>
                         </div>
                         <div className="flex justify-between items-center text-xs">
                           <span className="text-gray-500">Tenor:</span>
-                          <span className="font-bold text-[#0B1F3A]">{formData.tenorWeeks} Weeks</span>
+                          <span className="font-bold text-[#0B1F3A]">{formData.tenorWeeks || 0} Weeks</span>
+                        </div>
+                        {!isCRE && (
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-gray-500">Interest Rate:</span>
+                            <span className="font-bold text-[#0B1F3A]">{loanCalculations.interestRate}% p.a.</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-gray-500">Insurance Fee:</span>
+                          <span className="font-semibold text-emerald-700">₹{loanCalculations.insuranceFee.toLocaleString('en-IN')}</span>
                         </div>
                         <div className="flex justify-between items-center text-xs">
-                          <span className="text-gray-500">Interest Rate:</span>
-                          <span className="font-bold text-[#0B1F3A]">{formData.interestRateAnnual}% p.a.</span>
+                          <span className="text-gray-500">Document Processing Fee:</span>
+                          <span className="font-semibold text-emerald-700">₹{loanCalculations.documentFee.toLocaleString('en-IN')}</span>
                         </div>
                         <div className="flex justify-between items-center text-xs">
                           <span className="text-gray-500">Estimated Total Interest:</span>
@@ -3025,6 +3399,10 @@ const CustomerRegistrationPage: React.FC = () => {
                         <div className="flex justify-between items-center text-xs pt-2 border-t border-gray-200">
                           <span className="text-gray-700 font-bold">Total Repayment:</span>
                           <span className="font-black text-[#0B1F3A] text-sm">₹{loanCalculations.totalPayable.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-[11px] pt-1.5 border-t border-dashed border-gray-200">
+                          <span className="text-gray-600 font-medium">Net Disbursal (after fees):</span>
+                          <span className="font-bold text-emerald-700">₹{loanCalculations.netDisbursement.toLocaleString('en-IN')}</span>
                         </div>
                       </div>
                     </div>
@@ -3083,7 +3461,7 @@ const CustomerRegistrationPage: React.FC = () => {
                       <div><span className="text-gray-400 block text-[10px]">FULL NAME</span><span className="font-bold text-[#0B1F3A] text-sm">{formData.fullName}</span></div>
                       <div><span className="text-gray-400 block text-[10px]">FATHER / HUSBAND</span><span className="font-semibold text-gray-800">{formData.guardianName}</span></div>
                       <div><span className="text-gray-400 block text-[10px]">MOBILE NUMBER</span><span className="font-semibold text-blue-600 font-mono">{formData.phone}</span></div>
-                      <div><span className="text-gray-400 block text-[10px]">RESIDENTIAL ADDRESS</span><span className="text-gray-700">{formData.address}, {formData.city} - {formData.pincode}</span></div>
+                      <div><span className="text-gray-400 block text-[10px]">RESIDENTIAL ADDRESS</span><span className="text-gray-700">{formData.address}{formData.addressLine2 ? `, ${formData.addressLine2}` : ''}, {formData.city} - {formData.pincode}</span></div>
                       <div><span className="text-gray-400 block text-[10px]">CENTER & GROUP</span><span className="font-bold text-[#D4AF37]">{formData.centerName} ({formData.groupId})</span></div>
                     </div>
                   </div>
@@ -3113,7 +3491,9 @@ const CustomerRegistrationPage: React.FC = () => {
                       <div><span className="text-gray-400 block text-[10px]">NOMINEE</span><span className="font-bold text-[#0B1F3A]">{formData.nomineeName} ({formData.nomineeRelation})</span></div>
                       <div><span className="text-gray-400 block text-[10px]">GUARANTOR</span><span className="font-semibold text-gray-800">{formData.guarantorName} ({formData.guarantorRelation})</span></div>
                       <div><span className="text-gray-400 block text-[10px]">REQUESTED LOAN</span><span className="font-black text-[#0B1F3A] text-sm">₹{loanCalculations.principal.toLocaleString('en-IN')}</span></div>
-                      <div><span className="text-gray-400 block text-[10px]">WEEKLY EMI</span><span className="font-black text-[#D4AF37] text-sm">₹{loanCalculations.weeklyEMI.toLocaleString('en-IN')} ({formData.tenorWeeks} wks)</span></div>
+                      <div><span className="text-gray-400 block text-[10px]">TENOR & EMI</span><span className="font-black text-[#D4AF37] text-sm">₹{loanCalculations.weeklyEMI.toLocaleString('en-IN')} ({formData.tenorWeeks} wks)</span></div>
+                      <div><span className="text-gray-400 block text-[10px]">MANDATORY DEDUCTIONS</span><span className="font-semibold text-gray-700">₹{loanCalculations.totalDeductions.toLocaleString('en-IN')} (Ins: ₹{loanCalculations.insuranceFee} + Doc: ₹{loanCalculations.documentFee})</span></div>
+                      <div><span className="text-gray-400 block text-[10px]">NET DISBURSAL</span><span className="font-bold text-emerald-700">₹{loanCalculations.netDisbursement.toLocaleString('en-IN')}</span></div>
                       <div><span className="text-gray-400 block text-[10px]">TOTAL PAYABLE</span><span className="font-bold text-gray-800">₹{loanCalculations.totalPayable.toLocaleString('en-IN')}</span></div>
                     </div>
                   </div>
@@ -3282,13 +3662,22 @@ const CustomerRegistrationPage: React.FC = () => {
 
           {/* Action Button Navigation Footer */}
           <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between mt-10 pt-6 border-t border-[#E5E7EB] gap-4">
-            <button
-              type="button"
-              onClick={handleReset}
-              className="inline-flex items-center justify-center gap-2 px-5 py-3 min-h-[44px] rounded-xl bg-[#EF4444] text-white hover:bg-[#DC2626] font-bold font-body text-xs uppercase tracking-wider transition-all shadow-sm cursor-pointer active:scale-[0.98]"
-            >
-              <RotateCcw size={15} /> Reset Form
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={handleReset}
+                className="inline-flex items-center justify-center gap-2 px-5 py-3 min-h-[44px] rounded-xl bg-[#EF4444] text-white hover:bg-[#DC2626] font-bold font-body text-xs uppercase tracking-wider transition-all shadow-sm cursor-pointer active:scale-[0.98]"
+              >
+                <RotateCcw size={15} /> Reset Form
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/dashboard')}
+                className="inline-flex items-center justify-center gap-2 px-4 py-3 min-h-[44px] rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200 font-bold font-body text-xs uppercase tracking-wider transition-all shadow-sm cursor-pointer active:scale-[0.98]"
+              >
+                <Home size={15} /> Main Page
+              </button>
+            </div>
 
             <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-3">
               {currentStep > 0 && (
@@ -3309,6 +3698,29 @@ const CustomerRegistrationPage: React.FC = () => {
                 >
                   Proceed to {steps[currentStep + 1].label.replace(/^\d+\.\s*/, '')} <ArrowRight size={15} />
                 </button>
+              ) : isRegisteredCompleted ? (
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="inline-flex items-center gap-2 px-6 py-3.5 min-h-[48px] rounded-xl bg-emerald-600 text-white font-bold font-body text-xs sm:text-sm uppercase tracking-wider shadow-md cursor-default select-none">
+                    <CheckCircle2 size={18} className="text-white shrink-0" />
+                    <span>Customer Enrolled ✓ (1 Entry Only)</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={resetForNextCustomer}
+                    className="inline-flex items-center justify-center gap-2 px-6 py-3.5 min-h-[48px] rounded-xl bg-[#0B1F3A] hover:bg-[#15335D] text-white font-bold font-body text-xs sm:text-sm uppercase tracking-wider transition-all shadow-md cursor-pointer active:scale-95"
+                  >
+                    <User size={16} className="text-[#D4AF37] shrink-0" />
+                    <span>Enroll Next Customer</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/dashboard')}
+                    className="inline-flex items-center justify-center gap-2 px-5 py-3.5 min-h-[48px] rounded-xl bg-gray-100 hover:bg-gray-200 text-[#0B1F3A] font-bold font-body text-xs sm:text-sm uppercase tracking-wider transition-all shadow-xs cursor-pointer active:scale-95 border border-gray-200"
+                  >
+                    <Home size={16} className="shrink-0" />
+                    <span>Main Page</span>
+                  </button>
+                </div>
               ) : (
                 <button
                   type="button"
@@ -3331,6 +3743,102 @@ const CustomerRegistrationPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* ── CUSTOMER ENROLLMENT SUCCESS POPUP MODAL ── */}
+      <Modal
+        isOpen={!!enrolledSuccessData}
+        onClose={resetForNextCustomer}
+        size="md"
+        showCloseButton={false}
+        closeOnBackdrop={false}
+      >
+        {enrolledSuccessData && (
+          <div className="p-6 text-center space-y-5">
+            {/* Celebration Icon */}
+            <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-md">
+              <CheckCircle size={36} className="text-emerald-600" />
+            </div>
+
+            <div>
+              <span className="text-[11px] font-black uppercase tracking-widest text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
+                Enrollment Completed ✓
+              </span>
+              <h3 className="text-xl font-black text-[#0B1F3A] mt-2">
+                Customer Onboarded Successfully!
+              </h3>
+              <p className="text-xs text-gray-500 mt-1">
+                Applicant details and KYC verification documents have been securely recorded in the system.
+              </p>
+            </div>
+
+            {/* Enrolled Summary Card */}
+            <div className="bg-[#FAFBFD] border border-gray-200 rounded-2xl p-4 text-left text-xs space-y-2.5">
+              <div className="flex justify-between items-center pb-2 border-b border-gray-100">
+                <span className="text-gray-500 font-medium">Customer Name:</span>
+                <span className="font-bold text-[#0B1F3A] text-sm">{enrolledSuccessData.fullName}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-500">System Client ID:</span>
+                <span className="font-mono font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded">{enrolledSuccessData.clientId}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-500">Center & Group:</span>
+                <span className="font-bold text-[#D4AF37]">{enrolledSuccessData.centerName} ({enrolledSuccessData.groupId})</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-500">Requested Principal:</span>
+                <span className="font-bold text-[#0B1F3A]">₹{enrolledSuccessData.loanAmount.toLocaleString('en-IN')}</span>
+              </div>
+              <div className="flex justify-between items-center pt-2 border-t border-gray-100">
+                <span className="text-gray-700 font-bold">Calculated Weekly EMI:</span>
+                <span className="font-black text-[#D4AF37] text-sm">
+                  ₹{enrolledSuccessData.weeklyEMI.toLocaleString('en-IN')}
+                  <span className="text-[11px] text-gray-500 font-normal"> ({enrolledSuccessData.tenorWeeks} wks)</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Action Buttons: Go to Main Page OR Register Another Customer */}
+            <div className="flex flex-col sm:flex-row gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setEnrolledSuccessData(null);
+                  navigate('/dashboard');
+                }}
+                className="flex-1 py-3 px-4 rounded-xl bg-[#0B1F3A] hover:bg-[#15335D] text-white text-xs font-bold uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+              >
+                <Home size={16} /> Go to Main Page
+              </button>
+              <button
+                type="button"
+                onClick={resetForNextCustomer}
+                className="flex-1 py-3 px-4 rounded-xl bg-[#D4AF37] hover:bg-[#c49f2f] text-[#0B1F3A] text-xs font-black uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+              >
+                <User size={16} /> Register Next Customer
+              </button>
+            </div>
+
+            {/* Secondary Action */}
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setEnrolledSuccessData(null);
+                  if (canViewCustomers) {
+                    navigate('/customers');
+                  } else {
+                    navigate('/client/search');
+                  }
+                }}
+                className="text-xs font-semibold text-gray-500 hover:text-[#0B1F3A] underline transition-colors cursor-pointer"
+              >
+                {canViewCustomers ? 'View All Customers in System →' : 'Search Enrolled Customers →'}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </motion.div>
   );
 };

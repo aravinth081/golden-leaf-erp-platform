@@ -3,13 +3,13 @@
 // Instant Customer Identification Bar • 6 Operational Queue Tabs • 4-Box Layout
 // ──────────────────────────────────────────────────
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Store, Search, Plus, Filter, RotateCcw, AlertTriangle,
   CheckCircle2, Clock, DollarSign, FileText, ChevronRight,
   TrendingUp, Award, ShieldCheck, User, Building, MapPin,
-  Calendar, Layers, Sparkles
+  Calendar, Layers, Sparkles, Receipt
 } from 'lucide-react';
 import { businessLoanService } from '../../../services/businessLoanService';
 import {
@@ -33,13 +33,34 @@ type BusinessQueueTab =
 
 export const BusinessLoanPage: React.FC = () => {
   const currentUser = useAuthStore((s) => s.user);
-  const userRole = currentUser?.customClaims?.role || 'admin';
+  const rawRole = (currentUser?.customClaims?.role || '').toLowerCase();
+  const isCRO = rawRole === 'collection_agent' || rawRole === 'recovery_officer';
+  const isCM = rawRole === 'credit_manager' || rawRole === 'admin';
+  const isBM = rawRole === 'branch_manager' || rawRole === 'admin';
+  const isAdmin = rawRole === 'admin';
   const { addToast } = useUIStore();
 
   // Search & Active Tab
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState<BusinessQueueTab>('active');
+  const [activeTab, setActiveTab] = useState<BusinessQueueTab>(() => {
+    return isCM ? 'pending_cm' : 'active';
+  });
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // Auto-reload on storage and custom sync events across tabs/windows
+  useEffect(() => {
+    const handleUpdate = () => {
+      setRefreshKey((k) => k + 1);
+    };
+    window.addEventListener('storage', handleUpdate);
+    window.addEventListener('glf-business-loan-updated', handleUpdate);
+    window.addEventListener('glf_credit_manager_updated', handleUpdate);
+    return () => {
+      window.removeEventListener('storage', handleUpdate);
+      window.removeEventListener('glf-business-loan-updated', handleUpdate);
+      window.removeEventListener('glf_credit_manager_updated', handleUpdate);
+    };
+  }, []);
 
   // Modals state
   const [isNewApplicationOpen, setIsNewApplicationOpen] = useState(false);
@@ -74,6 +95,13 @@ export const BusinessLoanPage: React.FC = () => {
       pre_closure: allLoans.filter((l) => l.status === 'PRE_CLOSURE_REQUESTED' || l.status === 'CLOSED_NOC_ISSUED').length,
     };
   }, [allLoans]);
+
+  // For Credit Manager: default view to pending applications if available
+  useEffect(() => {
+    if (isCM && tabCounts.pending_cm > 0 && activeTab === 'active') {
+      setActiveTab('pending_cm');
+    }
+  }, [isCM, tabCounts.pending_cm, activeTab]);
 
   // Filtered List according to Search and Active Tab
   const filteredList = useMemo(() => {
@@ -318,14 +346,57 @@ export const BusinessLoanPage: React.FC = () => {
                     <span>Sanction KFS</span>
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setSelectedLoan(loan)}
-                    className="px-4 py-2 rounded-xl bg-[#0B1F3A] hover:bg-[#132c4e] text-white font-extrabold text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-xs transition-all"
-                  >
-                    <span>Manage / Review</span>
-                    <ChevronRight size={14} />
-                  </button>
+                  {/* Actions based on Role */}
+                  {isCRO ? (
+                    loan.status === 'SUBMITTED_BY_CRO' ? (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedLoan(loan)}
+                        className="px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-all"
+                        title="Click to view submitted details"
+                      >
+                        <Clock size={13} className="text-blue-600" />
+                        <span>Submitted (View Only)</span>
+                      </button>
+                    ) : loan.status === 'RETURNED_TO_CRO' ? (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedLoan(loan)}
+                        className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-black text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-md animate-pulse transition-all"
+                        title="Credit Manager flagged a discrepancy - click to fix and resubmit"
+                      >
+                        <AlertTriangle size={14} />
+                        <span>Fix Mistakes & Resubmit</span>
+                      </button>
+                    ) : loan.status === 'ACTIVE_COLLECTING' ? (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedLoan(loan)}
+                        className="px-3.5 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-xs transition-all"
+                      >
+                        <Receipt size={14} />
+                        <span>Collect Installment</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedLoan(loan)}
+                        className="px-3 py-1.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs flex items-center gap-1 cursor-pointer transition-all"
+                      >
+                        <span>View Details</span>
+                        <ChevronRight size={13} />
+                      </button>
+                    )
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedLoan(loan)}
+                      className="px-4 py-2 rounded-xl bg-[#0B1F3A] hover:bg-[#132c4e] text-white font-extrabold text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-xs transition-all"
+                    >
+                      <span>Manage / Review</span>
+                      <ChevronRight size={14} />
+                    </button>
+                  )}
                 </div>
               </div>
 

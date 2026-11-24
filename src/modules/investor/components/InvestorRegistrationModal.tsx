@@ -14,6 +14,7 @@ import { calculateAge, isSeniorCitizen, numberToWords } from '../../../utils/fdC
 import { createInvestor } from '../../../services/investorService';
 import { getStoredBranches } from '../../../services/branchService';
 import { uploadImage } from '../../../services/cloudinary';
+import { DobInput } from '../../../components/ui';
 
 interface InvestorRegistrationModalProps {
   onClose: () => void;
@@ -397,15 +398,12 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-[#475569] mb-1 uppercase tracking-wider">
-                    Date of Birth (DOB) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="date"
+                  <DobInput
+                    label="Date of Birth (DOB)"
+                    required
                     value={dob}
                     onChange={(e) => setDob(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] text-xs font-semibold text-[#0B1F3A] outline-none"
-                    required
+                    className="!py-2 !text-xs !font-semibold"
                   />
                 </div>
 

@@ -28,6 +28,7 @@ const HRPayrollDashboardPage = lazyWithRetry(() => import('../modules/hr/HRPayro
 const InvestorListPage = lazyWithRetry(() => import('../modules/investor/InvestorListPage'), 'investors');
 const FDListPage = lazyWithRetry(() => import('../modules/fd/FDListPage'), 'fixed-deposits');
 const FDRateSlabPage = lazyWithRetry(() => import('../modules/fd/FDRateSlabPage'), 'fixed-deposits/rates');
+const GroupLoanRateSlabsPage = lazyWithRetry(() => import('../modules/admin/GroupLoanRateSlabsPage'), 'admin/loans/rate-slabs');
 const FDReferralPage = lazyWithRetry(() => import('../modules/fd/FDReferralPage'), 'fixed-deposits/referral');
 const BusinessLoanPage = lazyWithRetry(() => import('../modules/loans/business/BusinessLoanPage'), 'business-loans');
 const GoldLoanPage = lazyWithRetry(() => import('../modules/loans/gold/GoldLoanPage'), 'gold-loans');
@@ -325,6 +326,14 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute allowedRoles={['admin', 'hr_payroll_manager', 'area_manager', 'branch_manager', 'credit_manager', 'collection_agent']}>
             <SuspenseWrapper><GoldLoanPage /></SuspenseWrapper>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: '/admin/loans/rate-slabs',
+        element: (
+          <ProtectedRoute allowedRoles={['admin', 'branch_manager', 'credit_manager', 'area_manager']}>
+            <SuspenseWrapper><GroupLoanRateSlabsPage /></SuspenseWrapper>
           </ProtectedRoute>
         ),
       },

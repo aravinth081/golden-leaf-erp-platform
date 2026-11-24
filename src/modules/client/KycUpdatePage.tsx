@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { getCenters, type Center } from '../../services/centerService';
 import { getClients, type ClientData } from '../../services/clientService';
-import { Input, Select, SearchableSelect, Button, Card } from '../../components/ui';
+import { Input, Select, SearchableSelect, Button, Card, DobInput } from '../../components/ui';
+import { calculateAge } from '../../utils/dateUtils';
 
 const KycUpdatePage: React.FC = () => {
   const [centers, setCenters] = useState<Center[]>([]);
@@ -280,7 +281,14 @@ const KycUpdatePage: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-6">
           <Input label="Client Id" name="clientId" error={errors.clientId} value={formData.clientId} onChange={handleFormChange} />
           <Input label="Date of Joining" name="dateOfJoining" error={errors.dateOfJoining} value={formData.dateOfJoining} onChange={handleFormChange} />
-          <Input label="Date of Birth" type="date" name="dob" error={errors.dob} value={formData.dob} onChange={handleFormChange} />
+          <DobInput
+            label="Date of Birth"
+            name="dob"
+            error={errors.dob}
+            value={formData.dob}
+            onChange={handleFormChange}
+            onAgeCalculated={(age) => setFormData(prev => ({ ...prev, age: String(age) }))}
+          />
           
           <Input label="Age" name="age" error={errors.age} value={formData.age} onChange={handleFormChange} />
           <Input label="Present Address" name="presentAddress" error={errors.presentAddress} value={formData.presentAddress} onChange={handleFormChange} />

@@ -55,3 +55,6 @@ export type { FileUploadProps } from './FileUpload';
 
 export { SearchableSelect } from './SearchableSelect';
 export type { SearchableSelectProps } from './SearchableSelect';
+
+export { DobInput } from './DobInput';
+export type { DobInputProps } from './DobInput';

@@ -25,6 +25,7 @@ import { lookupPincode } from '../../../services/pincodeService';
 import { getLocalInvestors, saveLocalInvestors } from '../../../services/investorService';
 import { InstantCustomerSearch } from './InstantCustomerSearch';
 import { useAuthStore } from '../../../store';
+import { DobInput } from '../../../components/ui';
 
 interface FDBookingModalProps {
   initialInvestor?: Investor | null;
@@ -443,15 +444,12 @@ export const FDBookingModal: React.FC<FDBookingModalProps> = ({
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
-                        <label className="block text-xs font-bold text-[#475569] mb-1 uppercase tracking-wider">
-                          Date of Birth (DOB) <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="date"
+                        <DobInput
+                          label="Date of Birth (DOB)"
+                          required
                           value={custDob}
                           onChange={(e) => setCustDob(e.target.value)}
-                          className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] text-xs font-semibold text-[#0B1F3A] outline-none"
-                          required
+                          className="!py-2 !text-xs !font-semibold"
                         />
                       </div>
 
@@ -1312,13 +1310,12 @@ export const FDBookingModal: React.FC<FDBookingModalProps> = ({
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[11px] text-[#64748B] mb-1">Nominee DOB *</label>
-                    <input
-                      type="date"
+                    <DobInput
+                      label="Nominee DOB"
+                      required
                       value={nomineeDob}
                       onChange={(e) => setNomineeDob(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] text-xs font-medium text-[#0B1F3A] bg-white outline-none"
-                      required
+                      className="!py-2 !text-xs !font-medium"
                     />
                   </div>
                 </div>
