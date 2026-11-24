@@ -20,23 +20,31 @@ import { getStoredBranches } from './branchService';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 export function normalizeStaffRole(role: string): StaffRole {
-  const r = (role || '').trim().toUpperCase();
-  if (r === 'ADMIN') return 'ADMIN';
-  if (r === 'HR' || r === 'HR_PAYROLL_MANAGER') return 'HR';
-  if (r === 'BRANCH_MANAGER' || r === 'BM') return 'BRANCH_MANAGER';
-  if (r === 'CREDIT_MANAGER' || r === 'CM') return 'CREDIT_MANAGER';
-  if (r === 'CRO' || r === 'COLLECTION_AGENT') return 'CRO';
+  const r = (role || '').trim().toUpperCase().replace(/[\s-]+/g, '_');
+  if (r === 'ADMIN' || r === 'SUPER_ADMIN' || r === 'ADMINISTRATOR' || r === 'SYSTEM_MASTER_AUTHORITY') return 'ADMIN';
+  if (r === 'HR' || r === 'HR_PAYROLL_MANAGER' || r === 'HR_MANAGER' || r === 'PAYROLL_MANAGER') return 'HR';
+  if (r === 'BRANCH_MANAGER' || r === 'BM' || r === 'BRANCH_HEAD' || r === 'BRANCH_OPERATIONS') return 'BRANCH_MANAGER';
+  if (r === 'CREDIT_MANAGER' || r === 'CM' || r === 'CREDIT_UNDERWRITER' || r === 'UNDERWRITING_HEAD') return 'CREDIT_MANAGER';
+  if (r === 'CRO' || r === 'COLLECTION_AGENT' || r === 'AGENT' || r === 'RECOVERY_OFFICER' || r === 'FIELD_AGENT') return 'CRO';
   return 'CRO';
 }
 
 export function staffRoleToUserRole(role: string): UserRole {
-  const r = (role || '').trim().toUpperCase();
-  if (r === 'ADMIN') return 'admin';
-  if (r === 'HR' || r === 'HR_PAYROLL_MANAGER') return 'hr_payroll_manager';
-  if (r === 'BRANCH_MANAGER') return 'branch_manager';
-  if (r === 'CREDIT_MANAGER') return 'credit_manager';
-  if (r === 'CRO' || r === 'COLLECTION_AGENT') return 'collection_agent';
+  const r = (role || '').trim().toUpperCase().replace(/[\s-]+/g, '_');
+  if (r === 'ADMIN' || r === 'SUPER_ADMIN' || r === 'ADMINISTRATOR' || r === 'SYSTEM_MASTER_AUTHORITY') return 'admin';
+  if (r === 'HR' || r === 'HR_PAYROLL_MANAGER' || r === 'HR_MANAGER' || r === 'PAYROLL_MANAGER') return 'hr_payroll_manager';
+  if (r === 'BRANCH_MANAGER' || r === 'BM' || r === 'BRANCH_HEAD') return 'branch_manager';
+  if (r === 'CREDIT_MANAGER' || r === 'CM' || r === 'CREDIT_UNDERWRITER') return 'credit_manager';
+  if (r === 'CRO' || r === 'COLLECTION_AGENT' || r === 'AGENT' || r === 'RECOVERY_OFFICER') return 'collection_agent';
   return (role.toLowerCase() as UserRole) || 'admin';
+}
+
+export function normalizeStaffUsername(username: string): string {
+  return (username || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^@+/, '')
+    .replace(/\s+/g, '.');
 }
 
 const STORAGE_KEY_PROFILES = 'glf_staff_profiles_master_v3';
@@ -868,11 +876,11 @@ const BUILTIN_DEMO_STAFF: Record<
 > = {};
 
 /**
- * Helper to normalize login identifiers (removes spaces, dots, underscores, dashes)
- * Allows "Aravinth s", "aravinth.s", "aravinths" to match seamlessly.
+ * Helper to normalize login identifiers (removes leading @, spaces, dots, underscores, dashes)
+ * Allows "@Aravinth s", "aravinth.s", "aravinths" to match seamlessly.
  */
 function normalizeLoginKey(val: string): string {
-  return (val || '').trim().toLowerCase().replace(/[\s._-]+/g, '');
+  return (val || '').trim().toLowerCase().replace(/^@+/, '').replace(/[\s._-]+/g, '');
 }
 
 /**
@@ -904,7 +912,7 @@ export async function fetchStaffUsersFromSupabase(): Promise<StaffProfile[]> {
             role: normalizeStaffRole(r.role),
             branchId: r.branch_id,
             branchName: resolveBranchName(r.branch_id) || (r.role?.toUpperCase() === 'ADMIN' || r.role?.toUpperCase() === 'HR' ? 'Corporate HQ (All Branches)' : 'Main Branch (Chennai)'),
-            username: r.username,
+            username: normalizeStaffUsername(r.username),
             passwordHash: r.password_hash,
             status: r.status === 'inactive' ? 'inactive' : 'active',
             mustChangePassword: !!r.must_change_password,
@@ -912,6 +920,8 @@ export async function fetchStaffUsersFromSupabase(): Promise<StaffProfile[]> {
             createdAt: r.created_at || new Date().toISOString(),
             updatedAt: r.updated_at || new Date().toISOString(),
             deletedAt: r.deleted_at || null,
+            totpSecret: r.totp_secret || null,
+            isMfaEnabled: !!r.is_mfa_enabled,
           };
           mergedMap.set(profile.id, profile);
         });
@@ -934,6 +944,7 @@ export async function fetchStaffUsersFromSupabase(): Promise<StaffProfile[]> {
           if (p && p.id && !mergedMap.has(p.id)) {
             mergedMap.set(p.id, {
               ...p,
+              username: normalizeStaffUsername(p.username),
               role: normalizeStaffRole(p.role),
               status: p.status === 'inactive' ? 'inactive' : 'active',
             });
@@ -949,14 +960,19 @@ export async function fetchStaffUsersFromSupabase(): Promise<StaffProfile[]> {
   const local = getStoredStaffProfiles();
   local.forEach((p) => {
     if (p.deletedAt === null && !mergedMap.has(p.id)) {
-      mergedMap.set(p.id, p);
+      mergedMap.set(p.id, {
+        ...p,
+        username: normalizeStaffUsername(p.username),
+      });
     }
   });
 
   // Deduplicate by clean username, keeping the latest / updated profile
   const deduplicatedByUsername = new Map<string, StaffProfile>();
+  const duplicateCloudIdsToDelete: string[] = [];
+
   mergedMap.forEach((profile) => {
-    const key = (profile.username || '').trim().toLowerCase();
+    const key = normalizeStaffUsername(profile.username);
     if (!key) {
       deduplicatedByUsername.set(profile.id, profile);
       return;
@@ -969,10 +985,33 @@ export async function fetchStaffUsersFromSupabase(): Promise<StaffProfile[]> {
       const existingTime = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
       const profileTime = new Date(profile.updatedAt || profile.createdAt || 0).getTime();
       if (profileTime >= existingTime) {
+        if (existing.id && !existing.id.startsWith('STF-001-ADMIN')) {
+          duplicateCloudIdsToDelete.push(existing.id);
+        }
         deduplicatedByUsername.set(key, profile);
+      } else {
+        if (profile.id && !profile.id.startsWith('STF-001-ADMIN')) {
+          duplicateCloudIdsToDelete.push(profile.id);
+        }
       }
     }
   });
+
+  // Clean up any stale duplicate accounts in Supabase database
+  if (duplicateCloudIdsToDelete.length > 0 && isSupabaseConfigured() && supabase) {
+    try {
+      const now = new Date().toISOString();
+      supabase
+        .from('staff_users')
+        .update({ deleted_at: now, updated_at: now })
+        .in('id', duplicateCloudIdsToDelete)
+        .then(() => {
+          console.log('[Supabase] Cleaned up duplicate staff IDs:', duplicateCloudIdsToDelete);
+        });
+    } catch (err) {
+      console.warn('[Supabase] Failed to soft-delete duplicate accounts:', err);
+    }
+  }
 
   const finalProfiles = Array.from(deduplicatedByUsername.values());
   writeStorage(STORAGE_KEY_PROFILES, finalProfiles);
@@ -1000,7 +1039,7 @@ export async function createOrUpdateStaffAccount(
   input: StaffAccountInput,
   actor: AuthUser
 ): Promise<StaffProfile> {
-  const cleanUsername = input.username.trim().toLowerCase().replace(/\s+/g, '.');
+  const cleanUsername = normalizeStaffUsername(input.username);
   const staffRole = normalizeStaffRole(input.role);
   const now = new Date().toISOString();
   const dbStatus = input.status === 'on_hold' ? 'inactive' : 'active';
@@ -1016,7 +1055,9 @@ export async function createOrUpdateStaffAccount(
     targetIndex = existingProfiles.findIndex((p) => p.id === input.id && p.deletedAt === null);
   }
   if (targetIndex === -1 && cleanUsername) {
-    targetIndex = existingProfiles.findIndex((p) => p.username.toLowerCase() === cleanUsername && p.deletedAt === null);
+    targetIndex = existingProfiles.findIndex(
+      (p) => normalizeStaffUsername(p.username) === cleanUsername && p.deletedAt === null
+    );
   }
 
   const existing = targetIndex >= 0 ? existingProfiles[targetIndex] : null;
@@ -1047,11 +1088,13 @@ export async function createOrUpdateStaffAccount(
       createdAt: existing?.createdAt || now,
       updatedAt: now,
       deletedAt: null,
+      totpSecret: existing?.totpSecret || null,
+      isMfaEnabled: existing?.isMfaEnabled || false,
     };
 
     // Remove any older duplicate entry with the same ID or same username
     const remainingProfiles = existingProfiles.filter(
-      (p) => p.id !== targetId && p.username.toLowerCase() !== cleanUsername
+      (p) => p.id !== targetId && normalizeStaffUsername(p.username) !== cleanUsername
     );
     remainingProfiles.unshift(updatedProfile);
     writeStorage(STORAGE_KEY_PROFILES, remainingProfiles);
@@ -1076,14 +1119,14 @@ export async function createOrUpdateStaffAccount(
           deleted_at: null,
         });
 
-        // Soft-delete any older duplicate in Supabase staff_users with the same username but different ID
+        // Soft-delete any older duplicate in Supabase staff_users with the same username (with or without @)
         await supabase
           .from('staff_users')
           .update({
             deleted_at: now,
             updated_at: now,
           })
-          .eq('username', updatedProfile.username)
+          .or(`username.eq.${updatedProfile.username},username.eq.@${updatedProfile.username}`)
           .neq('id', updatedProfile.id);
 
         await supabase.from('documents').upsert({
@@ -1102,7 +1145,9 @@ export async function createOrUpdateStaffAccount(
   } else {
     // ── CREATE NEW ACCOUNT ──
     // Double check to prevent duplicate username creation
-    const duplicateIdx = existingProfiles.findIndex((p) => p.username.toLowerCase() === cleanUsername && p.deletedAt === null);
+    const duplicateIdx = existingProfiles.findIndex(
+      (p) => normalizeStaffUsername(p.username) === cleanUsername && p.deletedAt === null
+    );
     if (duplicateIdx >= 0) {
       return createOrUpdateStaffAccount({ ...input, id: existingProfiles[duplicateIdx].id }, actor);
     }
@@ -1128,6 +1173,8 @@ export async function createOrUpdateStaffAccount(
       createdAt: now,
       updatedAt: now,
       deletedAt: null,
+      totpSecret: null,
+      isMfaEnabled: false,
     };
 
     existingProfiles.unshift(newProfile);
@@ -1183,14 +1230,14 @@ export async function authenticateStaffCredentials(
   landingPath: string;
 }> {
   const rawInput = (username || '').trim();
-  const cleanUsername = rawInput.toLowerCase();
+  const cleanUsername = normalizeStaffUsername(rawInput);
   const inputNorm = normalizeLoginKey(rawInput);
   const cleanPassword = (plainTextPassword || '').trim();
 
   let staff: StaffProfile | null = null;
 
   const matchesIdentifier = (targetUser?: string, targetFullName?: string, targetEmail?: string, targetEmpId?: string): boolean => {
-    const tUser = (targetUser || '').trim().toLowerCase();
+    const tUser = normalizeStaffUsername(targetUser || '');
     const tFull = (targetFullName || '').trim().toLowerCase();
     const tEmail = (targetEmail || '').trim().toLowerCase();
     const tEmp = (targetEmpId || '').trim().toLowerCase();
@@ -1213,7 +1260,8 @@ export async function authenticateStaffCredentials(
       const { data: rows, error } = await supabase
         .from('staff_users')
         .select('*')
-        .is('deleted_at', null);
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false });
 
       if (!error && Array.isArray(rows) && rows.length > 0) {
         const matched = rows.find((r: any) =>
@@ -1230,7 +1278,7 @@ export async function authenticateStaffCredentials(
             role: normalizeStaffRole(matched.role),
             branchId: matched.branch_id,
             branchName: resolveBranchName(matched.branch_id) || (matched.role?.toUpperCase() === 'ADMIN' || matched.role?.toUpperCase() === 'HR' ? 'Corporate HQ (All Branches)' : 'Main Branch (Chennai)'),
-            username: matched.username,
+            username: normalizeStaffUsername(matched.username),
             passwordHash: matched.password_hash,
             status: matched.status === 'inactive' ? 'inactive' : 'active',
             mustChangePassword: !!matched.must_change_password,
@@ -1238,6 +1286,8 @@ export async function authenticateStaffCredentials(
             createdAt: matched.created_at,
             updatedAt: matched.updated_at,
             deletedAt: matched.deleted_at,
+            totpSecret: matched.totp_secret || null,
+            isMfaEnabled: !!matched.is_mfa_enabled,
           };
         }
       }
@@ -1264,6 +1314,7 @@ export async function authenticateStaffCredentials(
             const p = matchedDoc.data;
             staff = {
               ...p,
+              username: normalizeStaffUsername(p.username),
               role: normalizeStaffRole(p.role),
               status: p.status === 'inactive' ? 'inactive' : 'active',
             };

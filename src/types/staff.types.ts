@@ -26,6 +26,8 @@ export interface StaffProfile {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+  totpSecret?: string | null;
+  isMfaEnabled?: boolean;
 }
 
 export interface StaffProfileCreateDTO {

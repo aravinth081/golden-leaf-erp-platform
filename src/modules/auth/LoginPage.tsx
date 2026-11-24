@@ -168,10 +168,10 @@ export const LoginPage: React.FC = () => {
 
   // If already authenticated, redirect immediately to dashboard
   useEffect(() => {
-    if (isAuthenticated && user) {
+    if (isAuthenticated && user && authStep === 'CREDENTIALS') {
       navigate('/dashboard', { replace: true });
     }
-  }, [isAuthenticated, user, navigate]);
+  }, [isAuthenticated, user, navigate, authStep]);
 
   // Complete Login and Redirect to Dashboard
   const completeLogin = (result: { authUser: AuthUser; profile: any; landingPath: string }) => {
@@ -211,7 +211,8 @@ export const LoginPage: React.FC = () => {
 
     setIsAuthenticatingStaff(true);
     try {
-      const result = await authenticateStaffCredentials(staffUsername, staffPassword);
+      const cleanUser = staffUsername.trim().replace(/^@+/, '');
+      const result = await authenticateStaffCredentials(cleanUser, staffPassword);
       
       // Reset failed attempts counter on success
       setFailedAttempts(0);
@@ -219,8 +220,34 @@ export const LoginPage: React.FC = () => {
         sessionStorage.removeItem('glf_failed_login_attempts');
       } catch {}
 
-      const role = result.authUser.customClaims?.role;
-      const isMfaRequired = role === 'admin' || role === 'branch_manager';
+      // Robust normalized role check supporting all cases and variants
+      const rawRole = (
+        result.authUser.customClaims?.role ||
+        result.profile?.role ||
+        ''
+      )
+        .toString()
+        .trim()
+        .toLowerCase()
+        .replace(/[\s-]+/g, '_');
+
+      const isMfaRequired =
+        rawRole === 'admin' ||
+        rawRole === 'super_admin' ||
+        rawRole === 'administrator' ||
+        rawRole === 'system_master_authority' ||
+        rawRole === 'branch_manager' ||
+        rawRole === 'bm' ||
+        rawRole === 'branch_head' ||
+        rawRole === 'branch_operations';
+
+      console.log('[GLF Security MFA] Login role check:', {
+        username: cleanUser,
+        evaluatedRole: rawRole,
+        isMfaRequired,
+        profileRole: result.profile?.role,
+        claimsRole: result.authUser.customClaims?.role,
+      });
 
       // Other roles (HR, Credit Manager, CRO): Direct access without MFA
       if (!isMfaRequired) {
@@ -231,20 +258,23 @@ export const LoginPage: React.FC = () => {
       // Admin & Branch Manager: Mandatory Google Authenticator MFA
       setPendingAuthResult(result);
 
-      let isMfaEnabled = false;
-      let existingSecret = '';
+      let isMfaEnabled = !!result.profile?.isMfaEnabled;
+      let existingSecret = result.profile?.totpSecret || '';
 
       if (isSupabaseConfigured() && supabase) {
         try {
           const { data: dbUser, error: dbErr } = await supabase
             .from('staff_users')
             .select('is_mfa_enabled, totp_secret')
-            .eq('id', result.authUser.uid)
+            .or(`id.eq.${result.authUser.uid},username.eq.${result.profile.username}`)
+            .is('deleted_at', null)
             .maybeSingle();
 
           if (!dbErr && dbUser) {
-            isMfaEnabled = !!dbUser.is_mfa_enabled;
-            existingSecret = dbUser.totp_secret || '';
+            if (dbUser.is_mfa_enabled && dbUser.totp_secret) {
+              isMfaEnabled = true;
+              existingSecret = dbUser.totp_secret;
+            }
           }
         } catch (err) {
           console.warn('[MFA] Supabase query status error:', err);
@@ -253,6 +283,7 @@ export const LoginPage: React.FC = () => {
 
       if (isMfaEnabled && existingSecret) {
         // Enrolled: Proceed to enter 6-digit TOTP
+        setPendingSecret(existingSecret);
         setOtpCode('');
         setOtpError('');
         setAuthStep('MFA_VERIFY');
@@ -368,10 +399,25 @@ export const LoginPage: React.FC = () => {
               is_mfa_enabled: true,
               updated_at: new Date().toISOString(),
             })
-            .eq('id', pendingAuthResult.authUser.uid);
+            .or(`id.eq.${pendingAuthResult.authUser.uid},username.eq.${pendingAuthResult.profile.username}`);
         } catch (dbErr) {
           console.warn('[Supabase] Failed to update staff_users with MFA secret:', dbErr);
         }
+      }
+
+      // Persist in local profile cache as well
+      const stored = getStoredStaffProfiles();
+      const pIdx = stored.findIndex(
+        (p) =>
+          p.id === pendingAuthResult.authUser.uid ||
+          p.username.toLowerCase() === pendingAuthResult.profile.username.toLowerCase()
+      );
+      if (pIdx >= 0) {
+        stored[pIdx].totpSecret = pendingSecret;
+        stored[pIdx].isMfaEnabled = true;
+        try {
+          localStorage.setItem('glf_staff_profiles_master_v3', JSON.stringify(stored));
+        } catch {}
       }
 
       addToast({
@@ -433,18 +479,17 @@ export const LoginPage: React.FC = () => {
         }
       }
 
-      // Secondary fallback check if RPC had network hiccup
-      if (!isValid && !errorMessage && isSupabaseConfigured() && supabase) {
-        try {
-          const { data: dbUser } = await supabase
-            .from('staff_users')
-            .select('totp_secret')
-            .eq('id', pendingAuthResult.authUser.uid)
-            .maybeSingle();
+      // Secondary fallback check if RPC had network hiccup or offline mode
+      if (!isValid && !errorMessage) {
+        const secretToUse =
+          pendingSecret ||
+          pendingAuthResult.profile?.totpSecret ||
+          '';
 
-          if (dbUser?.totp_secret) {
+        if (secretToUse) {
+          try {
             const totp = new OTPAuth.TOTP({
-              secret: OTPAuth.Secret.fromBase32(dbUser.totp_secret),
+              secret: OTPAuth.Secret.fromBase32(secretToUse),
               digits: 6,
               period: 30,
             });
@@ -452,9 +497,32 @@ export const LoginPage: React.FC = () => {
             if (delta !== null) {
               isValid = true;
             }
+          } catch (fallbackErr) {
+            console.warn('[MFA Fallback check failed]', fallbackErr);
           }
-        } catch (fallbackErr) {
-          console.warn('[MFA Fallback check failed]', fallbackErr);
+        } else if (isSupabaseConfigured() && supabase) {
+          try {
+            const { data: dbUser } = await supabase
+              .from('staff_users')
+              .select('totp_secret')
+              .or(`id.eq.${pendingAuthResult.authUser.uid},username.eq.${pendingAuthResult.profile.username}`)
+              .is('deleted_at', null)
+              .maybeSingle();
+
+            if (dbUser?.totp_secret) {
+              const totp = new OTPAuth.TOTP({
+                secret: OTPAuth.Secret.fromBase32(dbUser.totp_secret),
+                digits: 6,
+                period: 30,
+              });
+              const delta = totp.validate({ token: cleanOtp, window: 1 });
+              if (delta !== null) {
+                isValid = true;
+              }
+            }
+          } catch (dbErr) {
+            console.warn('[Supabase Direct Secret Query Failed]', dbErr);
+          }
         }
       }
 
