@@ -232,8 +232,58 @@ export const LoginPage: React.FC = () => {
         sessionStorage.removeItem('glf_failed_login_attempts');
       } catch {}
 
-      // Mandatory Google Authenticator 2FA for ALL staff (Admin, BM, HR, Credit Manager, CRO)
-      // Zero bypass to dashboard without verified 6-digit OTP code
+      // Check if 2FA MFA is required:
+      // STRICT RULE:
+      // - Admin & Branch Manager (BM): Mandatory Google Authenticator QR Code scan & 6-digit OTP verification.
+      // - HR, Credit Manager, CRO: Direct access to dashboard upon entering username & password. No QR code, no OTP.
+      const profileRole = (result.profile?.role || '').toString().trim().toUpperCase().replace(/[\s-]+/g, '_');
+      const claimsRole = (result.authUser.customClaims?.role || '').toString().trim().toLowerCase().replace(/[\s-]+/g, '_');
+
+      const isDirectAccessRole =
+        profileRole === 'HR' ||
+        profileRole === 'CREDIT_MANAGER' ||
+        profileRole === 'CRO' ||
+        claimsRole === 'hr_payroll_manager' ||
+        claimsRole === 'credit_manager' ||
+        claimsRole === 'collection_agent' ||
+        claimsRole.includes('hr') ||
+        claimsRole.includes('payroll') ||
+        claimsRole.includes('credit') ||
+        claimsRole.includes('cro') ||
+        claimsRole.includes('collection') ||
+        claimsRole.includes('agent') ||
+        claimsRole.includes('recovery');
+
+      const isAdminOrBm =
+        profileRole === 'ADMIN' ||
+        profileRole === 'BRANCH_MANAGER' ||
+        profileRole.includes('ADMIN') ||
+        profileRole.includes('BRANCH') ||
+        profileRole === 'BM' ||
+        claimsRole === 'admin' ||
+        claimsRole === 'branch_manager' ||
+        claimsRole.includes('admin') ||
+        claimsRole.includes('branch') ||
+        claimsRole === 'bm';
+
+      const isMfaRequired = isAdminOrBm && !isDirectAccessRole;
+
+      console.log('[GLF Security MFA] Login role check:', {
+        username: cleanUser,
+        profileRole,
+        claimsRole,
+        isAdminOrBm,
+        isDirectAccessRole,
+        isMfaRequired,
+      });
+
+      // HR, Credit Manager, CRO: Direct access to dashboard without QR code or OTP
+      if (!isMfaRequired) {
+        completeLogin(result);
+        return;
+      }
+
+      // Admin & Branch Manager: Mandatory Google Authenticator 2FA (QR Code + OTP)
       setPendingAuthResult(result);
 
       let isMfaEnabled = !!result.profile?.isMfaEnabled;
