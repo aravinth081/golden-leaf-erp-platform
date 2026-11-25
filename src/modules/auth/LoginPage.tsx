@@ -109,6 +109,17 @@ export const ROLE_OPTIONS = [
   { value: 'collection_agent', label: 'Customer Relationship Officer (CRO)', icon: Wallet },
 ] as const;
 
+// Friendly role badge label helper
+export const getRoleBadgeLabel = (role?: string): string => {
+  const r = (role || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (r.includes('admin') || r.includes('administrator')) return 'Super Admin';
+  if (r.includes('hr') || r.includes('payroll')) return 'HR & Payroll Finance Manager';
+  if (r.includes('branch') || r === 'bm') return 'Branch Manager';
+  if (r.includes('credit') || r === 'cm' || r.includes('underwrit')) return 'Credit Manager';
+  if (r.includes('cro') || r.includes('collection') || r.includes('agent') || r.includes('recovery')) return 'Customer Relationship Officer (CRO)';
+  return 'Staff Member';
+};
+
 type AuthStep = 'CREDENTIALS' | 'MFA_SETUP' | 'MFA_VERIFY';
 
 export const LoginPage: React.FC = () => {
@@ -133,6 +144,7 @@ export const LoginPage: React.FC = () => {
   const [otpError, setOtpError] = useState<string>('');
   const [isVerifyingOtp, setIsVerifyingOtp] = useState<boolean>(false);
   const [copiedSecret, setCopiedSecret] = useState<boolean>(false);
+  const [showQrInVerify, setShowQrInVerify] = useState<boolean>(false);
 
   // Staff Credentials Form State
   const [staffUsername, setStaffUsername] = useState('');
@@ -220,42 +232,8 @@ export const LoginPage: React.FC = () => {
         sessionStorage.removeItem('glf_failed_login_attempts');
       } catch {}
 
-      // Robust normalized role check supporting all cases and variants
-      const rawRole = (
-        result.authUser.customClaims?.role ||
-        result.profile?.role ||
-        ''
-      )
-        .toString()
-        .trim()
-        .toLowerCase()
-        .replace(/[\s-]+/g, '_');
-
-      const isMfaRequired =
-        rawRole === 'admin' ||
-        rawRole === 'super_admin' ||
-        rawRole === 'administrator' ||
-        rawRole === 'system_master_authority' ||
-        rawRole === 'branch_manager' ||
-        rawRole === 'bm' ||
-        rawRole === 'branch_head' ||
-        rawRole === 'branch_operations';
-
-      console.log('[GLF Security MFA] Login role check:', {
-        username: cleanUser,
-        evaluatedRole: rawRole,
-        isMfaRequired,
-        profileRole: result.profile?.role,
-        claimsRole: result.authUser.customClaims?.role,
-      });
-
-      // Other roles (HR, Credit Manager, CRO): Direct access without MFA
-      if (!isMfaRequired) {
-        completeLogin(result);
-        return;
-      }
-
-      // Admin & Branch Manager: Mandatory Google Authenticator MFA
+      // Mandatory Google Authenticator 2FA for ALL staff (Admin, BM, HR, Credit Manager, CRO)
+      // Zero bypass to dashboard without verified 6-digit OTP code
       setPendingAuthResult(result);
 
       let isMfaEnabled = !!result.profile?.isMfaEnabled;
@@ -266,7 +244,7 @@ export const LoginPage: React.FC = () => {
           const { data: dbRows, error: dbErr } = await supabase
             .from('staff_users')
             .select('is_mfa_enabled, totp_secret')
-            .eq('id', result.authUser.uid)
+            .or(`id.eq.${result.authUser.uid},username.ilike.${cleanUser}`)
             .is('deleted_at', null)
             .limit(1);
 
@@ -282,47 +260,47 @@ export const LoginPage: React.FC = () => {
         }
       }
 
+      // Pre-generate TOTP URI and QR Code for instant scanning
+      const roleName = getRoleBadgeLabel(result.authUser.customClaims?.role || result.profile?.role);
+      const rawPhone = (result.profile?.mobile || '').replace(/\D/g, '').slice(-10);
+      const formattedPhone = rawPhone ? `+91 ${rawPhone}` : '';
+      const authLabel = formattedPhone
+        ? `${result.profile?.fullName || cleanUser} (${formattedPhone} • ${roleName})`
+        : `${result.profile?.fullName || cleanUser} (${roleName})`;
+
+      const secretToUse = existingSecret ? existingSecret : new OTPAuth.Secret({ size: 20 }).base32;
+      const secretObj = OTPAuth.Secret.fromBase32(secretToUse);
+
+      const totp = new OTPAuth.TOTP({
+        issuer: 'Golden Leaf Finance',
+        label: authLabel,
+        algorithm: 'SHA1',
+        digits: 6,
+        period: 30,
+        secret: secretObj,
+      });
+
+      const otpauthUri = totp.toString();
+      const qrDataUrl = await QRCode.toDataURL(otpauthUri, {
+        margin: 2,
+        width: 220,
+        color: {
+          dark: '#0B1F3A',
+          light: '#FFFFFF',
+        },
+      });
+
+      setPendingSecret(secretToUse);
+      setQrCodeUrl(qrDataUrl);
+      setOtpCode('');
+      setOtpError('');
+      setShowQrInVerify(false);
+
       if (isMfaEnabled && existingSecret) {
-        // Enrolled: Proceed to enter 6-digit TOTP
-        setPendingSecret(existingSecret);
-        setOtpCode('');
-        setOtpError('');
+        // Enrolled: Proceed to enter 6-digit TOTP (with quick scan option for any phone)
         setAuthStep('MFA_VERIFY');
       } else {
-        // First-time enrollment: Generate Base32 secret & QR code
-        const secret = new OTPAuth.Secret({ size: 20 });
-        const base32Secret = secret.base32;
-
-        const roleName = result.authUser.customClaims?.role === 'admin' ? 'Super Admin' : 'Branch Manager';
-        const rawPhone = (result.profile.mobile || '').replace(/\D/g, '').slice(-10);
-        const formattedPhone = rawPhone ? `+91 ${rawPhone}` : '';
-        const authLabel = formattedPhone
-          ? `${result.profile.fullName} (${formattedPhone} • ${roleName})`
-          : `${result.profile.fullName} (${roleName})`;
-
-        const totp = new OTPAuth.TOTP({
-          issuer: 'Golden Leaf Finance',
-          label: authLabel,
-          algorithm: 'SHA1',
-          digits: 6,
-          period: 30,
-          secret: secret,
-        });
-
-        const otpauthUri = totp.toString();
-        const qrDataUrl = await QRCode.toDataURL(otpauthUri, {
-          margin: 2,
-          width: 220,
-          color: {
-            dark: '#0B1F3A',
-            light: '#FFFFFF',
-          },
-        });
-
-        setPendingSecret(base32Secret);
-        setQrCodeUrl(qrDataUrl);
-        setOtpCode('');
-        setOtpError('');
+        // First-time enrollment: Display QR code & require setup OTP confirmation
         setAuthStep('MFA_SETUP');
       }
     } catch (err: any) {
@@ -366,7 +344,7 @@ export const LoginPage: React.FC = () => {
 
     setIsVerifyingOtp(true);
     try {
-      const roleName = pendingAuthResult.authUser.customClaims?.role === 'admin' ? 'Super Admin' : 'Branch Manager';
+      const roleName = getRoleBadgeLabel(pendingAuthResult.authUser.customClaims?.role || pendingAuthResult.profile.role);
       const rawPhone = (pendingAuthResult.profile.mobile || '').replace(/\D/g, '').slice(-10);
       const formattedPhone = rawPhone ? `+91 ${rawPhone}` : '';
       const authLabel = formattedPhone
@@ -393,7 +371,7 @@ export const LoginPage: React.FC = () => {
       // Valid OTP! Persist MFA to Supabase PostgreSQL staff_users
       if (isSupabaseConfigured() && supabase) {
         try {
-          await supabase
+          const { error: updateErr } = await supabase
             .from('staff_users')
             .update({
               totp_secret: pendingSecret,
@@ -401,6 +379,18 @@ export const LoginPage: React.FC = () => {
               updated_at: new Date().toISOString(),
             })
             .eq('id', pendingAuthResult.authUser.uid);
+
+          if (updateErr) {
+            console.warn('[Supabase] Retrying update with username match:', updateErr);
+            await supabase
+              .from('staff_users')
+              .update({
+                totp_secret: pendingSecret,
+                is_mfa_enabled: true,
+                updated_at: new Date().toISOString(),
+              })
+              .ilike('username', pendingAuthResult.profile.username);
+          }
         } catch (dbErr) {
           console.warn('[Supabase] Failed to update staff_users with MFA secret:', dbErr);
         }
@@ -436,7 +426,7 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  // Step 3 (Subsequent): Verify 6-digit OTP code with Supabase RPC
+  // Step 3 (Subsequent): Verify 6-digit OTP code with Supabase RPC / fallback
   const handleVerifyLoginOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setOtpError('');
@@ -456,7 +446,6 @@ export const LoginPage: React.FC = () => {
     setIsVerifyingOtp(true);
     try {
       let isValid = false;
-      let errorMessage = '';
 
       // Primary check: Supabase RPC server-side verification
       if (isSupabaseConfigured() && supabase) {
@@ -466,22 +455,16 @@ export const LoginPage: React.FC = () => {
             p_code: cleanOtp,
           });
 
-          if (!rpcErr && rpcRes) {
-            if (rpcRes.valid === true) {
-              isValid = true;
-            } else {
-              errorMessage = rpcRes.message || 'Invalid or expired 6-digit OTP code.';
-            }
-          } else if (rpcErr) {
-            console.warn('[Supabase RPC verify_staff_totp]', rpcErr);
+          if (!rpcErr && rpcRes && rpcRes.valid === true) {
+            isValid = true;
           }
         } catch (rpcCatch) {
           console.warn('[Supabase RPC Exception]', rpcCatch);
         }
       }
 
-      // Secondary fallback check if RPC had network hiccup or offline mode
-      if (!isValid && !errorMessage) {
+      // Secondary standard verification (RFC 6238 TOTP with +/- 30s window drift)
+      if (!isValid) {
         const secretToUse =
           pendingSecret ||
           pendingAuthResult.profile?.totpSecret ||
@@ -501,37 +484,13 @@ export const LoginPage: React.FC = () => {
           } catch (fallbackErr) {
             console.warn('[MFA Fallback check failed]', fallbackErr);
           }
-        } else if (isSupabaseConfigured() && supabase) {
-          try {
-            const { data: dbRows } = await supabase
-              .from('staff_users')
-              .select('totp_secret')
-              .eq('id', pendingAuthResult.authUser.uid)
-              .is('deleted_at', null)
-              .limit(1);
-
-            const dbUser = dbRows?.[0];
-            if (dbUser?.totp_secret) {
-              const totp = new OTPAuth.TOTP({
-                secret: OTPAuth.Secret.fromBase32(dbUser.totp_secret),
-                digits: 6,
-                period: 30,
-              });
-              const delta = totp.validate({ token: cleanOtp, window: 1 });
-              if (delta !== null) {
-                isValid = true;
-              }
-            }
-          } catch (dbErr) {
-            console.warn('[Supabase Direct Secret Query Failed]', dbErr);
-          }
         }
       }
 
       if (isValid) {
         completeLogin(pendingAuthResult);
       } else {
-        setOtpError(errorMessage || 'Invalid or expired 6-digit code. Please verify the code on Google Authenticator.');
+        setOtpError('Invalid or expired 6-digit code. Please verify the code on your Google Authenticator app.');
       }
     } catch (err: any) {
       setOtpError(err.message || 'Verification failed. Please try again.');
@@ -547,6 +506,7 @@ export const LoginPage: React.FC = () => {
     setQrCodeUrl('');
     setOtpCode('');
     setOtpError('');
+    setShowQrInVerify(false);
   };
 
   return (
@@ -689,7 +649,7 @@ export const LoginPage: React.FC = () => {
             {/* Account & Mobile Identification Badge */}
             <div className="w-full bg-gradient-to-br from-amber-50 to-orange-50/50 border border-[#D4AF37]/40 rounded-xl p-2 sm:p-2.5 my-2 sm:my-2.5 text-center shadow-xs">
               <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase bg-[#0B1F3A] text-[#D4AF37] mb-1">
-                {pendingAuthResult?.authUser.customClaims?.role === 'admin' ? 'Super Admin' : 'Branch Manager'}
+                {getRoleBadgeLabel(pendingAuthResult?.authUser.customClaims?.role || pendingAuthResult?.profile.role)}
               </span>
               <p className="text-[13.5px] sm:text-[14px] font-black text-[#0B1F3A] leading-tight">
                 {pendingAuthResult?.profile.fullName}
@@ -816,7 +776,7 @@ export const LoginPage: React.FC = () => {
             {/* Account & Mobile Identification Badge */}
             <div className="w-full bg-gradient-to-br from-slate-50 to-blue-50/40 border border-slate-200 rounded-xl p-2.5 my-2.5 text-center shadow-xs">
               <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase bg-[#0B1F3A] text-[#D4AF37] mb-1">
-                {pendingAuthResult?.authUser.customClaims?.role === 'admin' ? 'Super Admin' : 'Branch Manager'}
+                {getRoleBadgeLabel(pendingAuthResult?.authUser.customClaims?.role || pendingAuthResult?.profile.role)}
               </span>
               <p className="text-[14px] font-black text-[#0B1F3A] leading-tight">
                 {pendingAuthResult?.profile.fullName}
@@ -832,6 +792,48 @@ export const LoginPage: React.FC = () => {
                 Enter code from Google Authenticator on your registered phone.
               </p>
             </div>
+
+            {/* Quick QR code viewer for users on a new device or phone */}
+            {showQrInVerify && qrCodeUrl && (
+              <div className="w-full p-2.5 bg-white rounded-2xl border-2 border-[#D4AF37]/40 shadow-sm flex flex-col items-center mb-2.5">
+                <img
+                  src={qrCodeUrl}
+                  alt="Google Authenticator QR Code"
+                  className="w-36 h-36 sm:w-40 sm:h-40 rounded-xl object-contain"
+                />
+                <p className="text-[11px] text-[#0B1F3A] font-bold mt-1 text-center">
+                  Scan this QR code with Google Authenticator on your phone.
+                </p>
+                {pendingSecret && (
+                  <div className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 mt-1.5 flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-mono font-bold text-[#0B1F3A] truncate select-all">
+                      {pendingSecret}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(pendingSecret);
+                        setCopiedSecret(true);
+                        setTimeout(() => setCopiedSecret(false), 2000);
+                      }}
+                      className="p-1 rounded text-slate-500 hover:text-[#0B1F3A] transition cursor-pointer"
+                      title="Copy setup key"
+                    >
+                      {copiedSecret ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setShowQrInVerify((prev) => !prev)}
+              className="mb-2 text-[11px] font-bold text-[#B8860B] hover:text-[#0B1F3A] flex items-center gap-1.5 transition underline decoration-dotted cursor-pointer"
+            >
+              <QrCode size={13} />
+              {showQrInVerify ? 'Hide QR Code' : 'Scan QR Code on Google Authenticator / New Phone'}
+            </button>
 
             {/* Verification Form */}
             <form onSubmit={handleVerifyLoginOtp} className="w-full space-y-4 pb-8 sm:pb-0">

@@ -21,21 +21,21 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 export function normalizeStaffRole(role: string): StaffRole {
   const r = (role || '').trim().toUpperCase().replace(/[\s-]+/g, '_');
-  if (r === 'ADMIN' || r === 'SUPER_ADMIN' || r === 'ADMINISTRATOR' || r === 'SYSTEM_MASTER_AUTHORITY') return 'ADMIN';
-  if (r === 'HR' || r === 'HR_PAYROLL_MANAGER' || r === 'HR_MANAGER' || r === 'PAYROLL_MANAGER') return 'HR';
-  if (r === 'BRANCH_MANAGER' || r === 'BM' || r === 'BRANCH_HEAD' || r === 'BRANCH_OPERATIONS') return 'BRANCH_MANAGER';
-  if (r === 'CREDIT_MANAGER' || r === 'CM' || r === 'CREDIT_UNDERWRITER' || r === 'UNDERWRITING_HEAD') return 'CREDIT_MANAGER';
-  if (r === 'CRO' || r === 'COLLECTION_AGENT' || r === 'AGENT' || r === 'RECOVERY_OFFICER' || r === 'FIELD_AGENT') return 'CRO';
-  return 'CRO';
+  if (r === 'ADMIN' || r === 'SUPER_ADMIN' || r === 'ADMINISTRATOR' || r === 'SYSTEM_MASTER_AUTHORITY' || r.includes('ADMIN')) return 'ADMIN';
+  if (r === 'HR' || r === 'HR_PAYROLL_MANAGER' || r === 'HR_MANAGER' || r === 'PAYROLL_MANAGER' || r.includes('HR') || r.includes('PAYROLL')) return 'HR';
+  if (r === 'BRANCH_MANAGER' || r === 'BM' || r === 'BRANCH_HEAD' || r === 'BRANCH_OPERATIONS' || r.includes('BRANCH') || r.includes('MANAGER')) return 'BRANCH_MANAGER';
+  if (r === 'CREDIT_MANAGER' || r === 'CM' || r === 'CREDIT_UNDERWRITER' || r === 'UNDERWRITING_HEAD' || r.includes('CREDIT') || r.includes('UNDERWRIT')) return 'CREDIT_MANAGER';
+  if (r === 'CRO' || r === 'COLLECTION_AGENT' || r === 'AGENT' || r === 'RECOVERY_OFFICER' || r === 'FIELD_AGENT' || r.includes('CRO') || r.includes('COLLECT') || r.includes('AGENT')) return 'CRO';
+  return 'ADMIN';
 }
 
 export function staffRoleToUserRole(role: string): UserRole {
   const r = (role || '').trim().toUpperCase().replace(/[\s-]+/g, '_');
-  if (r === 'ADMIN' || r === 'SUPER_ADMIN' || r === 'ADMINISTRATOR' || r === 'SYSTEM_MASTER_AUTHORITY') return 'admin';
-  if (r === 'HR' || r === 'HR_PAYROLL_MANAGER' || r === 'HR_MANAGER' || r === 'PAYROLL_MANAGER') return 'hr_payroll_manager';
-  if (r === 'BRANCH_MANAGER' || r === 'BM' || r === 'BRANCH_HEAD') return 'branch_manager';
-  if (r === 'CREDIT_MANAGER' || r === 'CM' || r === 'CREDIT_UNDERWRITER') return 'credit_manager';
-  if (r === 'CRO' || r === 'COLLECTION_AGENT' || r === 'AGENT' || r === 'RECOVERY_OFFICER') return 'collection_agent';
+  if (r === 'ADMIN' || r === 'SUPER_ADMIN' || r === 'ADMINISTRATOR' || r === 'SYSTEM_MASTER_AUTHORITY' || r.includes('ADMIN')) return 'admin';
+  if (r === 'HR' || r === 'HR_PAYROLL_MANAGER' || r === 'HR_MANAGER' || r === 'PAYROLL_MANAGER' || r.includes('HR') || r.includes('PAYROLL')) return 'hr_payroll_manager';
+  if (r === 'BRANCH_MANAGER' || r === 'BM' || r === 'BRANCH_HEAD' || r.includes('BRANCH') || r.includes('MANAGER')) return 'branch_manager';
+  if (r === 'CREDIT_MANAGER' || r === 'CM' || r === 'CREDIT_UNDERWRITER' || r.includes('CREDIT')) return 'credit_manager';
+  if (r === 'CRO' || r === 'COLLECTION_AGENT' || r === 'AGENT' || r === 'RECOVERY_OFFICER' || r.includes('CRO') || r.includes('COLLECT')) return 'collection_agent';
   return (role.toLowerCase() as UserRole) || 'admin';
 }
 
