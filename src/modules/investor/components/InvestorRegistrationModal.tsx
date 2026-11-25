@@ -7,7 +7,7 @@ import React, { useState } from 'react';
 import {
   X, User, MapPin, ShieldCheck, Landmark, CheckCircle,
   Upload, ArrowRight, ArrowLeft, Loader2, Coins, TrendingUp,
-  Calendar, Percent, Calculator
+  Calendar, Percent, Calculator, ChevronDown
 } from 'lucide-react';
 import type { Investor, InvestorCategory, TaxDeclaration, InvestorDocuments } from '../../../types/investor.types';
 import { calculateAge, isSeniorCitizen, numberToWords } from '../../../utils/fdCalculations';
@@ -711,18 +711,95 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[#475569] mb-1 uppercase tracking-wider">
-                  Tax Exemption Declaration <span className="text-red-500">*</span>
+                <label className="block text-xs font-bold text-[#475569] mb-1.5 uppercase tracking-wider flex items-center justify-between">
+                  <span>
+                    Tax Exemption Declaration <span className="text-red-500">*</span>
+                  </span>
+                  <span className="text-[10px] text-[#8C6808] font-bold bg-[#FAF7F0] px-2 py-0.5 rounded-full border border-[#D4AF37]/30">
+                    3 Options Available
+                  </span>
                 </label>
-                <select
-                  value={taxDeclaration}
-                  onChange={(e) => setTaxDeclaration(e.target.value as TaxDeclaration)}
-                  className="w-full px-3 py-2.5 rounded-xl border border-[#CBD5E1] text-xs font-semibold text-[#0B1F3A] bg-white outline-none"
-                >
-                  <option value="Standard TDS">Standard TDS Applicable (10% over Rs. 40k/50k threshold)</option>
-                  <option value="15G">Form 15G (Below 60 Yrs - NIL TDS deduction locked)</option>
-                  <option value="15H">Form 15H (Senior Citizen 60+ Yrs - NIL TDS deduction locked)</option>
-                </select>
+
+                {/* 3 Visible Option Cards for Direct 1-Tap Selection */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-2">
+                  {[
+                    {
+                      id: 'Standard TDS' as TaxDeclaration,
+                      title: 'Standard TDS (10%)',
+                      desc: 'Standard 10% deduction over threshold limits',
+                      tag: 'Default',
+                    },
+                    {
+                      id: '15G' as TaxDeclaration,
+                      title: 'Form 15G',
+                      desc: 'Below 60 Yrs — NIL TDS deduction locked',
+                      tag: '< 60 Yrs',
+                    },
+                    {
+                      id: '15H' as TaxDeclaration,
+                      title: 'Form 15H',
+                      desc: 'Senior Citizen (60+) — NIL TDS deduction locked',
+                      tag: '60+ Yrs',
+                    },
+                  ].map((opt) => {
+                    const isSelected = taxDeclaration === opt.id;
+                    return (
+                      <button
+                        type="button"
+                        key={opt.id}
+                        onClick={() => setTaxDeclaration(opt.id)}
+                        className={`p-3 rounded-xl border text-left transition-all cursor-pointer touch-manipulation flex flex-col justify-between ${
+                          isSelected
+                            ? 'border-[#D4AF37] bg-[#FFFDF7] shadow-sm ring-1 ring-[#D4AF37]'
+                            : 'border-[#CBD5E1] bg-white hover:border-[#94A3B8] hover:bg-[#F8FAFC]'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1 mb-1">
+                          <span className={`text-xs font-bold ${isSelected ? 'text-[#0B1F3A]' : 'text-[#334155]'}`}>
+                            {opt.title}
+                          </span>
+                          <span
+                            className={`w-4 h-4 rounded-full border flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                              isSelected
+                                ? 'border-[#D4AF37] bg-[#D4AF37] text-white'
+                                : 'border-[#CBD5E1] bg-white text-transparent'
+                            }`}
+                          >
+                            ✓
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-[#64748B] leading-tight mb-1">
+                          {opt.desc}
+                        </p>
+                        <span
+                          className={`self-start text-[9px] font-semibold px-1.5 py-0.5 rounded ${
+                            isSelected
+                              ? 'bg-[#D4AF37]/15 text-[#8C6808]'
+                              : 'bg-slate-100 text-slate-500'
+                          }`}
+                        >
+                          {opt.tag}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Dropdown Selector (Synchronized & Styled with Custom Chevron) */}
+                <div className="relative">
+                  <select
+                    value={taxDeclaration}
+                    onChange={(e) => setTaxDeclaration(e.target.value as TaxDeclaration)}
+                    className="w-full pl-3.5 pr-9 py-2.5 rounded-xl border border-[#CBD5E1] text-xs font-semibold text-[#0B1F3A] bg-white outline-none cursor-pointer focus:border-[#D4AF37] appearance-none"
+                  >
+                    <option value="Standard TDS">Standard TDS Applicable (10% over Rs. 40k/50k threshold)</option>
+                    <option value="15G">Form 15G (Below 60 Yrs - NIL TDS deduction locked)</option>
+                    <option value="15H">Form 15H (Senior Citizen 60+ Yrs - NIL TDS deduction locked)</option>
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-[#64748B]">
+                    <ChevronDown size={15} />
+                  </div>
+                </div>
               </div>
 
               {/* Digital Document Vault Uploads */}
