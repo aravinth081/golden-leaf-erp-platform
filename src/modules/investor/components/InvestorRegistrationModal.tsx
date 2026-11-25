@@ -264,9 +264,73 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
     }
   };
 
+  const formScrollRef = React.useRef<HTMLDivElement | null>(null);
+
+  React.useEffect(() => {
+    if (formScrollRef.current) {
+      formScrollRef.current.scrollTo({ top: 0, behavior: 'instant' });
+    }
+  }, [activeStep]);
+
+  const handleNextStep = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (activeStep === 1) {
+      if (!fullName.trim()) {
+        alert('Please enter investor full name.');
+        return;
+      }
+      if (!investmentAmount || Number(investmentAmount) <= 0) {
+        alert('Please enter a valid investor investment amount.');
+        return;
+      }
+    }
+    if (activeStep === 2) {
+      if (!primaryMobile || primaryMobile.replace(/\D/g, '').length < 10) {
+        alert('Please enter a valid 10-digit primary mobile number.');
+        return;
+      }
+      if (!doorNo.trim() || !street.trim() || !town.trim() || !district.trim()) {
+        alert('Please fill in complete residential address details (Door No, Street, City, District).');
+        return;
+      }
+      if (!pinCode || pinCode.replace(/\D/g, '').length !== 6) {
+        alert('Please enter a valid 6-digit PIN code.');
+        return;
+      }
+    }
+    if (activeStep === 3) {
+      if (pan.trim().length !== 10) {
+        alert('PAN must be exactly 10 characters.');
+        return;
+      }
+      if (aadhaar && aadhaar.replace(/\D/g, '').length !== 12) {
+        alert('Aadhaar must be exactly 12 digits.');
+        return;
+      }
+    }
+    if (activeStep === 4) {
+      if (!investmentAmount || Number(investmentAmount) <= 0) {
+        alert('Please enter a valid investment amount.');
+        return;
+      }
+      if (!interestRate || Number(interestRate) <= 0) {
+        alert('Please enter an agreed annual rate of interest.');
+        return;
+      }
+    }
+    setActiveStep((s) => (Math.min(s + 1, 5)) as any);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-white rounded-3xl shadow-2xl max-w-3xl w-full max-h-[92dvh] flex flex-col overflow-hidden border border-[#D4AF37]/40 animate-fade-in my-auto">
+      <form
+        noValidate
+        onSubmit={handleSubmit}
+        className="bg-white rounded-3xl shadow-2xl max-w-3xl w-full max-h-[92dvh] flex flex-col overflow-hidden border border-[#D4AF37]/40 animate-fade-in my-auto"
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-5 sm:px-6 py-4 bg-[#0B1F3A] text-white shrink-0">
           <div>
@@ -278,8 +342,9 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
             </p>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-2 rounded-xl hover:bg-white/10 text-white/70 hover:text-white transition-colors cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center shrink-0"
+            className="p-2 rounded-xl hover:bg-white/10 text-white/70 hover:text-white transition-colors cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center shrink-0 touch-manipulation"
           >
             <X size={20} />
           </button>
@@ -295,9 +360,10 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
             { num: 5, label: '05 Payout Bank' },
           ].map((s) => (
             <button
+              type="button"
               key={s.num}
               onClick={() => setActiveStep(s.num as any)}
-              className={`py-2.5 sm:py-3 px-1.5 sm:px-2 text-center font-bold border-b-2 transition-all cursor-pointer ${
+              className={`py-2.5 sm:py-3 px-1.5 sm:px-2 text-center font-bold border-b-2 transition-all cursor-pointer touch-manipulation select-none ${
                 activeStep === s.num
                   ? 'border-[#D4AF37] text-[#0B1F3A] bg-white'
                   : activeStep > s.num
@@ -324,7 +390,7 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-5 custom-scrollbar">
+        <div ref={formScrollRef} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-5 custom-scrollbar">
           {/* STEP 1: Basic Identity */}
           {activeStep === 1 && (
             <div className="space-y-4">
@@ -1116,79 +1182,51 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
               </div>
             </div>
           )}
+        </div>
 
-          {/* Footer Navigation */}
-          <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-4 border-t border-[#E2E8F0] shrink-0">
-            <div>
-              {activeStep > 1 && (
-                <button
-                  type="button"
-                  onClick={() => setActiveStep((s) => (s - 1) as any)}
-                  className="w-full sm:w-auto px-4 py-2.5 min-h-[40px] rounded-xl border border-[#CBD5E1] text-xs font-semibold text-[#475569] hover:bg-[#F1F5F9] transition-colors flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.98]"
-                >
-                  <ArrowLeft size={14} /> Back
-                </button>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2">
+        {/* Pinned Footer Navigation */}
+        <div className="px-5 sm:px-6 py-3.5 bg-white border-t border-[#E2E8F0] shrink-0 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2.5 z-10">
+          <div>
+            {activeStep > 1 && (
               <button
                 type="button"
-                onClick={onClose}
-                className="flex-1 sm:flex-none px-4 py-2.5 min-h-[40px] rounded-xl text-xs font-semibold text-[#64748B] hover:bg-[#F1F5F9] transition-colors cursor-pointer flex items-center justify-center active:scale-[0.98]"
+                onClick={() => setActiveStep((s) => (Math.max(s - 1, 1)) as any)}
+                className="w-full sm:w-auto px-4 py-2.5 min-h-[40px] rounded-xl border border-[#CBD5E1] text-xs font-semibold text-[#475569] hover:bg-[#F1F5F9] transition-colors flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.98] touch-manipulation select-none"
               >
-                Cancel
+                <ArrowLeft size={14} /> Back
               </button>
-
-              {activeStep < 5 ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (activeStep === 1) {
-                      if (!fullName.trim()) {
-                        alert('Please enter investor full name.');
-                        return;
-                      }
-                      if (!investmentAmount || Number(investmentAmount) <= 0) {
-                        alert('Please enter a valid investor investment amount.');
-                        return;
-                      }
-                    }
-                    if (activeStep === 3) {
-                      if (pan.trim().length !== 10) {
-                        alert('PAN must be exactly 10 characters.');
-                        return;
-                      }
-                    }
-                    if (activeStep === 4) {
-                      if (!investmentAmount || Number(investmentAmount) <= 0) {
-                        alert('Please enter a valid investment amount.');
-                        return;
-                      }
-                      if (!interestRate || Number(interestRate) <= 0) {
-                        alert('Please enter an agreed annual rate of interest.');
-                        return;
-                      }
-                    }
-                    setActiveStep((s) => (s + 1) as any);
-                  }}
-                  className="flex-1 sm:flex-none px-5 py-2.5 min-h-[40px] rounded-xl bg-[#0B1F3A] hover:bg-[#1E3A8A] text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-sm cursor-pointer active:scale-[0.98]"
-                >
-                  Next Step <ArrowRight size={14} />
-                </button>
-              ) : (
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 sm:flex-none px-6 py-2.5 min-h-[40px] rounded-xl bg-[#D4AF37] hover:bg-[#C9A227] text-white text-xs font-bold transition-colors shadow-md flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer active:scale-[0.98]"
-                >
-                  {loading ? 'Creating Profile...' : '✓ Complete Registration'}
-                </button>
-              )}
-            </div>
+            )}
           </div>
-        </form>
-      </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 sm:flex-none px-4 py-2.5 min-h-[40px] rounded-xl text-xs font-semibold text-[#64748B] hover:bg-[#F1F5F9] transition-colors cursor-pointer flex items-center justify-center active:scale-[0.98] touch-manipulation select-none"
+            >
+              Cancel
+            </button>
+
+            {activeStep < 5 ? (
+              <button
+                type="button"
+                onClick={handleNextStep}
+                className="flex-1 sm:flex-none px-5 py-2.5 min-h-[40px] rounded-xl bg-[#0B1F3A] hover:bg-[#1E3A8A] text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-sm cursor-pointer active:scale-[0.98] touch-manipulation select-none"
+              >
+                Next Step <ArrowRight size={14} />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex-1 sm:flex-none px-6 py-2.5 min-h-[40px] rounded-xl bg-[#D4AF37] hover:bg-[#C9A227] text-white text-xs font-bold transition-colors shadow-md flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer active:scale-[0.98] touch-manipulation select-none"
+              >
+                {loading ? 'Creating Profile...' : '✓ Complete Registration'}
+              </button>
+            )}
+          </div>
+        </div>
+      </form>
     </div>
   );
 };

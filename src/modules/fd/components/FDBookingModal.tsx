@@ -324,9 +324,10 @@ export const FDBookingModal: React.FC<FDBookingModalProps> = ({
             { num: 4, label: 'Payment & Nominee' },
           ].map((s) => (
             <button
+              type="button"
               key={s.num}
               onClick={() => setActiveStep(s.num as any)}
-              className={`py-2.5 sm:py-3 px-1.5 sm:px-2 text-center font-bold border-b-2 transition-all cursor-pointer ${
+              className={`py-2.5 sm:py-3 px-1.5 sm:px-2 text-center font-bold border-b-2 transition-all cursor-pointer touch-manipulation select-none ${
                 activeStep === s.num
                   ? 'border-[#D4AF37] text-[#0B1F3A] bg-white'
                   : activeStep > s.num
