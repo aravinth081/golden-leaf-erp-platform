@@ -880,7 +880,7 @@ const BUILTIN_DEMO_STAFF: Record<
  * Allows "@Aravinth s", "aravinth.s", "aravinths" to match seamlessly.
  */
 function normalizeLoginKey(val: string): string {
-  return (val || '').trim().toLowerCase().replace(/^@+/, '').replace(/[\s._-]+/g, '');
+  return (val || '').trim().toLowerCase().replace(/^@+|@+$/g, '').replace(/[\s._-]+/g, '');
 }
 
 /**

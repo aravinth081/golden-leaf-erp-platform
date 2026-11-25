@@ -211,7 +211,7 @@ export const LoginPage: React.FC = () => {
 
     setIsAuthenticatingStaff(true);
     try {
-      const cleanUser = staffUsername.trim().replace(/^@+/, '');
+      const cleanUser = staffUsername.trim().replace(/^@+|@+$/g, '');
       const result = await authenticateStaffCredentials(cleanUser, staffPassword);
       
       // Reset failed attempts counter on success

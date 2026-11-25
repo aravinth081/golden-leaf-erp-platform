@@ -364,10 +364,10 @@ export const RolesPermissionsPage: React.FC = () => {
       return;
     }
 
-    const cleanUsername = (createForm.username || '').trim().toLowerCase().replace(/^@+/, '').replace(/\s+/g, '.');
+    const cleanUsername = (createForm.username || '').trim().toLowerCase().replace(/^@+|@+$/g, '').replace(/\s+/g, '.');
 
     // Check username uniqueness
-    if (accounts.some((a) => (a.username || '').toLowerCase().replace(/^@+/, '') === cleanUsername)) {
+    if (accounts.some((a) => (a.username || '').toLowerCase().replace(/^@+|@+$/g, '') === cleanUsername)) {
       addToast({ type: 'error', title: 'Username Taken', message: `Username "${cleanUsername}" is already in use. Please choose another.` });
       return;
     }
@@ -387,7 +387,7 @@ export const RolesPermissionsPage: React.FC = () => {
       const newAccount: UserAccount = {
         id: createdStaff.id,
         name: createdStaff.fullName,
-        username: (createdStaff.username || '').replace(/^@+/, ''),
+        username: (createdStaff.username || '').replace(/^@+|@+$/g, ''),
         role: createForm.role,
         branchName: createdStaff.branchName || 'Main Branch (Chennai)',
         status: createForm.status,
@@ -398,7 +398,7 @@ export const RolesPermissionsPage: React.FC = () => {
         email: createdStaff.email,
       };
 
-      setAccounts((prev) => [newAccount, ...prev.filter(a => a.id !== newAccount.id && (a.username || '').toLowerCase().replace(/^@+/, '') !== cleanUsername)]);
+      setAccounts((prev) => [newAccount, ...prev.filter(a => a.id !== newAccount.id && (a.username || '').toLowerCase().replace(/^@+|@+$/g, '') !== cleanUsername)]);
       window.dispatchEvent(new CustomEvent('glf-staff-updated'));
       addToast({
         type: 'success',
@@ -487,7 +487,7 @@ export const RolesPermissionsPage: React.FC = () => {
         );
         const seen = new Set<string>();
         return updated.filter((item) => {
-          const key = (item.username || '').trim().toLowerCase().replace(/^@+/, '');
+          const key = (item.username || '').trim().toLowerCase().replace(/^@+|@+$/g, '');
           if (seen.has(key)) return false;
           seen.add(key);
           return true;
@@ -642,7 +642,7 @@ export const RolesPermissionsPage: React.FC = () => {
         return true;
       })
       .filter((acc) => {
-        const key = (acc.username || '').trim().toLowerCase().replace(/^@+/, '');
+        const key = (acc.username || '').trim().toLowerCase().replace(/^@+|@+$/g, '');
         if (!key) return true;
         if (seen.has(key)) return false;
         seen.add(key);
@@ -1577,7 +1577,7 @@ export const RolesPermissionsPage: React.FC = () => {
                       Permanently remove this account?
                     </p>
                     <p className="mt-1 text-rose-700 leading-relaxed text-xs">
-                      Deleting <strong>@{accountToDelete.username.replace(/^@+/, '')}</strong> ({accountToDelete.name}) will revoke all access privileges permanently.
+                      Deleting <strong>@{accountToDelete.username.replace(/^@+|@+$/g, '')}</strong> ({accountToDelete.name}) will revoke all access privileges permanently.
                     </p>
                   </div>
                 </div>
@@ -1585,7 +1585,7 @@ export const RolesPermissionsPage: React.FC = () => {
                 <div className="p-3 bg-slate-50 rounded-xl space-y-1.5 border border-slate-200 text-xs">
                   <div className="flex justify-between">
                     <span className="text-slate-500 font-medium">Username:</span>
-                    <span className="font-bold text-[#0B1F3A] font-mono">@{accountToDelete.username.replace(/^@+/, '')}</span>
+                    <span className="font-bold text-[#0B1F3A] font-mono">@{accountToDelete.username.replace(/^@+|@+$/g, '')}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500 font-medium">Role:</span>
