@@ -7,7 +7,7 @@ import React, { useState } from 'react';
 import {
   X, User, MapPin, ShieldCheck, Landmark, CheckCircle,
   Upload, ArrowRight, ArrowLeft, Loader2, Coins, TrendingUp,
-  Calendar, Percent, Calculator, ChevronDown
+  Calendar, Percent, Calculator, ChevronDown, Eye, Trash2
 } from 'lucide-react';
 import type { Investor, InvestorCategory, TaxDeclaration, InvestorDocuments } from '../../../types/investor.types';
 import { calculateAge, isSeniorCitizen, numberToWords } from '../../../utils/fdCalculations';
@@ -804,51 +804,113 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
 
               {/* Digital Document Vault Uploads */}
               <div className="p-4 rounded-2xl bg-[#F8FAFC] border border-[#E2E8F0] space-y-2.5">
-                <p className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wider">
-                  Digital Document Vault Uploads (5 Documents)
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                <div className="flex items-center justify-between pb-1 border-b border-[#E2E8F0]/60">
+                  <p className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wider">
+                    Digital Document Vault Uploads (5 Documents)
+                  </p>
+                  <span className="text-[10px] text-[#059669] font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                    Cloudinary Storage Active
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
                   {VAULT_DOCS.map((doc) => {
-                    const isAttached = !!documents[doc.key];
+                    const docUrl = documents[doc.key];
+                    const isAttached = !!docUrl;
                     const isUploading = uploadingDoc === doc.key;
 
                     return (
                       <div
                         key={doc.key}
-                        className="p-2.5 bg-white rounded-xl border border-[#E2E8F0] flex items-center justify-between gap-2"
+                        className={`p-3 rounded-xl border transition-all flex items-center justify-between gap-2.5 ${
+                          isAttached
+                            ? 'bg-emerald-50/40 border-emerald-300 shadow-xs'
+                            : 'bg-white border-[#E2E8F0] hover:border-[#CBD5E1]'
+                        }`}
                       >
-                        <span className="text-[#334155] font-medium text-[11px] truncate">{doc.name}</span>
-                        <label
-                          className={`px-2 py-1 rounded-lg border text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors shrink-0 ${
-                            isAttached
-                              ? 'bg-emerald-50 text-[#059669] border-emerald-300 hover:bg-emerald-100'
-                              : 'bg-[#FAF7F0] hover:bg-[#F3EAD3] text-[#8C6808] border-[#D4AF37]/40'
-                          } ${isUploading ? 'opacity-70 pointer-events-none' : ''}`}
-                        >
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={(e) => handleFileUpload(e, doc.key)}
-                            disabled={isUploading}
-                          />
-                          {isUploading ? (
+                        <div className="min-w-0 flex-1">
+                          <span className="text-[#1E293B] font-semibold text-xs block truncate">
+                            {doc.name}
+                          </span>
+                          {isAttached && (
+                            <span className="text-[10px] text-emerald-700 font-mono flex items-center gap-1 mt-0.5">
+                              <CheckCircle size={10} className="text-emerald-600 shrink-0" />
+                              <span className="truncate">Saved in Cloudinary</span>
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Hidden Native File Input with programmatic click */}
+                        <input
+                          id={`vault-upload-${doc.key}`}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => handleFileUpload(e, doc.key)}
+                          disabled={isUploading}
+                        />
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {isAttached && (
                             <>
-                              <Loader2 size={10} className="animate-spin text-[#D4AF37]" />
-                              <span>Uploading...</span>
-                            </>
-                          ) : isAttached ? (
-                            <>
-                              <CheckCircle size={10} className="text-[#059669]" />
-                              <span>Attached</span>
-                            </>
-                          ) : (
-                            <>
-                              <Upload size={10} />
-                              <span>Attach</span>
+                              <a
+                                href={docUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:text-[#0B1F3A] hover:bg-slate-100 transition-colors"
+                                title="View uploaded document"
+                              >
+                                <Eye size={13} />
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setDocuments((prev) => {
+                                    const next = { ...prev };
+                                    delete next[doc.key];
+                                    return next;
+                                  });
+                                }}
+                                className="p-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors cursor-pointer"
+                                title="Remove document"
+                              >
+                                <Trash2 size={13} />
+                              </button>
                             </>
                           )}
-                        </label>
+
+                          <button
+                            type="button"
+                            disabled={isUploading}
+                            onClick={() => {
+                              const el = document.getElementById(`vault-upload-${doc.key}`) as HTMLInputElement;
+                              if (el) {
+                                el.value = '';
+                                el.click();
+                              }
+                            }}
+                            className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 touch-manipulation select-none ${
+                              isAttached
+                                ? 'bg-white hover:bg-emerald-100 text-[#059669] border-emerald-300'
+                                : 'bg-[#FAF7F0] hover:bg-[#F3EAD3] text-[#8C6808] border-[#D4AF37]/50 shadow-sm'
+                            } ${isUploading ? 'opacity-70 pointer-events-none' : ''}`}
+                          >
+                            {isUploading ? (
+                              <>
+                                <Loader2 size={12} className="animate-spin text-[#D4AF37]" />
+                                <span>Uploading...</span>
+                              </>
+                            ) : isAttached ? (
+                              <>
+                                <span>Change</span>
+                              </>
+                            ) : (
+                              <>
+                                <Upload size={12} />
+                                <span>Attach</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
