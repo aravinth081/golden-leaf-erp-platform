@@ -13,35 +13,35 @@
   font-family: 'InterWithManropeNumbers';
   src: local('Manrope Regular'), local('Manrope-Regular'), local('Manrope'), url('https://fonts.gstatic.com/s/manrope/v20/xn7_YHE41ni1AdIRqAuZuw1Bx9mbZk79FO_F.ttf') format('truetype');
   font-weight: 400;
-  font-display: swap;
+  font-display: optional;
   unicode-range: U+0030-0039, U+20B9, U+0025;
 }
 @font-face {
   font-family: 'InterWithManropeNumbers';
   src: local('Manrope Medium'), local('Manrope-Medium'), local('Manrope'), url('https://fonts.gstatic.com/s/manrope/v20/xn7_YHE41ni1AdIRqAuZuw1Bx9mbZk7PFO_F.ttf') format('truetype');
   font-weight: 500;
-  font-display: swap;
+  font-display: optional;
   unicode-range: U+0030-0039, U+20B9, U+0025;
 }
 @font-face {
   font-family: 'InterWithManropeNumbers';
   src: local('Manrope SemiBold'), local('Manrope-SemiBold'), local('Manrope'), url('https://fonts.gstatic.com/s/manrope/v20/xn7_YHE41ni1AdIRqAuZuw1Bx9mbZk4jE-_F.ttf') format('truetype');
   font-weight: 600;
-  font-display: swap;
+  font-display: optional;
   unicode-range: U+0030-0039, U+20B9, U+0025;
 }
 @font-face {
   font-family: 'InterWithManropeNumbers';
   src: local('Manrope Bold'), local('Manrope-Bold'), local('Manrope'), url('https://fonts.gstatic.com/s/manrope/v20/xn7_YHE41ni1AdIRqAuZuw1Bx9mbZk4aE-_F.ttf') format('truetype');
   font-weight: 700;
-  font-display: swap;
+  font-display: optional;
   unicode-range: U+0030-0039, U+20B9, U+0025;
 }
 @font-face {
   font-family: 'InterWithManropeNumbers';
   src: local('Manrope ExtraBold'), local('Manrope-ExtraBold'), local('Manrope'), url('https://fonts.gstatic.com/s/manrope/v20/xn7_YHE41ni1AdIRqAuZuw1Bx9mbZk59E-_F.ttf') format('truetype');
   font-weight: 800;
-  font-display: swap;
+  font-display: optional;
   unicode-range: U+0030-0039, U+20B9, U+0025;
 }
 

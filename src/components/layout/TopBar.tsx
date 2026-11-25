@@ -15,6 +15,33 @@ import { useAuthStore, useUIStore } from '../../store';
 import { Avatar } from '../ui/Avatar';
 import { ROLE_LABELS } from '../../types';
 
+// Isolated self-updating clock component for 2xl screens to avoid whole-TopBar re-renders
+const TopBarFinancialClock: React.FC = React.memo(() => {
+  const [currentTime, setCurrentTime] = useState<string>(() => {
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+    const dateStr = now.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+    return `${timeStr} • ${dateStr}`;
+  });
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+      const dateStr = now.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+      setCurrentTime(`${timeStr} • ${dateStr}`);
+    }, 15000);
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <div className="hidden 2xl:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100/90 text-slate-700 text-xs font-semibold font-manrope tabular-nums border border-slate-200/90 shadow-2xs">
+      <Clock size={13} className="text-slate-400" />
+      <span>{currentTime}</span>
+    </div>
+  );
+});
+
 export const TopBar: React.FC = () => {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
@@ -27,28 +54,7 @@ export const TopBar: React.FC = () => {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
 
-  // Live IST Financial Date & Clock for Employee Workstation
-  const [currentTime, setCurrentTime] = useState<string>('');
 
-  useEffect(() => {
-    const updateTime = () => {
-      const now = new Date();
-      const timeStr = now.toLocaleTimeString('en-IN', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-      });
-      const dateStr = now.toLocaleDateString('en-IN', {
-        weekday: 'short',
-        day: 'numeric',
-        month: 'short',
-      });
-      setCurrentTime(`${timeStr} • ${dateStr}`);
-    };
-    updateTime();
-    const timer = setInterval(updateTime, 10000);
-    return () => clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent | TouchEvent) => {
@@ -190,12 +196,7 @@ export const TopBar: React.FC = () => {
           </div>
 
           {/* Live Financial Clock (IST) */}
-          {currentTime && (
-            <div className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200 text-[11px] font-mono font-medium text-slate-600">
-              <Clock size={13} className="text-slate-400" />
-              <span>{currentTime}</span>
-            </div>
-          )}
+          <TopBarFinancialClock />
 
           {/* Duty / Attendance Status Badge (Staff Only — Admin is exempt) */}
           {user?.customClaims?.role !== 'admin' && (

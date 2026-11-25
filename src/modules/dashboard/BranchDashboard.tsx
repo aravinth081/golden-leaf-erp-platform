@@ -57,6 +57,47 @@ const formatFullINR = (val: number | null | undefined): string => {
   return `₹${Number(val).toLocaleString('en-IN')}`;
 };
 
+// Isolated self-updating live clock & date component to prevent whole-dashboard 1000ms re-renders
+const BranchLiveClockAndDate: React.FC = React.memo(() => {
+  const [now, setNow] = useState<Date>(() => new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const timeStr = now.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  });
+
+  const dateStr = now.toLocaleDateString('en-US', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+
+  return (
+    <>
+      <span className="inline-flex items-center gap-1 text-amber-300 font-medium text-[11px] shrink-0 whitespace-nowrap">
+        <Calendar size={11} className="text-[#D4AF37] shrink-0" />
+        <span className="hidden sm:inline">{dateStr}</span>
+        <span className="sm:hidden">{dateStr.replace(/^[A-Za-z]+, /, '')}</span>
+      </span>
+      <span className="text-white/25 shrink-0">•</span>
+      <span className="inline-flex items-center gap-1 text-white font-manrope font-bold text-[11px] tabular-nums shrink-0 whitespace-nowrap">
+        <Clock size={11} className="text-[#D4AF37] shrink-0" />
+        {timeStr}
+      </span>
+    </>
+  );
+});
+
 export const BranchDashboard: React.FC = () => {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
@@ -80,34 +121,7 @@ export const BranchDashboard: React.FC = () => {
   const [focusedBranchIndex, setFocusedBranchIndex] = useState<number>(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Live real-time clock & date display matching SaaS Reference Top Bar
-  const [currentTime, setCurrentTime] = useState<string>('');
-  const [currentDate, setCurrentDate] = useState<string>('');
 
-  useEffect(() => {
-    const updateDateTime = () => {
-      const now = new Date();
-      setCurrentTime(
-        now.toLocaleTimeString('en-US', {
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-          hour12: true,
-        })
-      );
-      setCurrentDate(
-        now.toLocaleDateString('en-US', {
-          weekday: 'short',
-          day: 'numeric',
-          month: 'short',
-          year: 'numeric',
-        })
-      );
-    };
-    updateDateTime();
-    const timer = setInterval(updateDateTime, 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   // Close custom dropdown on outside click
   useEffect(() => {
@@ -323,16 +337,7 @@ export const BranchDashboard: React.FC = () => {
                 ONLINE
               </span>
               <span className="text-white/25 shrink-0">•</span>
-              <span className="inline-flex items-center gap-1 text-amber-300 font-medium text-[11px] shrink-0 whitespace-nowrap">
-                <Calendar size={11} className="text-[#D4AF37] shrink-0" />
-                <span className="hidden sm:inline">{currentDate || 'Live'}</span>
-                <span className="sm:hidden">{currentDate ? currentDate.replace(/^[A-Za-z]+, /, '') : 'Live'}</span>
-              </span>
-              <span className="text-white/25 shrink-0">•</span>
-              <span className="inline-flex items-center gap-1 text-white font-manrope font-bold text-[11px] tabular-nums shrink-0 whitespace-nowrap">
-                <Clock size={11} className="text-[#D4AF37] shrink-0" />
-                {currentTime}
-              </span>
+              <BranchLiveClockAndDate />
               <span className="text-white/25 shrink-0">•</span>
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-400/20 text-[#F5D061] text-[9.5px] font-bold uppercase tracking-wider shrink-0 whitespace-nowrap">
                 <Sun size={9} className="shrink-0" />

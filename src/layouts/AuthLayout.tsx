@@ -180,23 +180,13 @@ export const AuthLayout: React.FC = () => {
             </motion.div>
 
             {/* Typography */}
-            <motion.h2
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-              className="font-serif text-[clamp(22px,2.2vw,32px)] font-black tracking-[0.07em] uppercase leading-tight text-[#0F1F38] drop-shadow-xs"
-            >
+            <h2 className="font-serif text-[clamp(22px,2.2vw,32px)] font-black tracking-[0.07em] uppercase leading-tight text-[#0F1F38] drop-shadow-xs">
               GOLDEN LEAF
-            </motion.h2>
+            </h2>
 
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.35 }}
-              className="font-body text-[clamp(9.5px,0.78vw,11.5px)] font-extrabold tracking-[0.26em] text-[#8C6207] uppercase mt-1 drop-shadow-xs"
-            >
+            <p className="font-body text-[clamp(9.5px,0.78vw,11.5px)] font-extrabold tracking-[0.26em] text-[#8C6207] uppercase mt-1 drop-shadow-xs">
               FINANCE & LOAN MANAGEMENT
-            </motion.p>
+            </p>
 
             {/* Classical Gold Diamond Divider */}
             <div className="flex items-center justify-center gap-2.5 my-2.5 sm:my-3 w-full max-w-[240px]">
@@ -209,14 +199,9 @@ export const AuthLayout: React.FC = () => {
               <div className="h-[1px] flex-1 bg-gradient-to-l from-transparent via-[#D4AF37] to-[#C59B27]" />
             </div>
 
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.4 }}
-              className="text-[#475569] text-[clamp(11px,0.85vw,13px)] font-body text-center max-w-[340px] leading-relaxed font-semibold px-4"
-            >
+            <p className="text-[#475569] text-[clamp(11px,0.85vw,13px)] font-body text-center max-w-[340px] leading-relaxed font-semibold px-4">
               Empowering your financial future with smart, secure, and seamless loan management solutions.
-            </motion.p>
+            </p>
           </div>
         </div>
 
