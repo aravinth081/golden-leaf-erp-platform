@@ -288,18 +288,18 @@ export const AuthLayout: React.FC = () => {
           </div>
 
           {/* Centralized Brand & Form Container — Universally Centered on All Mobile Devices */}
-          <div className="w-full max-w-[390px] sm:max-w-[440px] mx-auto relative z-10 my-auto flex flex-col items-center justify-center shrink-0 px-2 sm:px-0">
+          <div className="w-full max-w-[410px] sm:max-w-[440px] mx-auto relative z-10 my-auto flex flex-col items-center justify-center shrink-0 px-3 sm:px-0">
             {/* Mobile-only single brand header */}
-            <div className="sm:hidden flex flex-col items-center pt-0 pb-1 mb-1 text-center relative z-10 w-full shrink-0">
-              <div className="relative w-[clamp(64px,16vw,78px)] h-[clamp(64px,16vw,78px)] mb-1.5 flex items-center justify-center">
+            <div className="sm:hidden flex flex-col items-center pt-0 pb-1 mb-2 text-center relative z-10 w-full shrink-0">
+              <div className="relative w-[90px] h-[90px] mb-2 flex items-center justify-center">
                 {/* Soft ambient golden glow behind the emblem */}
-                <div className="absolute inset-0 bg-[#D4AF37]/30 rounded-[20px] blur-md -z-10" />
-                <AuthBrandLogo sizeClass="w-full h-full drop-shadow-[0_8px_20px_rgba(212,175,55,0.35)]" isMobile />
+                <div className="absolute inset-0 bg-[#D4AF37]/35 rounded-[24px] blur-md -z-10" />
+                <AuthBrandLogo sizeClass="w-full h-full drop-shadow-[0_10px_25px_rgba(212,175,55,0.4)]" isMobile />
               </div>
-              <h1 className="font-serif font-black text-[clamp(20px,5.2vw,24px)] text-[#0B1F3A] uppercase tracking-[0.08em] leading-tight drop-shadow-2xs">
+              <h1 className="font-serif font-black text-[26px] text-[#0B1F3A] uppercase tracking-[0.08em] leading-tight drop-shadow-xs">
                 GOLDEN LEAF
               </h1>
-              <p className="text-[clamp(9px,2.2vw,10.5px)] font-extrabold text-[#B8860B] uppercase tracking-[0.24em] mt-0.5">
+              <p className="text-[11.5px] font-extrabold text-[#B8860B] uppercase tracking-[0.24em] mt-1">
                 FINANCE & LOAN MANAGEMENT
               </p>
             </div>
