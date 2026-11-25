@@ -174,7 +174,7 @@ export const AuthLayout: React.FC = () => {
         </div>
 
         {/* Right Panel - Form Area (Strictly 50% width on laptops/computers, clean universally responsive layout on all mobiles) */}
-        <div className="w-full sm:w-1/2 h-full max-sm:h-[100dvh] flex flex-col justify-center items-center bg-white px-3 sm:px-8 lg:px-12 py-2 sm:py-6 relative z-10 overflow-hidden sm:overflow-y-auto custom-scrollbar">
+        <div className="w-full sm:w-1/2 h-full max-sm:h-[100dvh] flex flex-col justify-center items-center bg-white px-3 sm:px-8 lg:px-12 py-2 sm:py-6 relative z-10 overflow-y-auto custom-scrollbar">
           {/* Sweeping Concentric Gold Ribbons — Top Left Corner (Mobile View) */}
           <div className="sm:hidden max-sm:fixed max-sm:top-0 max-sm:left-0 w-[clamp(90px,28vw,150px)] aspect-square pointer-events-none z-0 opacity-90">
             <svg viewBox="0 0 200 200" className="w-full h-full" fill="none">

@@ -238,9 +238,127 @@ export const LoginPage: React.FC = () => {
         sessionStorage.removeItem('glf_failed_login_attempts');
       } catch {}
 
-      // Direct instant authentication to dashboard
-      completeLogin(result);
-      return;
+      // Check if 2FA MFA is required:
+      // STRICT RULE:
+      // - Admin (Super Admin) & Branch Manager (BM): Mandatory Google Authenticator QR Code scan & 6-digit OTP verification.
+      // - HR, Credit Manager, CRO: Direct access to dashboard upon entering username & password. No QR code, no OTP.
+      const profileRole = (result.profile?.role || '').toString().trim().toUpperCase().replace(/[\s-]+/g, '_');
+      const claimsRole = (result.authUser.customClaims?.role || '').toString().trim().toLowerCase().replace(/[\s-]+/g, '_');
+
+      const isDirectAccessRole =
+        profileRole === 'HR' ||
+        profileRole === 'CREDIT_MANAGER' ||
+        profileRole === 'CRO' ||
+        claimsRole === 'hr_payroll_manager' ||
+        claimsRole === 'credit_manager' ||
+        claimsRole === 'collection_agent' ||
+        claimsRole.includes('hr') ||
+        claimsRole.includes('payroll') ||
+        claimsRole.includes('credit') ||
+        claimsRole.includes('cro') ||
+        claimsRole.includes('collection') ||
+        claimsRole.includes('agent') ||
+        claimsRole.includes('recovery');
+
+      const isAdminOrBm =
+        profileRole === 'ADMIN' ||
+        profileRole === 'BRANCH_MANAGER' ||
+        profileRole.includes('ADMIN') ||
+        profileRole.includes('BRANCH') ||
+        profileRole === 'BM' ||
+        claimsRole === 'admin' ||
+        claimsRole === 'branch_manager' ||
+        claimsRole.includes('admin') ||
+        claimsRole.includes('branch') ||
+        claimsRole === 'bm';
+
+      const isMfaRequired = isAdminOrBm && !isDirectAccessRole;
+
+      console.log('[GLF Security MFA] Login role check:', {
+        username: cleanUser,
+        profileRole,
+        claimsRole,
+        isAdminOrBm,
+        isDirectAccessRole,
+        isMfaRequired,
+      });
+
+      // HR, Credit Manager, CRO: Direct access to dashboard without QR code or OTP
+      if (!isMfaRequired) {
+        completeLogin(result);
+        return;
+      }
+
+      // Admin & Branch Manager: Mandatory Google Authenticator 2FA (QR Code + OTP)
+      setPendingAuthResult(result);
+
+      let isMfaEnabled = !!result.profile?.isMfaEnabled;
+      let existingSecret = result.profile?.totpSecret || '';
+
+      if (isSupabaseConfigured() && supabase) {
+        try {
+          const { data: dbRows, error: dbErr } = await supabase
+            .from('staff_users')
+            .select('is_mfa_enabled, totp_secret')
+            .or(`id.eq.${result.authUser.uid},username.ilike.${cleanUser}`)
+            .is('deleted_at', null)
+            .limit(1);
+
+          const dbUser = dbRows?.[0];
+          if (!dbErr && dbUser) {
+            if (dbUser.is_mfa_enabled && dbUser.totp_secret) {
+              isMfaEnabled = true;
+              existingSecret = dbUser.totp_secret;
+            }
+          }
+        } catch (err) {
+          console.warn('[MFA] Supabase query status error:', err);
+        }
+      }
+
+      // Pre-generate TOTP URI and QR Code for instant scanning
+      const roleName = getRoleBadgeLabel(result.authUser.customClaims?.role || result.profile?.role);
+      const rawPhone = (result.profile?.mobile || '').replace(/\D/g, '').slice(-10);
+      const formattedPhone = rawPhone ? `+91 ${rawPhone}` : '';
+      const authLabel = formattedPhone
+        ? `${result.profile?.fullName || cleanUser} (${formattedPhone} • ${roleName})`
+        : `${result.profile?.fullName || cleanUser} (${roleName})`;
+
+      const secretToUse = existingSecret ? existingSecret : new OTPAuth.Secret({ size: 20 }).base32;
+      const secretObj = OTPAuth.Secret.fromBase32(secretToUse);
+
+      const totp = new OTPAuth.TOTP({
+        issuer: 'Golden Leaf Finance',
+        label: authLabel,
+        algorithm: 'SHA1',
+        digits: 6,
+        period: 30,
+        secret: secretObj,
+      });
+
+      const otpauthUri = totp.toString();
+      const qrDataUrl = await QRCode.toDataURL(otpauthUri, {
+        margin: 2,
+        width: 220,
+        color: {
+          dark: '#0B1F3A',
+          light: '#FFFFFF',
+        },
+      });
+
+      setPendingSecret(secretToUse);
+      setQrCodeUrl(qrDataUrl);
+      setOtpCode('');
+      setOtpError('');
+      setShowQrInVerify(false);
+
+      if (isMfaEnabled && existingSecret) {
+        // Enrolled: Proceed to enter 6-digit TOTP (with quick scan option for any phone)
+        setAuthStep('MFA_VERIFY');
+      } else {
+        // First-time enrollment: Display QR code & require setup OTP confirmation
+        setAuthStep('MFA_SETUP');
+      }
     } catch (err: any) {
       const nextAttempts = failedAttempts + 1;
       setFailedAttempts(nextAttempts);
