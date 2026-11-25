@@ -50,6 +50,21 @@ export function parseDobToDate(dobStr: string | null | undefined): Date | null {
     return null;
   }
 
+  // 3. Raw 8 digits DDMMYYYY
+  if (/^\d{8}$/.test(trimmed)) {
+    const day = parseInt(trimmed.slice(0, 2), 10);
+    const month = parseInt(trimmed.slice(2, 4), 10) - 1;
+    const year = parseInt(trimmed.slice(4, 8), 10);
+    const date = new Date(year, month, day);
+    if (
+      date.getFullYear() === year &&
+      date.getMonth() === month &&
+      date.getDate() === day
+    ) {
+      return date;
+    }
+  }
+
   // 3. Fallback to standard Date parsing if valid
   const fallback = new Date(trimmed);
   if (!isNaN(fallback.getTime())) {

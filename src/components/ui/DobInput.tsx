@@ -49,6 +49,7 @@ export const DobInput = forwardRef<HTMLInputElement, DobInputProps>(
   ) => {
     const inputId = id || `dob-input-${name}`;
     const hiddenDateRef = useRef<HTMLInputElement>(null);
+    const isDeletingRef = useRef(false);
 
     // Format display value to DD-MM-YYYY (e.g. if ISO '1980-01-01' is passed in)
     const [displayVal, setDisplayVal] = useState<string>(() => formatToStandardDob(value));
@@ -65,22 +66,33 @@ export const DobInput = forwardRef<HTMLInputElement, DobInputProps>(
       }
     }, [value, onAgeCalculated]);
 
+    // Track backspace / delete to prevent unwanted auto-dash insertion during deletion
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+      props.onKeyDown?.(e);
+      if (e.key === 'Backspace' || e.key === 'Delete') {
+        isDeletingRef.current = true;
+      } else {
+        isDeletingRef.current = false;
+      }
+    };
+
     // Handle user typing naturally
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const raw = e.target.value;
       const cursorPos = e.target.selectionStart || raw.length;
 
-      // Allow only digits, dashes, and slashes
-      let cleaned = raw.replace(/[^\d\-/]/g, '').slice(0, 10);
+      // Allow only digits, dashes, slashes, and dots
+      let cleaned = raw.replace(/[^\d\-/. ]/g, '').slice(0, 10);
 
-      // Smart auto-dash ONLY when typing forward at the end of the text
-      const isAppending = cursorPos === raw.length;
-      if (isAppending) {
-        // When typing e.g. "15" and next is digit "0" -> auto-insert dash "15-0"
+      // If user typed 8 digits without separator e.g. 15081975
+      if (/^\d{8}$/.test(cleaned)) {
+        cleaned = `${cleaned.slice(0, 2)}-${cleaned.slice(2, 4)}-${cleaned.slice(4, 8)}`;
+      } else if (!isDeletingRef.current && cursorPos === raw.length) {
+        // Only auto-add hyphen when typing forward at the end
         if (/^\d{2}$/.test(cleaned)) {
           cleaned = `${cleaned}-`;
-        } else if (/^\d{2}[-/]\d{2}$/.test(cleaned)) {
-          cleaned = `${cleaned}-`;
+        } else if (/^\d{2}[-/.]\d{2}$/.test(cleaned)) {
+          cleaned = `${cleaned.replace(/[/. ]/g, '-')}-`;
         }
       }
 
@@ -109,7 +121,7 @@ export const DobInput = forwardRef<HTMLInputElement, DobInputProps>(
       if (!displayVal) return;
 
       const formatted = formatToStandardDob(displayVal);
-      if (formatted !== displayVal) {
+      if (formatted && formatted !== displayVal) {
         setDisplayVal(formatted);
         onChange?.({
           target: {
@@ -193,6 +205,7 @@ export const DobInput = forwardRef<HTMLInputElement, DobInputProps>(
             maxLength={10}
             value={displayVal}
             onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
             onBlur={handleBlur}
             disabled={disabled}
             className={clsx(

@@ -21,7 +21,7 @@ import { getCenters } from '../../services/centerService';
 import { getBranchCollectionGroups } from '../../services/monitoringDataService';
 import { uploadCustomerPhoto, uploadKYCDocument, uploadImage } from '../../services/cloudinary';
 import { DobInput, Modal } from '../../components/ui';
-import { calculateAge } from '../../utils/dateUtils';
+import { calculateAge, parseDobToDate } from '../../utils/dateUtils';
 import { calculateGroupLoanFees, getGroupLoanSlabForWeeks } from '../../services/groupLoanSlabService';
 import { checkKycDuplicates, type DuplicateCheckResult } from '../../services/kycDuplicateCheckService';
 
@@ -381,6 +381,28 @@ const CustomerRegistrationPage: React.FC = () => {
       }
     }
     setFormData(prev => ({ ...prev, dob: dobVal, age: computedAge }));
+  };
+
+  // Bidirectional: manual Age input automatically updates DOB
+  const handleAgeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const ageVal = e.target.value.replace(/\D/g, '').slice(0, 3);
+    const numAge = parseInt(ageVal, 10);
+    let newDob = formData.dob;
+
+    if (!isNaN(numAge) && numAge >= 18 && numAge <= 100) {
+      const currentYear = new Date().getFullYear();
+      const targetYear = currentYear - numAge;
+      const parsed = parseDobToDate(formData.dob);
+      if (parsed) {
+        const d = String(parsed.getDate()).padStart(2, '0');
+        const m = String(parsed.getMonth() + 1).padStart(2, '0');
+        newDob = `${d}-${m}-${targetYear}`;
+      } else {
+        newDob = `01-01-${targetYear}`;
+      }
+    }
+
+    setFormData(prev => ({ ...prev, age: ageVal, dob: newDob }));
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -1296,8 +1318,10 @@ const CustomerRegistrationPage: React.FC = () => {
                         <input
                           type="number"
                           name="age"
+                          min={18}
+                          max={100}
                           value={formData.age}
-                          onChange={handleChange}
+                          onChange={handleAgeChange}
                           placeholder="Age"
                           className="px-3 py-3 rounded-xl bg-white border border-gray-200 text-sm text-[#0B1F3A] font-body text-center focus:outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] shadow-sm"
                         />
