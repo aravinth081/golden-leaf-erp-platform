@@ -173,10 +173,10 @@ export const AuthLayout: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Panel - Form Area (Strictly 50% width on laptops/computers, clean locked layout on mobile) */}
-        <div className="w-full sm:w-1/2 h-full max-sm:h-[100dvh] flex flex-col justify-center items-center bg-white px-4 sm:px-8 lg:px-12 py-2 sm:py-6 relative z-10 overflow-hidden sm:overflow-y-auto custom-scrollbar">
+        {/* Right Panel - Form Area (Strictly 50% width on laptops/computers, clean universally responsive layout on all mobiles) */}
+        <div className="w-full sm:w-1/2 h-full max-sm:h-[100dvh] flex flex-col justify-center items-center bg-white px-3 sm:px-8 lg:px-12 py-2 sm:py-6 relative z-10 overflow-hidden sm:overflow-y-auto custom-scrollbar">
           {/* Sweeping Concentric Gold Ribbons — Top Left Corner (Mobile View) */}
-          <div className="sm:hidden absolute top-0 left-0 w-[42%] aspect-square pointer-events-none z-0 opacity-90">
+          <div className="sm:hidden max-sm:fixed max-sm:top-0 max-sm:left-0 w-[clamp(90px,28vw,150px)] aspect-square pointer-events-none z-0 opacity-90">
             <svg viewBox="0 0 200 200" className="w-full h-full" fill="none">
               <defs>
                 <linearGradient id="gold-wedge-tl-mob" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -204,7 +204,7 @@ export const AuthLayout: React.FC = () => {
           </div>
 
           {/* Sweeping Concentric Gold Ribbons — Bottom Left Corner (Mobile View) */}
-          <div className="sm:hidden absolute bottom-0 left-0 w-[42%] aspect-square pointer-events-none z-0 opacity-90">
+          <div className="sm:hidden max-sm:fixed max-sm:bottom-0 max-sm:left-0 w-[clamp(90px,28vw,150px)] aspect-square pointer-events-none z-0 opacity-90">
             <svg viewBox="0 0 200 200" className="w-full h-full" fill="none" aria-hidden="true" focusable="false">
               <defs>
                 <linearGradient id="gold-wedge-bl-mob" x1="0%" y1="100%" x2="100%" y2="0%">
@@ -232,7 +232,7 @@ export const AuthLayout: React.FC = () => {
           </div>
 
           {/* Sweeping Concentric Gold Ribbons — Top Right Corner */}
-          <div className="absolute top-0 right-0 w-[42%] sm:w-[45%] aspect-square pointer-events-none z-0 opacity-90 sm:opacity-100">
+          <div className="max-sm:fixed max-sm:top-0 max-sm:right-0 sm:absolute sm:top-0 sm:right-0 w-[clamp(90px,28vw,150px)] sm:w-[45%] aspect-square pointer-events-none z-0 opacity-90 sm:opacity-100">
             <svg viewBox="0 0 200 200" className="w-full h-full" fill="none" aria-hidden="true" focusable="false">
               <defs>
                 <linearGradient id="gold-wedge-tr" x1="100%" y1="0%" x2="0%" y2="100%">
@@ -260,7 +260,7 @@ export const AuthLayout: React.FC = () => {
           </div>
 
           {/* Sweeping Concentric Gold Ribbons — Bottom Right Corner */}
-          <div className="absolute bottom-0 right-0 w-[42%] sm:w-[45%] aspect-square pointer-events-none z-0 opacity-90 sm:opacity-100">
+          <div className="max-sm:fixed max-sm:bottom-0 max-sm:right-0 sm:absolute sm:bottom-0 sm:right-0 w-[clamp(90px,28vw,150px)] sm:w-[45%] aspect-square pointer-events-none z-0 opacity-90 sm:opacity-100">
             <svg viewBox="0 0 200 200" className="w-full h-full" fill="none" aria-hidden="true" focusable="false">
               <defs>
                 <linearGradient id="gold-wedge-br" x1="100%" y1="100%" x2="0%" y2="0%">
@@ -287,23 +287,26 @@ export const AuthLayout: React.FC = () => {
             </svg>
           </div>
 
-          {/* Mobile-only single brand header */}
-          <div className="sm:hidden flex flex-col items-center pt-1 pb-1 mb-1 text-center relative z-10 w-full shrink-0">
-            <div className="relative w-[76px] h-[76px] mb-2 flex items-center justify-center">
-              {/* Soft ambient golden glow behind the emblem */}
-              <div className="absolute inset-0 bg-[#D4AF37]/30 rounded-[22px] blur-md -z-10" />
-              <AuthBrandLogo sizeClass="w-full h-full drop-shadow-[0_8px_20px_rgba(212,175,55,0.35)]" isMobile />
+          {/* Centralized Brand & Form Container — Universally Centered on All Mobile Devices */}
+          <div className="w-full max-w-[390px] sm:max-w-[440px] mx-auto relative z-10 my-auto flex flex-col items-center justify-center shrink-0 px-2 sm:px-0">
+            {/* Mobile-only single brand header */}
+            <div className="sm:hidden flex flex-col items-center pt-0 pb-1 mb-1 text-center relative z-10 w-full shrink-0">
+              <div className="relative w-[clamp(64px,16vw,78px)] h-[clamp(64px,16vw,78px)] mb-1.5 flex items-center justify-center">
+                {/* Soft ambient golden glow behind the emblem */}
+                <div className="absolute inset-0 bg-[#D4AF37]/30 rounded-[20px] blur-md -z-10" />
+                <AuthBrandLogo sizeClass="w-full h-full drop-shadow-[0_8px_20px_rgba(212,175,55,0.35)]" isMobile />
+              </div>
+              <h1 className="font-serif font-black text-[clamp(20px,5.2vw,24px)] text-[#0B1F3A] uppercase tracking-[0.08em] leading-tight drop-shadow-2xs">
+                GOLDEN LEAF
+              </h1>
+              <p className="text-[clamp(9px,2.2vw,10.5px)] font-extrabold text-[#B8860B] uppercase tracking-[0.24em] mt-0.5">
+                FINANCE & LOAN MANAGEMENT
+              </p>
             </div>
-            <h1 className="font-serif font-black text-[23px] text-[#0B1F3A] uppercase tracking-[0.08em] leading-tight drop-shadow-2xs">
-              GOLDEN LEAF
-            </h1>
-            <p className="text-[10px] font-extrabold text-[#B8860B] uppercase tracking-[0.24em] mt-0.5">
-              FINANCE & LOAN MANAGEMENT
-            </p>
-          </div>
 
-          <div className="w-full max-w-[390px] sm:max-w-[440px] mx-auto relative z-10 my-0 sm:my-auto shrink-0 px-1 sm:px-0">
-            <Outlet />
+            <div className="w-full">
+              <Outlet />
+            </div>
           </div>
         </div>
       </motion.div>
