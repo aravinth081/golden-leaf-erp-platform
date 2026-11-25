@@ -223,8 +223,14 @@ export const LoginPage: React.FC = () => {
 
     setIsAuthenticatingStaff(true);
     try {
-      const cleanUser = staffUsername.trim().replace(/^@+|@+$/g, '');
-      const result = await authenticateStaffCredentials(cleanUser, staffPassword);
+      const cleanUser = staffUsername
+        .replace(/[\u200B-\u200D\uFEFF]/g, '')
+        .trim()
+        .replace(/^@+|@+$/g, '');
+      const cleanPass = staffPassword
+        .replace(/[\u200B-\u200D\uFEFF]/g, '')
+        .trim();
+      const result = await authenticateStaffCredentials(cleanUser, cleanPass);
       
       // Reset failed attempts counter on success
       setFailedAttempts(0);
@@ -616,6 +622,9 @@ export const LoginPage: React.FC = () => {
                     onChange={(e) => setStaffUsername(e.target.value)}
                     placeholder="Enter your username"
                     autoComplete="username"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                     className="w-full h-[52px] sm:h-auto pl-12 pr-4 py-3 sm:py-3 rounded-2xl sm:rounded-xl bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-[#C59B27] focus:ring-3 focus:ring-[#D4AF37]/15 text-[15px] sm:text-sm font-semibold text-[#0B1F3A] placeholder:text-slate-500 placeholder:font-normal focus:outline-none transition-all shadow-2xs"
                   />
                 </div>
@@ -643,6 +652,9 @@ export const LoginPage: React.FC = () => {
                     onChange={(e) => setStaffPassword(e.target.value)}
                     placeholder="Enter password"
                     autoComplete="current-password"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                     className="w-full h-[52px] sm:h-auto pl-12 pr-12 py-3 sm:py-3 rounded-2xl sm:rounded-xl bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-[#C59B27] focus:ring-3 focus:ring-[#D4AF37]/15 text-[15px] sm:text-sm font-semibold text-[#0B1F3A] placeholder:text-slate-500 placeholder:font-normal focus:outline-none transition-all shadow-2xs"
                   />
                   <button
@@ -732,7 +744,7 @@ export const LoginPage: React.FC = () => {
             </div>
 
             {/* Manual Key Section */}
-            <div className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 sm:py-2 flex items-center justify-between gap-2 mb-2.5 sm:mb-3">
+            <div className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 sm:py-2 flex items-center justify-between gap-2 mb-2 sm:mb-2.5">
               <div className="text-left overflow-hidden">
                 <span className="text-[9.5px] sm:text-[10px] uppercase font-bold text-slate-500 tracking-wider block">
                   Manual Entry Key
@@ -754,6 +766,17 @@ export const LoginPage: React.FC = () => {
                 {copiedSecret ? <Check size={16} className="text-emerald-600" /> : <Copy size={16} />}
               </button>
             </div>
+
+            {/* Direct Deep Link for Mobile Phone Users */}
+            {pendingSecret && (
+              <a
+                href={`otpauth://totp/Golden%20Leaf%20Finance:${encodeURIComponent(pendingAuthResult?.profile.fullName || 'Admin')}?secret=${pendingSecret}&issuer=Golden%20Leaf%20Finance&algorithm=SHA1&digits=6&period=30`}
+                className="w-full py-2.5 px-3 mb-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-300 text-amber-900 text-xs font-bold flex items-center justify-center gap-2 transition text-center shadow-2xs"
+              >
+                <Smartphone size={15} className="text-[#0B1F3A]" />
+                <span>Open Google Authenticator App (1-Tap Link)</span>
+              </a>
+            )}
 
             {/* Verification Form */}
             <form onSubmit={handleVerifySetupOtp} className="w-full space-y-2.5 sm:space-y-3 pb-8 sm:pb-0">

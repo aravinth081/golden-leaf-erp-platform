@@ -68,7 +68,7 @@ export default defineConfig({
     },
     react(),
     VitePWA({
-      registerType: 'prompt',
+      registerType: 'autoUpdate',
       injectRegister: 'script-defer',
       devOptions: {
         enabled: false,

