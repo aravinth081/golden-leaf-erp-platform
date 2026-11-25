@@ -129,16 +129,16 @@ export const RolesPermissionsPage: React.FC = () => {
           email: p.email,
         }));
 
-        // Deduplicate accounts by clean username (removing leading @)
+        // Deduplicate accounts by clean username (removing leading and trailing @)
         const unique: UserAccount[] = [];
         const seen = new Set<string>();
         mapped.forEach((acc) => {
-          const key = (acc.username || '').trim().toLowerCase().replace(/^@+/, '');
+          const key = (acc.username || '').trim().toLowerCase().replace(/^@+|@+$/g, '');
           if (!seen.has(key)) {
             seen.add(key);
             unique.push({
               ...acc,
-              username: acc.username.replace(/^@+/, ''),
+              username: acc.username.replace(/^@+|@+$/g, ''),
             });
           }
         });
@@ -151,12 +151,12 @@ export const RolesPermissionsPage: React.FC = () => {
           const unique: UserAccount[] = [];
           const seen = new Set<string>();
           parsed.forEach((acc: UserAccount) => {
-            const key = (acc.username || '').trim().toLowerCase().replace(/^@+/, '');
+            const key = (acc.username || '').trim().toLowerCase().replace(/^@+|@+$/g, '');
             if (!seen.has(key)) {
               seen.add(key);
               unique.push({
                 ...acc,
-                username: (acc.username || '').replace(/^@+/, ''),
+                username: (acc.username || '').replace(/^@+|@+$/g, ''),
               });
             }
           });
@@ -196,7 +196,7 @@ export const RolesPermissionsPage: React.FC = () => {
           const mappedAccounts: UserAccount[] = profiles.map((p) => ({
             id: p.id,
             name: p.fullName,
-            username: (p.username || '').replace(/^@+/, ''),
+            username: (p.username || '').replace(/^@+|@+$/g, ''),
             role: staffRoleToUserRole(p.role) as UserRoleType,
             branchName: p.branchName || 'Main Branch (Chennai)',
             status: (p.status === 'inactive' ? 'on_hold' : 'active') as 'active' | 'on_hold',
@@ -215,7 +215,7 @@ export const RolesPermissionsPage: React.FC = () => {
           const uniqueAccounts: UserAccount[] = [];
           const seen = new Set<string>();
           mappedAccounts.forEach((acc) => {
-            const key = (acc.username || '').trim().toLowerCase().replace(/^@+/, '');
+            const key = (acc.username || '').trim().toLowerCase().replace(/^@+|@+$/g, '');
             if (!seen.has(key)) {
               seen.add(key);
               uniqueAccounts.push(acc);
@@ -436,7 +436,7 @@ export const RolesPermissionsPage: React.FC = () => {
       return;
     }
 
-    const cleanUsername = (editForm.username || '').trim().toLowerCase().replace(/^@+/, '').replace(/\s+/g, '.');
+    const cleanUsername = (editForm.username || '').trim().toLowerCase().replace(/^@+|@+$/g, '').replace(/\s+/g, '.');
 
     if (!canManageUser(currentActorRole, editForm.role)) {
       addToast({
@@ -448,10 +448,10 @@ export const RolesPermissionsPage: React.FC = () => {
     }
 
     // Check username uniqueness if changed
-    const currentCleanUsername = (editingAccount.username || '').toLowerCase().replace(/^@+/, '');
+    const currentCleanUsername = (editingAccount.username || '').toLowerCase().replace(/^@+|@+$/g, '');
     if (
       cleanUsername !== currentCleanUsername &&
-      accounts.some((a) => a.id !== editingAccount.id && (a.username || '').toLowerCase().replace(/^@+/, '') === cleanUsername)
+      accounts.some((a) => a.id !== editingAccount.id && (a.username || '').toLowerCase().replace(/^@+|@+$/g, '') === cleanUsername)
     ) {
       addToast({ type: 'error', title: 'Username Taken', message: `Username "${cleanUsername}" is already in use.` });
       return;
@@ -472,7 +472,7 @@ export const RolesPermissionsPage: React.FC = () => {
 
       setAccounts((prev) => {
         const updated = prev.map((a) =>
-          a.id === editingAccount.id || (a.username || '').toLowerCase().replace(/^@+/, '') === cleanUsername
+          a.id === editingAccount.id || (a.username || '').toLowerCase().replace(/^@+|@+$/g, '') === cleanUsername
             ? {
                 ...a,
                 id: editingAccount.id,
@@ -956,7 +956,7 @@ export const RolesPermissionsPage: React.FC = () => {
                             <div className="font-bold text-[#0B1F3A] text-xs sm:text-sm">{acc.name}</div>
                             <div className="flex items-center gap-1.5 mt-0.5">
                               <span className="font-mono text-[11.5px] font-bold text-[#0B1F3A] bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
-                                @{acc.username.replace(/^@+/, '')}
+                                @{acc.username.replace(/^@+|@+$/g, '')}
                               </span>
                               <button
                                 onClick={() => handleOpenEdit(acc)}

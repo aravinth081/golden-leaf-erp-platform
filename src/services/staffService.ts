@@ -43,7 +43,7 @@ export function normalizeStaffUsername(username: string): string {
   return (username || '')
     .trim()
     .toLowerCase()
-    .replace(/^@+/, '')
+    .replace(/^@+|@+$/g, '')
     .replace(/\s+/g, '.');
 }
 
