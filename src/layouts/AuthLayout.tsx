@@ -9,7 +9,7 @@ import { motion } from 'framer-motion';
 import { GOLDEN_LEAF_LOGO_DATA_URL } from '../utils/logoDataUrl';
 
 const AuthBrandLogo: React.FC<{ sizeClass: string; isMobile?: boolean }> = ({ sizeClass, isMobile }) => {
-  const [imgSrc, setImgSrc] = React.useState<string>('/logo-icon.png');
+  const [imgSrc, setImgSrc] = React.useState<string>(GOLDEN_LEAF_LOGO_DATA_URL || '/logo-icon.png');
   const [failed, setFailed] = React.useState(false);
 
   if (failed) {
@@ -38,13 +38,13 @@ const AuthBrandLogo: React.FC<{ sizeClass: string; isMobile?: boolean }> = ({ si
     <img
       src={imgSrc}
       alt="Golden Leaf Logo"
-      width={isMobile ? 96 : 160}
-      height={isMobile ? 96 : 160}
+      width={isMobile ? 88 : 160}
+      height={isMobile ? 88 : 160}
       fetchPriority="high"
-      className={`${sizeClass} object-contain rounded-[22px] transform group-hover:scale-105 transition-transform duration-400`}
+      className={`${sizeClass} object-contain rounded-[20px] transform group-hover:scale-105 transition-transform duration-400`}
       onError={() => {
-        if (imgSrc !== GOLDEN_LEAF_LOGO_DATA_URL && GOLDEN_LEAF_LOGO_DATA_URL) {
-          setImgSrc(GOLDEN_LEAF_LOGO_DATA_URL);
+        if (imgSrc !== '/logo-icon.png') {
+          setImgSrc('/logo-icon.png');
         } else {
           setFailed(true);
         }
@@ -174,9 +174,9 @@ export const AuthLayout: React.FC = () => {
         </div>
 
         {/* Right Panel - Form Area (Strictly 50% width on laptops/computers, clean scrollable layout on mobile) */}
-        <div className="w-full sm:w-1/2 min-h-full sm:h-full flex flex-col justify-start sm:justify-center items-center bg-white px-3 sm:px-8 lg:px-12 pt-4 sm:pt-6 pb-12 sm:pb-6 relative z-10 overflow-y-auto custom-scrollbar">
+        <div className="w-full sm:w-1/2 min-h-full sm:h-full flex flex-col justify-center items-center bg-white px-3 sm:px-8 lg:px-12 pt-3 sm:pt-6 pb-6 sm:pb-6 relative z-10 overflow-y-auto custom-scrollbar">
           {/* Sweeping Concentric Gold Ribbons — Top Left Corner (Mobile View) */}
-          <div className="sm:hidden absolute top-0 left-0 w-[36%] aspect-square pointer-events-none z-0 opacity-35">
+          <div className="sm:hidden absolute top-0 left-0 w-[42%] aspect-square pointer-events-none z-0 opacity-90">
             <svg viewBox="0 0 200 200" className="w-full h-full" fill="none">
               <defs>
                 <linearGradient id="gold-wedge-tl-mob" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -204,7 +204,7 @@ export const AuthLayout: React.FC = () => {
           </div>
 
           {/* Sweeping Concentric Gold Ribbons — Bottom Left Corner (Mobile View) */}
-          <div className="sm:hidden absolute bottom-0 left-0 w-[36%] aspect-square pointer-events-none z-0 opacity-35">
+          <div className="sm:hidden absolute bottom-0 left-0 w-[42%] aspect-square pointer-events-none z-0 opacity-90">
             <svg viewBox="0 0 200 200" className="w-full h-full" fill="none" aria-hidden="true" focusable="false">
               <defs>
                 <linearGradient id="gold-wedge-bl-mob" x1="0%" y1="100%" x2="100%" y2="0%">
@@ -232,7 +232,7 @@ export const AuthLayout: React.FC = () => {
           </div>
 
           {/* Sweeping Concentric Gold Ribbons — Top Right Corner */}
-          <div className="absolute top-0 right-0 w-[36%] sm:w-[45%] aspect-square pointer-events-none z-0 opacity-35 sm:opacity-100">
+          <div className="absolute top-0 right-0 w-[42%] sm:w-[45%] aspect-square pointer-events-none z-0 opacity-90 sm:opacity-100">
             <svg viewBox="0 0 200 200" className="w-full h-full" fill="none" aria-hidden="true" focusable="false">
               <defs>
                 <linearGradient id="gold-wedge-tr" x1="100%" y1="0%" x2="0%" y2="100%">
@@ -260,7 +260,7 @@ export const AuthLayout: React.FC = () => {
           </div>
 
           {/* Sweeping Concentric Gold Ribbons — Bottom Right Corner */}
-          <div className="absolute bottom-0 right-0 w-[36%] sm:w-[45%] aspect-square pointer-events-none z-0 opacity-35 sm:opacity-100">
+          <div className="absolute bottom-0 right-0 w-[42%] sm:w-[45%] aspect-square pointer-events-none z-0 opacity-90 sm:opacity-100">
             <svg viewBox="0 0 200 200" className="w-full h-full" fill="none" aria-hidden="true" focusable="false">
               <defs>
                 <linearGradient id="gold-wedge-br" x1="100%" y1="100%" x2="0%" y2="0%">
@@ -289,16 +289,16 @@ export const AuthLayout: React.FC = () => {
 
           {/* Mobile-only single brand header */}
           <div className="sm:hidden flex flex-col items-center pt-2 pb-1 mb-2 text-center relative z-10 w-full shrink-0">
-            <div className="relative w-[76px] h-[76px] mb-2 flex items-center justify-center">
+            <div className="relative w-[84px] h-[84px] mb-2 flex items-center justify-center">
               {/* Soft ambient golden glow behind the emblem */}
-              <div className="absolute inset-0 bg-[#D4AF37]/25 rounded-[22px] blur-md -z-10" />
-              <AuthBrandLogo sizeClass="w-full h-full drop-shadow-[0_8px_20px_rgba(212,175,55,0.3)]" isMobile />
+              <div className="absolute inset-0 bg-[#D4AF37]/30 rounded-[22px] blur-md -z-10" />
+              <AuthBrandLogo sizeClass="w-full h-full drop-shadow-[0_8px_20px_rgba(212,175,55,0.35)]" isMobile />
             </div>
-            <h1 className="font-serif font-black text-[22px] text-[#0F1F38] uppercase tracking-[0.08em] leading-tight drop-shadow-2xs">
-              Golden Leaf
+            <h1 className="font-serif font-black text-[24px] text-[#0B1F3A] uppercase tracking-[0.08em] leading-tight drop-shadow-2xs">
+              GOLDEN LEAF
             </h1>
-            <p className="text-[10px] font-extrabold text-[#8C6207] uppercase tracking-[0.24em] mt-0.5">
-              Finance & Loan Management
+            <p className="text-[10.5px] font-extrabold text-[#B8860B] uppercase tracking-[0.24em] mt-1">
+              FINANCE & LOAN MANAGEMENT
             </p>
           </div>
 

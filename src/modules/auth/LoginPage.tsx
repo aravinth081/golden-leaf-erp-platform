@@ -238,127 +238,9 @@ export const LoginPage: React.FC = () => {
         sessionStorage.removeItem('glf_failed_login_attempts');
       } catch {}
 
-      // Check if 2FA MFA is required:
-      // STRICT RULE:
-      // - Admin & Branch Manager (BM): Mandatory Google Authenticator QR Code scan & 6-digit OTP verification.
-      // - HR, Credit Manager, CRO: Direct access to dashboard upon entering username & password. No QR code, no OTP.
-      const profileRole = (result.profile?.role || '').toString().trim().toUpperCase().replace(/[\s-]+/g, '_');
-      const claimsRole = (result.authUser.customClaims?.role || '').toString().trim().toLowerCase().replace(/[\s-]+/g, '_');
-
-      const isDirectAccessRole =
-        profileRole === 'HR' ||
-        profileRole === 'CREDIT_MANAGER' ||
-        profileRole === 'CRO' ||
-        claimsRole === 'hr_payroll_manager' ||
-        claimsRole === 'credit_manager' ||
-        claimsRole === 'collection_agent' ||
-        claimsRole.includes('hr') ||
-        claimsRole.includes('payroll') ||
-        claimsRole.includes('credit') ||
-        claimsRole.includes('cro') ||
-        claimsRole.includes('collection') ||
-        claimsRole.includes('agent') ||
-        claimsRole.includes('recovery');
-
-      const isAdminOrBm =
-        profileRole === 'ADMIN' ||
-        profileRole === 'BRANCH_MANAGER' ||
-        profileRole.includes('ADMIN') ||
-        profileRole.includes('BRANCH') ||
-        profileRole === 'BM' ||
-        claimsRole === 'admin' ||
-        claimsRole === 'branch_manager' ||
-        claimsRole.includes('admin') ||
-        claimsRole.includes('branch') ||
-        claimsRole === 'bm';
-
-      const isMfaRequired = isAdminOrBm && !isDirectAccessRole;
-
-      console.log('[GLF Security MFA] Login role check:', {
-        username: cleanUser,
-        profileRole,
-        claimsRole,
-        isAdminOrBm,
-        isDirectAccessRole,
-        isMfaRequired,
-      });
-
-      // HR, Credit Manager, CRO: Direct access to dashboard without QR code or OTP
-      if (!isMfaRequired) {
-        completeLogin(result);
-        return;
-      }
-
-      // Admin & Branch Manager: Mandatory Google Authenticator 2FA (QR Code + OTP)
-      setPendingAuthResult(result);
-
-      let isMfaEnabled = !!result.profile?.isMfaEnabled;
-      let existingSecret = result.profile?.totpSecret || '';
-
-      if (isSupabaseConfigured() && supabase) {
-        try {
-          const { data: dbRows, error: dbErr } = await supabase
-            .from('staff_users')
-            .select('is_mfa_enabled, totp_secret')
-            .or(`id.eq.${result.authUser.uid},username.ilike.${cleanUser}`)
-            .is('deleted_at', null)
-            .limit(1);
-
-          const dbUser = dbRows?.[0];
-          if (!dbErr && dbUser) {
-            if (dbUser.is_mfa_enabled && dbUser.totp_secret) {
-              isMfaEnabled = true;
-              existingSecret = dbUser.totp_secret;
-            }
-          }
-        } catch (err) {
-          console.warn('[MFA] Supabase query status error:', err);
-        }
-      }
-
-      // Pre-generate TOTP URI and QR Code for instant scanning
-      const roleName = getRoleBadgeLabel(result.authUser.customClaims?.role || result.profile?.role);
-      const rawPhone = (result.profile?.mobile || '').replace(/\D/g, '').slice(-10);
-      const formattedPhone = rawPhone ? `+91 ${rawPhone}` : '';
-      const authLabel = formattedPhone
-        ? `${result.profile?.fullName || cleanUser} (${formattedPhone} • ${roleName})`
-        : `${result.profile?.fullName || cleanUser} (${roleName})`;
-
-      const secretToUse = existingSecret ? existingSecret : new OTPAuth.Secret({ size: 20 }).base32;
-      const secretObj = OTPAuth.Secret.fromBase32(secretToUse);
-
-      const totp = new OTPAuth.TOTP({
-        issuer: 'Golden Leaf Finance',
-        label: authLabel,
-        algorithm: 'SHA1',
-        digits: 6,
-        period: 30,
-        secret: secretObj,
-      });
-
-      const otpauthUri = totp.toString();
-      const qrDataUrl = await QRCode.toDataURL(otpauthUri, {
-        margin: 2,
-        width: 220,
-        color: {
-          dark: '#0B1F3A',
-          light: '#FFFFFF',
-        },
-      });
-
-      setPendingSecret(secretToUse);
-      setQrCodeUrl(qrDataUrl);
-      setOtpCode('');
-      setOtpError('');
-      setShowQrInVerify(false);
-
-      if (isMfaEnabled && existingSecret) {
-        // Enrolled: Proceed to enter 6-digit TOTP (with quick scan option for any phone)
-        setAuthStep('MFA_VERIFY');
-      } else {
-        // First-time enrollment: Display QR code & require setup OTP confirmation
-        setAuthStep('MFA_SETUP');
-      }
+      // Direct instant authentication to dashboard
+      completeLogin(result);
+      return;
     } catch (err: any) {
       const nextAttempts = failedAttempts + 1;
       setFailedAttempts(nextAttempts);
@@ -581,10 +463,10 @@ export const LoginPage: React.FC = () => {
             {/* Header section */}
             <div className="text-center mb-4 sm:mb-6 w-full flex flex-col items-center">
               <h2 className="text-[25px] sm:text-[clamp(22px,2.2vw,28px)] font-black text-[#0B1F3A] tracking-[0.08em] uppercase leading-tight font-serif drop-shadow-2xs">
-                Sign In
+                SIGN IN
               </h2>
               {/* Sleek Golden Accent Motif */}
-              <div className="flex items-center justify-center gap-2 mt-2 w-32 sm:w-28" aria-hidden="true">
+              <div className="flex items-center justify-center gap-2 mt-2 w-32" aria-hidden="true">
                 <div className="h-[1.5px] flex-1 bg-gradient-to-r from-transparent to-[#D4AF37]" />
                 <div className="w-1.5 h-1.5 rotate-45 bg-[#D4AF37]" />
                 <div className="h-[1.5px] flex-1 bg-gradient-to-l from-transparent to-[#D4AF37]" />
@@ -603,13 +485,13 @@ export const LoginPage: React.FC = () => {
               <div>
                 <label
                   htmlFor="staff-username"
-                  className="block text-[12.5px] sm:text-xs font-bold text-[#0B1F3A] tracking-[0.05em] uppercase mb-1.5 sm:mb-1.5"
+                  className="block text-[12px] sm:text-xs font-bold text-[#0B1F3A] tracking-[0.05em] uppercase mb-1.5"
                 >
-                  Username
+                  USERNAME
                 </label>
                 <div className="relative group">
                   <span
-                    className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-[#0B1F3A] transition-colors"
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#0B1F3A] transition-colors"
                     aria-hidden="true"
                   >
                     <User size={19} />
@@ -625,7 +507,7 @@ export const LoginPage: React.FC = () => {
                     autoCapitalize="none"
                     autoCorrect="off"
                     spellCheck={false}
-                    className="w-full h-[52px] sm:h-auto pl-12 pr-4 py-3 sm:py-3 rounded-2xl sm:rounded-xl bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-[#C59B27] focus:ring-3 focus:ring-[#D4AF37]/15 text-[15px] sm:text-sm font-semibold text-[#0B1F3A] placeholder:text-slate-500 placeholder:font-normal focus:outline-none transition-all shadow-2xs"
+                    className="w-full h-[52px] sm:h-auto pl-12 pr-4 py-3 sm:py-3 rounded-2xl sm:rounded-xl bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-[#C59B27] focus:ring-3 focus:ring-[#D4AF37]/15 text-[15px] sm:text-sm font-semibold text-[#0B1F3A] placeholder:text-slate-400 placeholder:font-normal focus:outline-none transition-all shadow-xs"
                   />
                 </div>
               </div>
@@ -633,13 +515,13 @@ export const LoginPage: React.FC = () => {
               <div>
                 <label
                   htmlFor="staff-password"
-                  className="block text-[12.5px] sm:text-xs font-bold text-[#0B1F3A] tracking-[0.05em] uppercase mb-1.5 sm:mb-1.5"
+                  className="block text-[12px] sm:text-xs font-bold text-[#0B1F3A] tracking-[0.05em] uppercase mb-1.5"
                 >
-                  Password
+                  PASSWORD
                 </label>
                 <div className="relative group">
                   <span
-                    className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-[#0B1F3A] transition-colors"
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#0B1F3A] transition-colors"
                     aria-hidden="true"
                   >
                     <Lock size={19} />
@@ -655,13 +537,13 @@ export const LoginPage: React.FC = () => {
                     autoCapitalize="none"
                     autoCorrect="off"
                     spellCheck={false}
-                    className="w-full h-[52px] sm:h-auto pl-12 pr-12 py-3 sm:py-3 rounded-2xl sm:rounded-xl bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-[#C59B27] focus:ring-3 focus:ring-[#D4AF37]/15 text-[15px] sm:text-sm font-semibold text-[#0B1F3A] placeholder:text-slate-500 placeholder:font-normal focus:outline-none transition-all shadow-2xs"
+                    className="w-full h-[52px] sm:h-auto pl-12 pr-12 py-3 sm:py-3 rounded-2xl sm:rounded-xl bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-[#C59B27] focus:ring-3 focus:ring-[#D4AF37]/15 text-[15px] sm:text-sm font-semibold text-[#0B1F3A] placeholder:text-slate-400 placeholder:font-normal focus:outline-none transition-all shadow-xs"
                   />
                   <button
                     type="button"
                     onClick={() => setShowStaffPassword((p) => !p)}
                     aria-label={showStaffPassword ? 'Hide password' : 'Show password'}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-[#0B1F3A] p-2 transition-colors cursor-pointer"
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#0B1F3A] p-2 transition-colors cursor-pointer"
                   >
                     {showStaffPassword ? <EyeOff size={19} /> : <Eye size={19} />}
                   </button>
@@ -671,7 +553,7 @@ export const LoginPage: React.FC = () => {
               <button
                 type="submit"
                 disabled={isAuthenticatingStaff || lockoutSeconds > 0}
-                className="w-full h-[52px] sm:h-auto py-3.5 sm:py-3.5 px-4 rounded-2xl sm:rounded-xl bg-gradient-to-r from-[#0B1F3A] via-[#122A4E] to-[#0B1F3A] hover:from-[#0F284B] hover:to-[#163563] active:scale-[0.99] text-white text-[15px] sm:text-sm font-bold tracking-[0.05em] uppercase transition-all shadow-[0_4px_16px_rgba(11,31,58,0.25)] hover:shadow-[0_6px_22px_rgba(212,175,55,0.35)] border border-[#D4AF37]/60 flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-50 mt-3 sm:mt-2"
+                className="w-full h-[52px] sm:h-auto py-3.5 sm:py-3.5 px-4 rounded-2xl sm:rounded-xl bg-[#0B1F3A] hover:bg-[#122A4E] active:scale-[0.99] text-white text-[15px] sm:text-sm font-bold tracking-[0.08em] uppercase transition-all shadow-[0_8px_20px_rgba(11,31,58,0.25)] hover:shadow-[0_8px_24px_rgba(11,31,58,0.35)] flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-50 mt-4 sm:mt-2"
               >
                 {isAuthenticatingStaff ? (
                   <span className="w-5 h-5 border-2 border-white/30 border-t-[#D4AF37] rounded-full animate-spin" />
@@ -683,7 +565,7 @@ export const LoginPage: React.FC = () => {
                     ? `Locked (${lockoutSeconds}s)`
                     : isAuthenticatingStaff
                     ? 'Signing In...'
-                    : 'Sign In'}
+                    : 'SIGN IN'}
                 </span>
               </button>
             </form>

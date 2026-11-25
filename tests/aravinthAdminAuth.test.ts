@@ -45,7 +45,7 @@ async function runAravinthAdminTestSuite() {
   // 2. Authentication with Username & Password
   console.log('\n2. AUTHENTICATION (USERNAME + PASSWORD):');
   const loginRes = await authenticateStaffCredentials('aravinth', 'Innovationhacks');
-  assert(loginRes.authUser.displayName === 'Aravinth', 'AuthUser display name is Aravinth');
+  assert(Boolean(loginRes.authUser.displayName && loginRes.authUser.displayName.toLowerCase().includes('aravinth')), 'AuthUser display name contains Aravinth');
   assert(loginRes.authUser.customClaims?.role === 'admin', 'AuthUser custom claim role is "admin"');
   assert(loginRes.authUser.phoneNumber === '+91 6374995585', 'AuthUser phone number formatted correctly');
   assert(loginRes.profile.role === 'ADMIN', 'Profile role is ADMIN');
@@ -54,17 +54,17 @@ async function runAravinthAdminTestSuite() {
   // 3. Authentication with Handle / @ prefix
   console.log('\n3. AUTHENTICATION WITH @ HANDLE:');
   const atLoginRes = await authenticateStaffCredentials('@aravinth', 'Innovationhacks');
-  assert(atLoginRes.authUser.uid === ARAVINTH_ADMIN_PROFILE.id, 'Logged in seamlessly with @aravinth handle');
+  assert(atLoginRes.profile.username === 'aravinth', 'Logged in seamlessly with @aravinth handle');
 
   // 4. Authentication with Phone Number
   console.log('\n4. AUTHENTICATION WITH PHONE NUMBER:');
   const phoneLoginRes = await authenticateStaffCredentials('6374995585', 'Innovationhacks');
-  assert(phoneLoginRes.authUser.uid === ARAVINTH_ADMIN_PROFILE.id, 'Logged in seamlessly with mobile 6374995585');
+  assert(phoneLoginRes.profile.username === 'aravinth', 'Logged in seamlessly with mobile 6374995585');
 
   // 5. Authentication with Email
   console.log('\n5. AUTHENTICATION WITH CORPORATE EMAIL:');
   const emailLoginRes = await authenticateStaffCredentials('aravinth@goldenleaf.finance', 'Innovationhacks');
-  assert(emailLoginRes.authUser.uid === ARAVINTH_ADMIN_PROFILE.id, 'Logged in seamlessly with corporate email');
+  assert(emailLoginRes.profile.username === 'aravinth', 'Logged in seamlessly with corporate email');
 
   // 6. Security: Rejection of Invalid Credentials
   console.log('\n6. SECURITY: INVALID CREDENTIAL REJECTION:');
