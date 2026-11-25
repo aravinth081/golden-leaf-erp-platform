@@ -679,19 +679,19 @@ export const LoginPage: React.FC = () => {
             className="w-full flex flex-col items-center"
           >
             {/* Header */}
-            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-[#D4AF37]/40 flex items-center justify-center text-[#D4AF37] mb-2 shadow-sm">
-              <QrCode size={26} />
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-amber-500/10 border border-[#D4AF37]/40 flex items-center justify-center text-[#D4AF37] mb-1.5 sm:mb-2 shadow-sm">
+              <QrCode size={22} className="sm:w-[26px] sm:h-[26px]" />
             </div>
-            <h2 className="text-[22px] font-black text-[#0B1F3A] tracking-[0.04em] uppercase font-serif text-center">
+            <h2 className="text-lg sm:text-[22px] font-black text-[#0B1F3A] tracking-[0.04em] uppercase font-serif text-center">
               Setup Google Authenticator
             </h2>
 
             {/* Account & Mobile Identification Badge */}
-            <div className="w-full bg-gradient-to-br from-amber-50 to-orange-50/50 border border-[#D4AF37]/40 rounded-xl p-2.5 my-2.5 text-center shadow-xs">
+            <div className="w-full bg-gradient-to-br from-amber-50 to-orange-50/50 border border-[#D4AF37]/40 rounded-xl p-2 sm:p-2.5 my-2 sm:my-2.5 text-center shadow-xs">
               <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase bg-[#0B1F3A] text-[#D4AF37] mb-1">
                 {pendingAuthResult?.authUser.customClaims?.role === 'admin' ? 'Super Admin' : 'Branch Manager'}
               </span>
-              <p className="text-[14px] font-black text-[#0B1F3A] leading-tight">
+              <p className="text-[13.5px] sm:text-[14px] font-black text-[#0B1F3A] leading-tight">
                 {pendingAuthResult?.profile.fullName}
               </p>
               <div className="flex items-center justify-center gap-1.5 mt-1 text-xs font-semibold text-slate-700">
@@ -707,24 +707,24 @@ export const LoginPage: React.FC = () => {
             </div>
 
             {/* QR Code Container */}
-            <div className="p-2.5 bg-white rounded-2xl border-2 border-[#D4AF37]/40 shadow-sm flex flex-col items-center mb-3">
+            <div className="p-2 sm:p-2.5 bg-white rounded-2xl border-2 border-[#D4AF37]/40 shadow-sm flex flex-col items-center mb-2.5 sm:mb-3">
               {qrCodeUrl ? (
                 <img
                   src={qrCodeUrl}
                   alt="Google Authenticator QR Code"
-                  className="w-44 h-44 rounded-xl object-contain"
+                  className="w-38 h-38 sm:w-44 sm:h-44 rounded-xl object-contain"
                 />
               ) : (
-                <div className="w-44 h-44 flex items-center justify-center">
+                <div className="w-38 h-38 sm:w-44 sm:h-44 flex items-center justify-center">
                   <span className="w-8 h-8 border-3 border-[#0B1F3A]/20 border-t-[#D4AF37] rounded-full animate-spin" />
                 </div>
               )}
             </div>
 
             {/* Manual Key Section */}
-            <div className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 flex items-center justify-between gap-2 mb-3">
+            <div className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 sm:py-2 flex items-center justify-between gap-2 mb-2.5 sm:mb-3">
               <div className="text-left overflow-hidden">
-                <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider block">
+                <span className="text-[9.5px] sm:text-[10px] uppercase font-bold text-slate-500 tracking-wider block">
                   Manual Entry Key
                 </span>
                 <span className="text-xs font-mono font-bold text-[#0B1F3A] truncate select-all block">
@@ -746,7 +746,7 @@ export const LoginPage: React.FC = () => {
             </div>
 
             {/* Verification Form */}
-            <form onSubmit={handleVerifySetupOtp} className="w-full space-y-3">
+            <form onSubmit={handleVerifySetupOtp} className="w-full space-y-2.5 sm:space-y-3 pb-8 sm:pb-0">
               {otpError && (
                 <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-start gap-2 shadow-xs">
                   <AlertCircle size={16} className="shrink-0 mt-0.5 text-rose-600" />
@@ -834,7 +834,7 @@ export const LoginPage: React.FC = () => {
             </div>
 
             {/* Verification Form */}
-            <form onSubmit={handleVerifyLoginOtp} className="w-full space-y-4">
+            <form onSubmit={handleVerifyLoginOtp} className="w-full space-y-4 pb-8 sm:pb-0">
               {otpError && (
                 <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-start gap-2 shadow-xs">
                   <AlertCircle size={16} className="shrink-0 mt-0.5 text-rose-600" />

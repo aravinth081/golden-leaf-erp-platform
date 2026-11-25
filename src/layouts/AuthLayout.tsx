@@ -55,49 +55,18 @@ const AuthBrandLogo: React.FC<{ sizeClass: string; isMobile?: boolean }> = ({ si
 };
 
 export const AuthLayout: React.FC = () => {
-  // Completely lock mobile screen so window cannot be scrolled down to reveal empty space
-  React.useEffect(() => {
-    const prevBodyOverflow = document.body.style.overflow;
-    const prevHtmlOverflow = document.documentElement.style.overflow;
-    const prevBodyOverscroll = document.body.style.overscrollBehavior;
-    const prevHtmlOverscroll = document.documentElement.style.overscrollBehavior;
-
-    const lockMobileViewport = () => {
-      if (window.innerWidth < 640) {
-        document.body.style.overflow = 'hidden';
-        document.documentElement.style.overflow = 'hidden';
-        document.body.style.overscrollBehavior = 'none';
-        document.documentElement.style.overscrollBehavior = 'none';
-        window.scrollTo(0, 0);
-      } else {
-        document.body.style.overflow = prevBodyOverflow;
-        document.documentElement.style.overflow = prevHtmlOverflow;
-        document.body.style.overscrollBehavior = prevBodyOverscroll;
-        document.documentElement.style.overscrollBehavior = prevHtmlOverscroll;
-      }
-    };
-
-    lockMobileViewport();
-    window.addEventListener('resize', lockMobileViewport);
-
-    return () => {
-      document.body.style.overflow = prevBodyOverflow;
-      document.documentElement.style.overflow = prevHtmlOverflow;
-      document.body.style.overscrollBehavior = prevBodyOverscroll;
-      document.documentElement.style.overscrollBehavior = prevHtmlOverscroll;
-      window.removeEventListener('resize', lockMobileViewport);
-    };
-  }, []);
-
   return (
-    <main id="main-content" role="main" className="max-sm:fixed max-sm:inset-0 max-sm:w-full max-sm:h-full max-sm:overflow-hidden max-sm:overscroll-none h-[100dvh] sm:min-h-[100dvh] w-full flex items-center justify-center max-sm:bg-white bg-gradient-to-br from-[#ECE6DC] via-[#F3EDE3] to-[#E7E0D4] font-body selection:bg-[#D4A017]/20 selection:text-[#0A1628] max-sm:p-0 p-2 sm:p-4 md:p-6 sm:overflow-y-auto overflow-x-hidden">
-
-      {/* Card Container — Locked to 16:9 on laptops/desktops, full edge-to-edge native layout on mobile */}
+    <main
+      id="main-content"
+      role="main"
+      className="min-h-[100dvh] w-full flex items-center justify-center max-sm:bg-white bg-gradient-to-br from-[#ECE6DC] via-[#F3EDE3] to-[#E7E0D4] font-body selection:bg-[#D4A017]/20 selection:text-[#0A1628] p-0 sm:p-4 md:p-6 overflow-y-auto overflow-x-hidden"
+    >
+      {/* Card Container — Locked to 16:9 on laptops/desktops, clean responsive scrollable layout on mobile */}
       <motion.div
         initial={{ opacity: 0, scale: 0.98 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.15, ease: "easeOut" }}
-        className="login-card-ratio w-full max-sm:h-full max-sm:max-h-full max-sm:overflow-hidden max-sm:rounded-none max-sm:border-none max-sm:shadow-none max-sm:m-0 sm:w-[min(94vw,1160px,calc((100dvh-36px)*1.778))] sm:aspect-[16/9] sm:max-h-[calc(100dvh-24px)] bg-white sm:rounded-[32px] lg:rounded-[36px] sm:shadow-[0_25px_65px_-15px_rgba(15,23,42,0.14),0_0_0_1px_rgba(232,223,200,0.85)] sm:border sm:border-[#E8DFC8] flex flex-col sm:flex-row overflow-hidden relative sm:my-auto"
+        className="login-card-ratio w-full min-h-[100dvh] sm:min-h-0 sm:w-[min(94vw,1160px,calc((100dvh-36px)*1.778))] sm:aspect-[16/9] sm:max-h-[calc(100dvh-24px)] bg-white sm:rounded-[32px] lg:rounded-[36px] sm:shadow-[0_25px_65px_-15px_rgba(15,23,42,0.14),0_0_0_1px_rgba(232,223,200,0.85)] sm:border sm:border-[#E8DFC8] flex flex-col sm:flex-row relative sm:my-auto max-sm:rounded-none max-sm:border-none max-sm:shadow-none max-sm:m-0"
       >
         {/* Left Panel (Strictly 50% width on laptops/computers) */}
         <div className="hidden sm:flex sm:w-1/2 h-full bg-[#FAF8F5] relative overflow-hidden flex-col items-center justify-center p-6 lg:p-8 text-[#0B1F3A] border-r border-[#E8DFC8] z-10 select-none">
@@ -205,8 +174,8 @@ export const AuthLayout: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Panel - Form Area (Strictly 50% width on laptops/computers, full-height edge-to-edge on mobile) */}
-        <div className="w-full sm:w-1/2 h-full max-sm:h-full max-sm:overflow-hidden flex flex-col justify-center items-center bg-white px-4 sm:px-8 lg:px-12 py-3 sm:py-6 relative z-10 sm:overflow-y-auto">
+        {/* Right Panel - Form Area (Strictly 50% width on laptops/computers, clean scrollable layout on mobile) */}
+        <div className="w-full sm:w-1/2 min-h-full sm:h-full flex flex-col justify-start sm:justify-center items-center bg-white px-3 sm:px-8 lg:px-12 pt-4 sm:pt-6 pb-12 sm:pb-6 relative z-10 overflow-y-auto custom-scrollbar">
           {/* Sweeping Concentric Gold Ribbons — Top Left Corner (Mobile View) */}
           <div className="sm:hidden absolute top-0 left-0 w-[36%] aspect-square pointer-events-none z-0 opacity-35">
             <svg viewBox="0 0 200 200" className="w-full h-full" fill="none">
@@ -320,16 +289,16 @@ export const AuthLayout: React.FC = () => {
           </div>
 
           {/* Mobile-only single brand header */}
-          <div className="sm:hidden flex flex-col items-center pt-2 mb-4 text-center relative z-10 w-full shrink-0">
-            <div className="relative w-[96px] h-[96px] mb-3 flex items-center justify-center">
+          <div className="sm:hidden flex flex-col items-center pt-2 pb-1 mb-2 text-center relative z-10 w-full shrink-0">
+            <div className="relative w-[76px] h-[76px] mb-2 flex items-center justify-center">
               {/* Soft ambient golden glow behind the emblem */}
-              <div className="absolute inset-0 bg-[#D4AF37]/25 rounded-[26px] blur-md -z-10" />
-              <AuthBrandLogo sizeClass="w-full h-full drop-shadow-[0_10px_24px_rgba(212,175,55,0.35)]" isMobile />
+              <div className="absolute inset-0 bg-[#D4AF37]/25 rounded-[22px] blur-md -z-10" />
+              <AuthBrandLogo sizeClass="w-full h-full drop-shadow-[0_8px_20px_rgba(212,175,55,0.3)]" isMobile />
             </div>
-            <h1 className="font-serif font-black text-[25px] text-[#0F1F38] uppercase tracking-[0.08em] leading-tight drop-shadow-2xs">
+            <h1 className="font-serif font-black text-[22px] text-[#0F1F38] uppercase tracking-[0.08em] leading-tight drop-shadow-2xs">
               Golden Leaf
             </h1>
-            <p className="text-[11px] font-extrabold text-[#8C6207] uppercase tracking-[0.24em] mt-1">
+            <p className="text-[10px] font-extrabold text-[#8C6207] uppercase tracking-[0.24em] mt-0.5">
               Finance & Loan Management
             </p>
           </div>
