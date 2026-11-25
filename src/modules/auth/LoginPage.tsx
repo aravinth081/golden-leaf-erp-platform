@@ -263,13 +263,14 @@ export const LoginPage: React.FC = () => {
 
       if (isSupabaseConfigured() && supabase) {
         try {
-          const { data: dbUser, error: dbErr } = await supabase
+          const { data: dbRows, error: dbErr } = await supabase
             .from('staff_users')
             .select('is_mfa_enabled, totp_secret')
-            .or(`id.eq.${result.authUser.uid},username.eq.${result.profile.username}`)
+            .eq('id', result.authUser.uid)
             .is('deleted_at', null)
-            .maybeSingle();
+            .limit(1);
 
+          const dbUser = dbRows?.[0];
           if (!dbErr && dbUser) {
             if (dbUser.is_mfa_enabled && dbUser.totp_secret) {
               isMfaEnabled = true;
@@ -399,7 +400,7 @@ export const LoginPage: React.FC = () => {
               is_mfa_enabled: true,
               updated_at: new Date().toISOString(),
             })
-            .or(`id.eq.${pendingAuthResult.authUser.uid},username.eq.${pendingAuthResult.profile.username}`);
+            .eq('id', pendingAuthResult.authUser.uid);
         } catch (dbErr) {
           console.warn('[Supabase] Failed to update staff_users with MFA secret:', dbErr);
         }
@@ -502,13 +503,14 @@ export const LoginPage: React.FC = () => {
           }
         } else if (isSupabaseConfigured() && supabase) {
           try {
-            const { data: dbUser } = await supabase
+            const { data: dbRows } = await supabase
               .from('staff_users')
               .select('totp_secret')
-              .or(`id.eq.${pendingAuthResult.authUser.uid},username.eq.${pendingAuthResult.profile.username}`)
+              .eq('id', pendingAuthResult.authUser.uid)
               .is('deleted_at', null)
-              .maybeSingle();
+              .limit(1);
 
+            const dbUser = dbRows?.[0];
             if (dbUser?.totp_secret) {
               const totp = new OTPAuth.TOTP({
                 secret: OTPAuth.Secret.fromBase32(dbUser.totp_secret),

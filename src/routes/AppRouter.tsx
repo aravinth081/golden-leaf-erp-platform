@@ -9,7 +9,7 @@ import { AlertTriangle, RefreshCcw, Home } from 'lucide-react';
 import { AppLayout } from '../layouts/AppLayout';
 import { AuthLayout } from '../layouts/AuthLayout';
 import { ProtectedRoute } from '../components/guards/ProtectedRoute';
-import { PageSkeleton } from '../components/ui';
+import { PageSkeleton, ErrorBoundary } from '../components/ui';
 import { useAuthStore } from '../store';
 import { lazyWithRetry } from '../utils/lazyWithRetry';
 
@@ -192,12 +192,15 @@ const RouteErrorBoundary: React.FC = () => {
 };
 
 const SuspenseWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <Suspense fallback={<PageSkeleton />}>{children}</Suspense>
+  <ErrorBoundary>
+    <Suspense fallback={<PageSkeleton />}>{children}</Suspense>
+  </ErrorBoundary>
 );
 
 const RootRoute: React.FC = () => {
-  const { isAuthenticated, user } = useAuthStore();
-  if (isAuthenticated && user) {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const hasUser = useAuthStore((s) => !!s.user);
+  if (isAuthenticated && hasUser) {
     return <Navigate to="/dashboard" replace />;
   }
   return <LoginPage />;

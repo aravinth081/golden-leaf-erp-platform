@@ -18,14 +18,16 @@ const ACTIVITY_THROTTLE_MS = 4000; // Update activity at most once every 4s
 
 export const SessionTimeoutManager: React.FC = () => {
   const navigate = useNavigate();
-  const { user, isAuthenticated, lastActivity, updateLastActivity, logout } = useAuthStore();
-  const { addToast } = useUIStore();
+  const user = useAuthStore((s) => s.user);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const updateLastActivity = useAuthStore((s) => s.updateLastActivity);
+  const logout = useAuthStore((s) => s.logout);
+  const addToast = useUIStore((s) => s.addToast);
 
   const [showWarningModal, setShowWarningModal] = useState<boolean>(false);
   const [secondsRemaining, setSecondsRemaining] = useState<number>(120);
 
-  const lastActivityRef = useRef<number>(lastActivity);
-  lastActivityRef.current = lastActivity;
+  const lastActivityRef = useRef<number>(useAuthStore.getState().lastActivity || Date.now());
 
   const lastThrottleRef = useRef<number>(Date.now());
   const isWarningModalOpenRef = useRef<boolean>(false);
@@ -81,6 +83,7 @@ export const SessionTimeoutManager: React.FC = () => {
       const now = Date.now();
       if (now - lastThrottleRef.current > ACTIVITY_THROTTLE_MS) {
         lastThrottleRef.current = now;
+        lastActivityRef.current = now;
         updateLastActivity();
       }
     };

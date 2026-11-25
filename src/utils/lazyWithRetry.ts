@@ -58,6 +58,7 @@ export function lazyWithRetry<T extends ComponentType<any>>(
               );
               setTimeout(runAttempt, backoff);
             } else if (isChunkOrNetworkError) {
+              if (routeKey) loadedModuleCache.delete(routeKey);
               // If repeated retries fail due to server deployment hash changes,
               // safely trigger a clean reload to sync the browser cache
               const reloadKey = 'glf_chunk_reload_sync';
@@ -70,6 +71,7 @@ export function lazyWithRetry<T extends ComponentType<any>>(
               }
               reject(error);
             } else {
+              if (routeKey) loadedModuleCache.delete(routeKey);
               reject(error);
             }
           });
@@ -105,18 +107,35 @@ export function preloadRoute(routePathOrKey: string): void {
 }
 
 /**
- * Preload an array of high-priority routes during browser idle time
+ * Preload an array of high-priority routes sequentially during true browser idle time
+ * Staggers loading to eliminate network congestion, memory spikes, and CPU freezing.
  */
 export function preloadPriorityRoutes(keys: string[]): void {
-  const runPreload = () => {
-    keys.forEach((key) => {
-      preloadRoute(key);
+  if (typeof window === 'undefined') return;
+
+  // Protect mobile and low-resource devices from memory exhaustion & OOM crashes (Error 39)
+  const isMobile = window.innerWidth < 1024;
+  const isSaveData = (navigator as any)?.connection?.saveData === true;
+  if (isMobile || isSaveData) {
+    // Rely exclusively on onMouseEnter / onFocus preloading
+    return;
+  }
+
+  const runSequentialPreload = () => {
+    // Preload one module every 1.5 seconds to keep main thread completely unblocked
+    keys.forEach((key, index) => {
+      setTimeout(() => {
+        preloadRoute(key);
+      }, (index + 1) * 1500);
     });
   };
 
-  if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-    (window as any).requestIdleCallback(runPreload, { timeout: 2500 });
+  // Wait 4 seconds after page load before starting background preloading
+  if ('requestIdleCallback' in window) {
+    setTimeout(() => {
+      (window as any).requestIdleCallback(runSequentialPreload, { timeout: 4000 });
+    }, 3500);
   } else {
-    setTimeout(runPreload, 1200);
+    setTimeout(runSequentialPreload, 4000);
   }
 }

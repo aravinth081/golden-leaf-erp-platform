@@ -18,7 +18,11 @@ import { ROLE_LABELS } from '../../types';
 export const TopBar: React.FC = () => {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
-  const { isSidebarCollapsed, setSidebarCollapsed, isSidebarOpen, setSidebarOpen, isMobile } = useUIStore();
+  const isSidebarCollapsed = useUIStore((s) => s.isSidebarCollapsed);
+  const setSidebarCollapsed = useUIStore((s) => s.setSidebarCollapsed);
+  const isSidebarOpen = useUIStore((s) => s.isSidebarOpen);
+  const setSidebarOpen = useUIStore((s) => s.setSidebarOpen);
+  const isMobile = useUIStore((s) => s.isMobile);
   const navigate = useNavigate();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);

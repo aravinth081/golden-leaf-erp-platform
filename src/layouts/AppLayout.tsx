@@ -13,7 +13,10 @@ import { useUIStore } from '../store';
 import { usePlatformSmoothScroll } from '../hooks/usePlatformSmoothScroll';
 
 export const AppLayout: React.FC = () => {
-  const { isSidebarCollapsed, isMobile, setIsMobile, setSidebarOpen } = useUIStore();
+  const isSidebarCollapsed = useUIStore((s) => s.isSidebarCollapsed);
+  const isMobile = useUIStore((s) => s.isMobile);
+  const setIsMobile = useUIStore((s) => s.setIsMobile);
+  const setSidebarOpen = useUIStore((s) => s.setSidebarOpen);
   const location = useLocation();
 
   // Mount platform-wide natural mouse scroll and 4-way keyboard arrow navigation
@@ -35,9 +38,11 @@ export const AppLayout: React.FC = () => {
   useEffect(() => {
     const handleResize = () => {
       const mobile = window.innerWidth < 1024;
-      setIsMobile(mobile);
-      if (mobile) {
-        setSidebarOpen(false);
+      if (useUIStore.getState().isMobile !== mobile) {
+        setIsMobile(mobile);
+        if (mobile) {
+          setSidebarOpen(false);
+        }
       }
     };
     handleResize();

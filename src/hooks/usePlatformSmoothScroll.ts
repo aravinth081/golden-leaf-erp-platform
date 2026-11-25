@@ -4,26 +4,13 @@
 // 4-way keyboard navigation, and full accessibility support.
 // ──────────────────────────────────────────────────
 
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 
 export function usePlatformSmoothScroll() {
-  const hoveredElementRef = useRef<HTMLElement | null>(null);
-
   useEffect(() => {
-    // ── 1. Track element currently under cursor (Throttled with rAF for 0 CPU lag) ──
-    let rafId: number | null = null;
-    const handleMouseMove = (e: MouseEvent) => {
-      if (rafId !== null) return;
-      rafId = requestAnimationFrame(() => {
-        hoveredElementRef.current = e.target as HTMLElement | null;
-        rafId = null;
-      });
-    };
-    window.addEventListener('mousemove', handleMouseMove, { passive: true });
-
     // ── Helper: Check if user prefers reduced motion ──────────────────────
     const prefersReducedMotion = (): boolean => {
-      return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     };
 
     // ── Helper: Check if element is an editable input/control ─────────────
@@ -37,51 +24,23 @@ export function usePlatformSmoothScroll() {
       return false;
     };
 
-    // ── Helper: Check if element can scroll vertically ────────────────────
-    const canScrollVertically = (el: HTMLElement, dir: 'up' | 'down'): boolean => {
-      const style = window.getComputedStyle(el);
-      const overflowY = style.overflowY;
-      const isScrollable = overflowY === 'auto' || overflowY === 'scroll';
-      if (!isScrollable && el.tagName.toLowerCase() !== 'main' && el.id !== 'main-content-scroll') return false;
-
-      if (dir === 'down') {
-        return el.scrollTop + el.clientHeight < el.scrollHeight - 2;
-      } else {
-        return el.scrollTop > 2;
-      }
-    };
-
-    // ── Helper: Check if element can scroll horizontally ──────────────────
-    const canScrollHorizontally = (el: HTMLElement, dir: 'left' | 'right'): boolean => {
-      const style = window.getComputedStyle(el);
-      const overflowX = style.overflowX;
-      const isScrollable = overflowX === 'auto' || overflowX === 'scroll';
-      if (!isScrollable && !el.classList.contains('overflow-x-auto')) return false;
-
-      if (dir === 'right') {
-        return el.scrollLeft + el.clientWidth < el.scrollWidth - 2;
-      } else {
-        return el.scrollLeft > 2;
-      }
-    };
-
     // ── Helper: Find the active vertical scroll container ─────────────────
     const findVerticalContainer = (dir: 'up' | 'down'): HTMLElement | null => {
       // 1. Check if a modal/dialog is open
       const modal = document.querySelector('[role="dialog"], .modal-responsive-container, [data-modal]');
-      if (modal) {
-        if (modal instanceof HTMLElement && canScrollVertically(modal, dir)) return modal;
+      if (modal instanceof HTMLElement) {
         const scrollableInModal = modal.querySelector('.overflow-y-auto, [class*="overflow-y"]') as HTMLElement | null;
-        if (scrollableInModal && canScrollVertically(scrollableInModal, dir)) return scrollableInModal;
+        if (scrollableInModal) return scrollableInModal;
+        return modal;
       }
 
-      // 2. Check hovered element or its scrollable ancestors
-      let current = hoveredElementRef.current;
-      while (current && current !== document.body && current !== document.documentElement) {
-        if (canScrollVertically(current, dir)) {
-          return current;
+      // 2. Check active element ancestor
+      const active = document.activeElement;
+      if (active && active !== document.body && active !== document.documentElement) {
+        const scrollParent = active.closest('#main-content-scroll, .overflow-y-auto, main');
+        if (scrollParent instanceof HTMLElement) {
+          return scrollParent;
         }
-        current = current.parentElement;
       }
 
       // 3. Fallback to main layout scroll container
@@ -90,42 +49,28 @@ export function usePlatformSmoothScroll() {
         return main;
       }
 
-      // 4. Fallback to document scrolling element
-      const docScroll = (document.scrollingElement || document.documentElement) as HTMLElement;
-      if (docScroll) return docScroll;
-
-      return null;
+      return (document.scrollingElement || document.documentElement) as HTMLElement;
     };
 
     // ── Helper: Find active horizontal scroll container ───────────────────
     const findHorizontalContainer = (dir: 'left' | 'right'): HTMLElement | null => {
-      // 1. Check hovered element or its scrollable ancestors
-      let current = hoveredElementRef.current;
-      while (current && current !== document.body && current !== document.documentElement) {
-        if (canScrollHorizontally(current, dir)) {
-          return current;
+      const active = document.activeElement;
+      if (active) {
+        const tableContainer = active.closest('.overflow-x-auto, [class*="overflow-x-auto"]');
+        if (tableContainer instanceof HTMLElement) {
+          return tableContainer;
         }
-        current = current.parentElement;
       }
 
-      // 2. Check visible horizontal tables in viewport
-      const horizContainers = Array.from(
-        document.querySelectorAll('.overflow-x-auto, [class*="overflow-x-auto"]')
-      ) as HTMLElement[];
-
-      for (const container of horizContainers) {
-        const rect = container.getBoundingClientRect();
-        if (rect.top < window.innerHeight && rect.bottom > 0 && rect.width > 0) {
-          if (canScrollHorizontally(container, dir)) {
-            return container;
-          }
-        }
+      const visibleTable = document.querySelector('.overflow-x-auto, [class*="overflow-x-auto"]');
+      if (visibleTable instanceof HTMLElement) {
+        return visibleTable;
       }
 
       return null;
     };
 
-    // ── 2. Keyboard Navigation Controller ────────────────────────────────
+    // ── Keyboard Navigation Controller ────────────────────────────────────
     const handleKeyDown = (e: KeyboardEvent) => {
       // Never intercept when user is typing in forms or content editors
       if (isEditableElement(document.activeElement)) return;
@@ -133,7 +78,7 @@ export function usePlatformSmoothScroll() {
 
       const key = e.key;
       const smooth = !prefersReducedMotion();
-      const behavior = smooth ? 'smooth' : 'auto';
+      const behavior: ScrollBehavior = smooth ? 'smooth' : 'auto';
 
       // ── Vertical Navigation: ArrowDown, ArrowUp
       if (key === 'ArrowDown') {
@@ -186,7 +131,7 @@ export function usePlatformSmoothScroll() {
         }
       }
 
-      // ── Home / End Navigation (Document or Container)
+      // ── Home / End Navigation
       else if (key === 'Home') {
         const target = findVerticalContainer('up');
         if (target) {
@@ -217,10 +162,9 @@ export function usePlatformSmoothScroll() {
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown, { passive: false });
 
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, []);

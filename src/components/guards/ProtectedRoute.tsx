@@ -18,7 +18,10 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   children,
   allowedRoles,
 }) => {
-  const { isAuthenticated, isLoading, user } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isLoading = useAuthStore((s) => s.isLoading);
+  const hasUser = useAuthStore((s) => !!s.user);
+  const userRole = useAuthStore((s) => s.user?.customClaims?.role);
   const location = useLocation();
 
   // Still checking auth state
@@ -36,13 +39,12 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   }
 
   // Not authenticated → redirect to login
-  if (!isAuthenticated || !user) {
+  if (!isAuthenticated || !hasUser) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   // Role check
   if (allowedRoles && allowedRoles.length > 0) {
-    const userRole = user.customClaims?.role;
     if (!userRole || !allowedRoles.includes(userRole)) {
       return <Navigate to="/unauthorized" replace />;
     }
