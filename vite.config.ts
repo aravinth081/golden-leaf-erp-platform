@@ -156,13 +156,13 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (id.includes('node_modules')) {
-            if (/[\\/]node_modules[\\/](react|react-dom|scheduler|react-router|react-router-dom|@remix-run)[\\/]/.test(id)) {
+            if (/[\\/]node_modules[\\/](react|react-dom|scheduler|react-router|react-router-dom|@remix-run|react-is)[\\/]/.test(id)) {
               return 'vendor-react';
             }
             if (/[\\/]node_modules[\\/](jspdf|jspdf-autotable|html2canvas)[\\/]/.test(id)) {
               return 'vendor-pdf';
             }
-            if (/[\\/]node_modules[\\/](recharts|d3-|victory-vendor|react-is)[\\/]/.test(id)) {
+            if (/[\\/]node_modules[\\/](recharts|d3-|victory-vendor)[\\/]/.test(id)) {
               return 'vendor-charts';
             }
             if (/[\\/]node_modules[\\/](framer-motion|motion-dom|motion-utils)[\\/]/.test(id)) {

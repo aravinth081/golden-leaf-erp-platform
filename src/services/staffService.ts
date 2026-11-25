@@ -18,6 +18,7 @@ import type {
 import { STAFF_ROLE_META } from '../types/staff.types';
 import { getStoredBranches } from './branchService';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { cachedQuery, invalidateQueryCache, withRetry } from '../lib/queryCache';
 
 export function normalizeStaffRole(role: string): StaffRole {
   const r = (role || '').trim().toUpperCase().replace(/[\s-]+/g, '_');
@@ -662,6 +663,7 @@ export async function createStaffProfile(
         created_at: newProfile.createdAt,
         updated_at: newProfile.updatedAt,
       });
+      invalidateQueryCache('staff:');
     } catch (err) {
       console.warn('[Supabase] Staff profile persist error:', err);
     }
@@ -819,6 +821,7 @@ export function updateStaffProfile(
           data: updated,
           updated_at: updated.updatedAt,
         });
+        invalidateQueryCache('staff:');
       } catch (err: unknown) {
         console.warn('[Supabase] Staff profile update error:', err);
       }
@@ -875,6 +878,7 @@ export function updateStaffStatus(
           data: existing,
           updated_at: existing.updatedAt,
         });
+        invalidateQueryCache('staff:');
       } catch (err: unknown) {
         console.warn('[Supabase] Staff status sync error:', err);
       }
@@ -930,6 +934,7 @@ export async function resetStaffPassword(
         data: existing,
         updated_at: existing.updatedAt,
       });
+      invalidateQueryCache('staff:');
     } catch (err) {
       console.warn('[Supabase] Staff password reset sync error:', err);
     }
@@ -976,6 +981,8 @@ export function deleteStaffProfile(id: string, actor: AuthUser): void {
         is_deleted: true,
         updated_at: now,
       }).eq('collection', 'staff_users').eq('id', id).then();
+
+      invalidateQueryCache('staff:');
     } catch (err) {
       console.warn('[Supabase] Staff delete sync error:', err);
     }
@@ -1023,13 +1030,20 @@ export async function fetchStaffUsersFromSupabase(): Promise<StaffProfile[]> {
   mergedMap.set(ARAVINTH_ADMIN_PROFILE.id, ARAVINTH_ADMIN_PROFILE);
 
   if (isSupabaseConfigured() && supabase) {
-    // 1. Fetch from staff_users table
+    // 1. Fetch from staff_users table with Single-Flight caching
     try {
-      const { data: rows, error } = await supabase
-        .from('staff_users')
-        .select('*')
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false });
+      const { data: rows, error } = await cachedQuery('staff:staff_users_table', async () => {
+        return withRetry(
+          async () => supabase!
+            .from('staff_users')
+            .select('*')
+            .is('deleted_at', null)
+            .order('created_at', { ascending: false }),
+          2,
+          150,
+          8000
+        );
+      }, 3000);
 
       if (!error && Array.isArray(rows)) {
         rows.forEach((r: any) => {
@@ -1060,13 +1074,20 @@ export async function fetchStaffUsersFromSupabase(): Promise<StaffProfile[]> {
       console.warn('[Supabase] Failed to fetch staff_users:', e);
     }
 
-    // 2. Secondary fetch from documents table
+    // 2. Secondary fetch from documents table with Single-Flight caching
     try {
-      const { data: docRows, error: docErr } = await supabase
-        .from('documents')
-        .select('data')
-        .eq('collection', 'staff_users')
-        .eq('is_deleted', false);
+      const { data: docRows, error: docErr } = await cachedQuery('staff:staff_documents_table', async () => {
+        return withRetry(
+          async () => supabase!
+            .from('documents')
+            .select('data')
+            .eq('collection', 'staff_users')
+            .eq('is_deleted', false),
+          2,
+          150,
+          8000
+        );
+      }, 3000);
 
       if (!docErr && Array.isArray(docRows)) {
         docRows.forEach((r: any) => {
@@ -1387,14 +1408,21 @@ export async function authenticateStaffCredentials(
     );
   };
 
-  // 1. First, check Supabase staff_users table
+  // 1. First, check Supabase staff_users table with Single-Flight caching
   if (isSupabaseConfigured() && supabase) {
     try {
-      const { data: rows, error } = await supabase
-        .from('staff_users')
-        .select('*')
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false });
+      const { data: rows, error } = await cachedQuery('staff:staff_users_table', async () => {
+        return withRetry(
+          async () => supabase!
+            .from('staff_users')
+            .select('*')
+            .is('deleted_at', null)
+            .order('created_at', { ascending: false }),
+          2,
+          150,
+          8000
+        );
+      }, 3000);
 
       if (!error && Array.isArray(rows) && rows.length > 0) {
         const matched = rows.find((r: any) =>
@@ -1428,14 +1456,21 @@ export async function authenticateStaffCredentials(
       console.warn('[Supabase] Auth lookup fallback to local cache:', e);
     }
 
-    // 2. Secondary check in documents collection 'staff_users'
+    // 2. Secondary check in documents collection 'staff_users' with Single-Flight caching
     if (!staff) {
       try {
-        const { data: docRows, error: docErr } = await supabase
-          .from('documents')
-          .select('data')
-          .eq('collection', 'staff_users')
-          .eq('is_deleted', false);
+        const { data: docRows, error: docErr } = await cachedQuery('staff:staff_documents_table', async () => {
+          return withRetry(
+            async () => supabase!
+              .from('documents')
+              .select('data')
+              .eq('collection', 'staff_users')
+              .eq('is_deleted', false),
+            2,
+            150,
+            8000
+          );
+        }, 3000);
 
         if (!docErr && Array.isArray(docRows) && docRows.length > 0) {
           const matchedDoc = docRows.find((dr: any) => {

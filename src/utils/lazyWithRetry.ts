@@ -12,7 +12,7 @@ const routeLoaderRegistry = new Map<string, ComponentFactory>();
 const loadedModuleCache = new Map<string, Promise<{ default: ComponentType<any> }>>();
 
 const MODULE_LOAD_ERROR_PATTERN =
-  /Failed to fetch dynamically imported module|Loading chunk|Importing a module script failed|error loading dynamically imported module|Unable to preload CSS|NetworkError|Load failed|Unexpected token '<'|not a valid JavaScript MIME type|does not provide an export named|Lazy element type must resolve|Cannot read properties of null|Cannot destructure property 'default'/i;
+  /Failed to fetch dynamically imported module|Loading chunk [\w\d_-]+ failed|Importing a module script failed|error loading dynamically imported module|Unable to preload CSS|not a valid JavaScript MIME type/i;
 
 /**
  * Checks whether an error was caused by a failed/stale dynamic chunk or lazy module import.
@@ -49,13 +49,8 @@ export function lazyWithRetry<T extends ComponentType<any>>(
     routeLoaderRegistry.set(routeKey, factory as ComponentFactory);
   }
 
-  return lazy((): Promise<{ default: T }> => {
-    // If already preloaded or in flight, return existing promise
-    if (routeKey && loadedModuleCache.has(routeKey)) {
-      return loadedModuleCache.get(routeKey)! as Promise<{ default: T }>;
-    }
-
-    const loaderPromise = new Promise<{ default: T }>((resolve, reject) => {
+  const createRetryingPromise = (): Promise<{ default: T }> => {
+    return new Promise<{ default: T }>((resolve, reject) => {
       let attempts = 0;
 
       const runAttempt = () => {
@@ -88,6 +83,21 @@ export function lazyWithRetry<T extends ComponentType<any>>(
 
       runAttempt();
     });
+  };
+
+  return lazy((): Promise<{ default: T }> => {
+    // If already preloaded or in flight, return existing promise with eviction fallback
+    if (routeKey && loadedModuleCache.has(routeKey)) {
+      const cached = loadedModuleCache.get(routeKey)!;
+      return cached.catch(() => {
+        loadedModuleCache.delete(routeKey);
+        const retryPromise = createRetryingPromise();
+        loadedModuleCache.set(routeKey, retryPromise as Promise<{ default: ComponentType<any> }>);
+        return retryPromise;
+      }) as Promise<{ default: T }>;
+    }
+
+    const loaderPromise = createRetryingPromise();
 
     if (routeKey) {
       loadedModuleCache.set(routeKey, loaderPromise as Promise<{ default: ComponentType<any> }>);

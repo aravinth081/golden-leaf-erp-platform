@@ -4,7 +4,7 @@
 // Google Authenticator TOTP Two-Factor Authentication (Admin & BM)
 // ──────────────────────────────────────────────────
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import QRCode from 'qrcode';
@@ -31,7 +31,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { useAuthStore, useUIStore } from '../../store';
-import type { AuthUser, UserRole } from '../../types';
+import { type AuthUser, type UserRole, getRoleLandingPath } from '../../types';
 import { authenticateStaffCredentials, getStoredStaffProfiles } from '../../services/staffService';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 
@@ -178,15 +178,19 @@ export const LoginPage: React.FC = () => {
     return () => clearInterval(timer);
   }, [lockoutSeconds]);
 
-  // If already authenticated, redirect immediately to dashboard
-  useEffect(() => {
-    if (isAuthenticated && user && authStep === 'CREDENTIALS') {
-      navigate('/dashboard', { replace: true });
-    }
-  }, [isAuthenticated, user, navigate, authStep]);
+  const isLoggingInRef = useRef(false);
 
-  // Complete Login and Redirect to Dashboard
+  // If already authenticated upon initial mount, redirect to authorized landing dashboard
+  useEffect(() => {
+    if (isAuthenticated && user && !isLoggingInRef.current) {
+      const target = getRoleLandingPath(user.customClaims?.role);
+      navigate(target, { replace: true });
+    }
+  }, [isAuthenticated, user, navigate]);
+
+  // Complete Login and Redirect to Role Dashboard
   const completeLogin = (result: { authUser: AuthUser; profile: any; landingPath: string }) => {
+    isLoggingInRef.current = true;
     setUser(result.authUser);
     if (result.authUser.customClaims?.branchId) {
       useUIStore.getState().setSelectedBranchId(result.authUser.customClaims.branchId);
@@ -199,7 +203,8 @@ export const LoginPage: React.FC = () => {
       }.`,
       duration: 2000,
     });
-    navigate(result.landingPath, { replace: true });
+    const target = result.landingPath || getRoleLandingPath(result.authUser.customClaims?.role);
+    navigate(target, { replace: true });
   };
 
   // Step 1: Handle Staff Username & Password Submission

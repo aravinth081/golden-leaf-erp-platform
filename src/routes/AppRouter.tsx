@@ -11,6 +11,7 @@ import { AuthLayout } from '../layouts/AuthLayout';
 import { ProtectedRoute } from '../components/guards/ProtectedRoute';
 import { PageSkeleton, ErrorBoundary } from '../components/ui';
 import { useAuthStore } from '../store';
+import { getRoleLandingPath, normalizeUserRole } from '../types';
 import { lazyWithRetry, clearLazyModuleCache, isModuleLoadError } from '../utils/lazyWithRetry';
 
 // Auth Pages
@@ -87,9 +88,15 @@ const ResetPasswordPage = lazyWithRetry(() => import('../modules/employee/ResetP
 // Role-Aware Dynamic Dashboard Router for 10 Enterprise Roles
 const DashboardRouter: React.FC = () => {
   const user = useAuthStore((s) => s.user);
-  const role = user?.customClaims?.role || 'admin';
+  const role = user?.customClaims?.role;
 
-  switch (role) {
+  if (!user || !role) {
+    return <PageSkeleton />;
+  }
+
+  const normalizedRole = normalizeUserRole(role);
+
+  switch (normalizedRole) {
     case 'admin':
     case 'area_manager':
       return <AdminDashboard />;
@@ -105,32 +112,27 @@ const DashboardRouter: React.FC = () => {
     case 'recovery_officer':
       return <AgentDashboard />;
     default:
-      return <AdminDashboard />;
+      return <BranchDashboard />;
   }
 };
 
 const RouteErrorBoundary: React.FC = () => {
   const error = useRouteError() as any;
   const navigate = useNavigate();
+  const location = useLocation();
+  const user = useAuthStore((s) => s.user);
+  const targetDashboard = getRoleLandingPath(user?.customClaims?.role);
   const isChunkError = isModuleLoadError(error);
 
   const handleRetry = () => {
     clearLazyModuleCache();
-    if (isChunkError && typeof window !== 'undefined') {
-      window.location.reload();
-      return;
-    }
     // Retry route rendering within client router smoothly without disruptive full browser reload
-    navigate(window.location.pathname + window.location.search, { replace: true });
+    navigate(location.pathname + location.search, { replace: true });
   };
 
   const handleGoDashboard = () => {
     clearLazyModuleCache();
-    if (isChunkError && typeof window !== 'undefined') {
-      window.location.assign('/dashboard');
-      return;
-    }
-    navigate('/dashboard', { replace: true });
+    navigate(targetDashboard, { replace: true });
   };
 
   return (
@@ -173,11 +175,15 @@ const RouteErrorBoundary: React.FC = () => {
 const SuspenseWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const user = useAuthStore((s) => s.user);
+  const targetDashboard = getRoleLandingPath(user?.customClaims?.role);
 
   return (
     <ErrorBoundary
       resetKey={location.pathname + location.search}
-      onNavigateDashboard={() => navigate('/dashboard', { replace: true })}
+      onNavigateDashboard={() => {
+        navigate(targetDashboard, { replace: true });
+      }}
     >
       <Suspense fallback={<PageSkeleton />}>{children}</Suspense>
     </ErrorBoundary>
@@ -186,11 +192,41 @@ const SuspenseWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
 const RootRoute: React.FC = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const hasUser = useAuthStore((s) => !!s.user);
-  if (isAuthenticated && hasUser) {
-    return <Navigate to="/dashboard" replace />;
+  const user = useAuthStore((s) => s.user);
+  if (isAuthenticated && user) {
+    const target = getRoleLandingPath(user.customClaims?.role);
+    return <Navigate to={target} replace />;
   }
   return <LoginPage />;
+};
+
+const UnauthorizedFallback: React.FC = () => {
+  const user = useAuthStore((s) => s.user);
+  const target = getRoleLandingPath(user?.customClaims?.role);
+
+  return (
+    <div className="flex flex-col items-center justify-center py-20 font-body">
+      <div className="w-16 h-16 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center mb-4 text-amber-600">
+        <span className="text-3xl">🔒</span>
+      </div>
+      <h1 className="text-2xl font-display font-bold text-[#0B1F3A]">Access Restricted</h1>
+      <p className="mt-2 text-sm text-gray-500 max-w-sm text-center">
+        Your role does not possess authorization to access this panel. Please navigate to your permitted dashboard.
+      </p>
+      <Link
+        to={target}
+        className="mt-6 px-6 py-2.5 rounded-[10px] bg-[#D4AF37] hover:bg-[#C9A227] text-white font-semibold text-xs transition-colors shadow-sm"
+      >
+        Return to Authorized Dashboard
+      </Link>
+    </div>
+  );
+};
+
+const CatchAllRedirect: React.FC = () => {
+  const user = useAuthStore((s) => s.user);
+  const target = getRoleLandingPath(user?.customClaims?.role);
+  return <Navigate to={target} replace />;
 };
 
 export const router = createBrowserRouter([
@@ -793,23 +829,7 @@ export const router = createBrowserRouter([
       // ── UNAUTHORIZED ACCESS FALLBACK ──
       {
         path: '/unauthorized',
-        element: (
-          <div className="flex flex-col items-center justify-center py-20 font-body">
-            <div className="w-16 h-16 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center mb-4 text-amber-600">
-              <span className="text-3xl">🔒</span>
-            </div>
-            <h1 className="text-2xl font-display font-bold text-[#0B1F3A]">Access Restricted</h1>
-            <p className="mt-2 text-sm text-gray-500 max-w-sm text-center">
-              Your role does not possess authorization to access this panel. Please navigate to your permitted dashboard.
-            </p>
-            <Link
-              to="/dashboard"
-              className="mt-6 px-6 py-2.5 rounded-[10px] bg-[#D4AF37] hover:bg-[#C9A227] text-white font-semibold text-xs transition-colors shadow-sm"
-            >
-              Return to Authorized Dashboard
-            </Link>
-          </div>
-        ),
+        element: <UnauthorizedFallback />,
       },
     ],
   },
@@ -817,7 +837,7 @@ export const router = createBrowserRouter([
   // Catch-all
   {
     path: '*',
-    element: <Navigate to="/dashboard" replace />,
+    element: <CatchAllRedirect />,
   },
 ]);
 

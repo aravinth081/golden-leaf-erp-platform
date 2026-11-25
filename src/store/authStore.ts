@@ -6,7 +6,7 @@
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { AuthUser, UserRole } from '../types';
+import { type AuthUser, type UserRole, normalizeUserRole } from '../types';
 import { useUIStore } from './uiStore';
 
 interface AuthStore {
@@ -36,9 +36,9 @@ const sanitizeUser = (user: AuthUser | null): AuthUser | null => {
 
   // Normalize customClaims
   if (!clone.customClaims) {
-    const rawRole = ((clone as any).role || 'branch_manager').toString().toLowerCase();
+    const rawRole = (clone as any).role || 'branch_manager';
     clone.customClaims = {
-      role: (rawRole === 'bm' ? 'branch_manager' : rawRole === 'cm' ? 'credit_manager' : rawRole) as UserRole,
+      role: normalizeUserRole(rawRole),
       companyId: 'default',
       branchId: (clone as any).branchId,
       branchName: (clone as any).branchName,
@@ -46,8 +46,7 @@ const sanitizeUser = (user: AuthUser | null): AuthUser | null => {
   } else {
     clone.customClaims = { ...clone.customClaims };
     if (clone.customClaims.role) {
-      const rawRole = clone.customClaims.role.toString().toLowerCase();
-      clone.customClaims.role = (rawRole === 'bm' ? 'branch_manager' : rawRole === 'cm' ? 'credit_manager' : rawRole) as UserRole;
+      clone.customClaims.role = normalizeUserRole(clone.customClaims.role);
     }
   }
 
@@ -159,7 +158,11 @@ export const useAuthStore = create<AuthStore>()(
         });
       },
 
-      hasRole: (role) => get().user?.customClaims?.role === role,
+      hasRole: (role) => {
+        const currentRole = get().user?.customClaims?.role;
+        if (!currentRole) return false;
+        return normalizeUserRole(currentRole) === normalizeUserRole(role);
+      },
 
       getBranchId: () => get().user?.customClaims?.branchId,
     }),

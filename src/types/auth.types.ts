@@ -266,3 +266,46 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   auditor: 'Internal Auditor',
   accountant: 'Finance & Accounts Officer',
 };
+
+/**
+ * Normalizes any role string (DB values, legacy codes, aliases) to a canonical UserRole.
+ */
+export function normalizeUserRole(role?: string | null): UserRole {
+  if (!role) return 'branch_manager';
+  const r = role.toString().trim().toUpperCase().replace(/[\s-]+/g, '_');
+  if (r.includes('ADMIN') || r === 'SUPER_ADMIN' || r === 'ADMINISTRATOR' || r === 'SYSTEM_MASTER_AUTHORITY') return 'admin';
+  if (r.includes('HR') || r.includes('PAYROLL')) return 'hr_payroll_manager';
+  if (r.includes('CREDIT') || r.includes('UNDERWRIT') || r === 'CM') return 'credit_manager';
+  if (r.includes('CRO') || r.includes('COLLECT') || r.includes('RECOVERY') || r === 'AGENT' || r === 'FIELD_AGENT') return 'collection_agent';
+  if (r.includes('BRANCH') || r === 'BM' || r === 'BRANCH_HEAD') return 'branch_manager';
+  if (r === 'AREA_MANAGER') return 'area_manager';
+  if (r === 'AUDITOR') return 'auditor';
+  if (r === 'ACCOUNTANT') return 'accountant';
+  return (role.toLowerCase() as UserRole) || 'branch_manager';
+}
+
+/**
+ * Maps any role to its official authorized dashboard/landing route.
+ */
+export function getRoleLandingPath(role?: string | null): string {
+  const normRole = normalizeUserRole(role);
+  switch (normRole) {
+    case 'admin':
+    case 'area_manager':
+      return '/dashboard';
+    case 'hr_payroll_manager':
+      return '/hr-payroll';
+    case 'branch_manager':
+    case 'accountant':
+      return '/dashboard';
+    case 'credit_manager':
+    case 'auditor':
+      return '/dashboard';
+    case 'collection_agent':
+    case 'recovery_officer':
+      return '/collections';
+    default:
+      return '/dashboard';
+  }
+}
+

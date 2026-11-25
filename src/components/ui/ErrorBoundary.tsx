@@ -5,6 +5,8 @@
 import React, { Component, type ErrorInfo, type ReactNode } from 'react';
 import { AlertTriangle, RefreshCcw, Home } from 'lucide-react';
 import { clearLazyModuleCache, isModuleLoadError } from '../../utils/lazyWithRetry';
+import { useAuthStore } from '../../store';
+import { getRoleLandingPath } from '../../types';
 
 interface Props {
   children: ReactNode;
@@ -50,22 +52,8 @@ export class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
     console.error('ErrorBoundary caught:', error, errorInfo);
 
-    // One-time seamless recovery when a new deployment invalidates cached chunk hashes
-    if (isModuleLoadError(error) && typeof window !== 'undefined') {
-      try {
-        const lastSync = Number(sessionStorage.getItem(CHUNK_SYNC_STORAGE_KEY) || '0');
-        const now = Date.now();
-        if (!lastSync || now - lastSync > CHUNK_SYNC_COOLDOWN_MS) {
-          sessionStorage.setItem(CHUNK_SYNC_STORAGE_KEY, String(now));
-          clearLazyModuleCache();
-          this.setState({ isAutoReloading: true });
-          this.reloadTimeoutId = setTimeout(() => {
-            window.location.reload();
-          }, 150);
-        }
-      } catch {
-        // Ignore sessionStorage restrictions
-      }
+    if (isModuleLoadError(error)) {
+      clearLazyModuleCache();
     }
   }
 
@@ -77,10 +65,6 @@ export class ErrorBoundary extends Component<Props, State> {
 
   handleRetry = (): void => {
     clearLazyModuleCache();
-    if (isModuleLoadError(this.state.error) && typeof window !== 'undefined') {
-      window.location.reload();
-      return;
-    }
     this.setState((prev) => ({
       hasError: false,
       error: null,
@@ -91,10 +75,9 @@ export class ErrorBoundary extends Component<Props, State> {
 
   handleGoDashboard = (): void => {
     clearLazyModuleCache();
-    if (isModuleLoadError(this.state.error) && typeof window !== 'undefined') {
-      window.location.assign('/dashboard');
-      return;
-    }
+    const authUser = useAuthStore.getState().user;
+    const target = getRoleLandingPath(authUser?.customClaims?.role);
+
     this.setState((prev) => ({
       hasError: false,
       error: null,
@@ -104,7 +87,7 @@ export class ErrorBoundary extends Component<Props, State> {
     if (this.props.onNavigateDashboard) {
       this.props.onNavigateDashboard();
     } else if (typeof window !== 'undefined') {
-      window.history.pushState(null, '', '/dashboard');
+      window.history.pushState(null, '', target);
       window.dispatchEvent(new PopStateEvent('popstate'));
     }
   };

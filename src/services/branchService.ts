@@ -5,6 +5,7 @@
 // ──────────────────────────────────────────────────
 
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { cachedQuery, invalidateQueryCache, withRetry } from '../lib/queryCache';
 
 export interface BranchActivity {
   id: string;
@@ -205,11 +206,18 @@ export const getStoredBranches = (): DetailedBranch[] => {
 export const fetchBranchesFromSupabase = async (): Promise<DetailedBranch[]> => {
   if (isSupabaseConfigured() && supabase) {
     try {
-      const { data: rows, error } = await supabase
-        .from('documents')
-        .select('data')
-        .eq('collection', 'branches')
-        .eq('is_deleted', false);
+      const { data: rows, error } = await cachedQuery('branches:all', async () => {
+        return withRetry(
+          async () => supabase!
+            .from('documents')
+            .select('data')
+            .eq('collection', 'branches')
+            .eq('is_deleted', false),
+          2,
+          150,
+          8000
+        );
+      }, 5000);
 
       if (!error && Array.isArray(rows) && rows.length > 0) {
         const cloudBranches = rows
@@ -232,7 +240,7 @@ export const fetchBranchesFromSupabase = async (): Promise<DetailedBranch[]> => 
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }));
-        await supabase.from('documents').upsert(upsertRows);
+        await withRetry(async () => supabase!.from('documents').upsert(upsertRows), 2, 200, 8000);
       }
     } catch (e) {
       console.warn('[Supabase] Failed to fetch branches from cloud:', e);
@@ -247,6 +255,7 @@ export const saveStoredBranches = (branches: DetailedBranch[]): void => {
   } catch (e) {
     console.error('Failed to save branches to localStorage:', e);
   }
+  invalidateQueryCache('branches:all');
 
   if (isSupabaseConfigured() && supabase) {
     try {
@@ -258,7 +267,7 @@ export const saveStoredBranches = (branches: DetailedBranch[]): void => {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }));
-      supabase.from('documents').upsert(upsertRows).then();
+      withRetry(async () => supabase!.from('documents').upsert(upsertRows), 2, 200, 8000).then();
     } catch (e) {
       console.warn('[Supabase] Branch sync error:', e);
     }

@@ -5,6 +5,7 @@
 // ──────────────────────────────────────────────────
 
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { singleFlight, cachedQuery, invalidateQueryCache, withRetry } from '../lib/queryCache';
 
 export type Unsubscribe = () => void;
 export type WhereFilterOp = '==' | '!=' | '<' | '<=' | '>' | '>=' | 'in' | 'array-contains';
@@ -43,6 +44,7 @@ function notifyCollectionChange(collectionName: string) {
 const STORAGE_PREFIX = 'glf_db_';
 
 function getCollectionItems<T = DocumentData>(collectionName: string): T[] {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return [];
   try {
     const raw = localStorage.getItem(`${STORAGE_PREFIX}${collectionName}`);
     if (raw) {
@@ -56,6 +58,7 @@ function getCollectionItems<T = DocumentData>(collectionName: string): T[] {
 }
 
 function saveCollectionItems<T = DocumentData>(collectionName: string, items: T[], notify: boolean = true): void {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
   try {
     localStorage.setItem(`${STORAGE_PREFIX}${collectionName}`, JSON.stringify(items));
     if (notify) {
@@ -147,21 +150,27 @@ export async function createDocument<T extends { id: string }>(
   const items = getCollectionItems<T>(collectionName);
   items.unshift(newDoc);
   saveCollectionItems(collectionName, items);
+  invalidateQueryCache(`col:${collectionName}`);
 
-  // 2. Persistent cloud sync to Supabase PostgreSQL
+  // 2. Persistent cloud sync to Supabase PostgreSQL with retry
   if (isSupabaseConfigured() && supabase) {
     try {
       const client = supabase;
-      const { error } = await client
-        .from('documents')
-        .upsert({
-          collection: collectionName,
-          id: newId,
-          data: newDoc,
-          is_deleted: false,
-          created_at: now,
-          updated_at: now,
-        });
+      const { error } = await withRetry(
+        async () => client
+          .from('documents')
+          .upsert({
+            collection: collectionName,
+            id: newId,
+            data: newDoc,
+            is_deleted: false,
+            created_at: now,
+            updated_at: now,
+          }),
+        2,
+        200,
+        8000
+      );
       if (error) {
         console.warn(`[Supabase] Create doc error (${collectionName}/${newId}):`, error.message);
       }
@@ -200,20 +209,27 @@ export async function createDocumentWithId<T extends { id: string }>(
 
   // 1. Instant local write
   saveCollectionItems(collectionName, items);
+  invalidateQueryCache(`col:${collectionName}`);
+  invalidateQueryCache(`doc:${collectionName}:${docId}`);
 
-  // 2. Sync to Supabase
+  // 2. Sync to Supabase with retry
   if (isSupabaseConfigured() && supabase) {
     try {
       const client = supabase;
-      const { error } = await client
-        .from('documents')
-        .upsert({
-          collection: collectionName,
-          id: docId,
-          data: newDoc,
-          is_deleted: false,
-          updated_at: now,
-        });
+      const { error } = await withRetry(
+        async () => client
+          .from('documents')
+          .upsert({
+            collection: collectionName,
+            id: docId,
+            data: newDoc,
+            is_deleted: false,
+            updated_at: now,
+          }),
+        2,
+        200,
+        8000
+      );
       if (error) {
         console.warn(`[Supabase] Upsert error (${collectionName}/${docId}):`, error.message);
       }
@@ -234,19 +250,32 @@ export async function getDocument<T>(
   const items = getCollectionItems<T>(collectionName);
   const found = items.find((item: any) => item.id === docId);
 
-  // Attempt fetch from Supabase for fresh data
+  // Attempt fetch from Supabase for fresh data with Single-Flight coalescing
   if (isSupabaseConfigured() && supabase) {
     try {
-      const client = supabase;
-      const { data: row, error } = await client
-        .from('documents')
-        .select('data')
-        .eq('collection', collectionName)
-        .eq('id', docId)
-        .maybeSingle();
+      const cacheKey = `doc:${collectionName}:${docId}`;
+      const cloudDoc = await singleFlight(cacheKey, async () => {
+        const client = supabase!;
+        const { data: row, error } = await withRetry(
+          async () => client
+            .from('documents')
+            .select('data')
+            .eq('collection', collectionName)
+            .eq('id', docId)
+            .maybeSingle(),
+          2,
+          150,
+          6000
+        );
 
-      if (!error && row?.data) {
-        return row.data as T;
+        if (!error && row?.data) {
+          return row.data as T;
+        }
+        return null;
+      });
+
+      if (cloudDoc) {
+        return cloudDoc;
       }
     } catch (e) {
       console.warn(`[Supabase] getDocument error (${collectionName}/${docId}):`, e);
@@ -286,7 +315,10 @@ export async function updateDocument(
     };
   }
 
-  // Sync to Supabase
+  invalidateQueryCache(`col:${collectionName}`);
+  invalidateQueryCache(`doc:${collectionName}:${docId}`);
+
+  // Sync to Supabase with retry
   if (isSupabaseConfigured() && supabase) {
     try {
       const client = supabase;
@@ -298,14 +330,19 @@ export async function updateDocument(
         .maybeSingle();
 
       const cloudMerged = { ...(row?.data || {}), ...data, updatedAt: now };
-      const { error } = await client
-        .from('documents')
-        .upsert({
-          collection: collectionName,
-          id: docId,
-          data: cloudMerged,
-          updated_at: now,
-        });
+      const { error } = await withRetry(
+        async () => client
+          .from('documents')
+          .upsert({
+            collection: collectionName,
+            id: docId,
+            data: cloudMerged,
+            updated_at: now,
+          }),
+        2,
+        200,
+        8000
+      );
 
       if (error) {
         console.warn(`[Supabase] Update error (${collectionName}/${docId}):`, error.message);
@@ -330,15 +367,22 @@ export async function softDeleteDocument(
     deletedAt: now,
     deletedBy,
   });
+  invalidateQueryCache(`col:${collectionName}`);
+  invalidateQueryCache(`doc:${collectionName}:${docId}`);
 
   if (isSupabaseConfigured() && supabase) {
     try {
       const client = supabase;
-      const { error } = await client
-        .from('documents')
-        .update({ is_deleted: true, updated_at: now })
-        .eq('collection', collectionName)
-        .eq('id', docId);
+      const { error } = await withRetry(
+        async () => client
+          .from('documents')
+          .update({ is_deleted: true, updated_at: now })
+          .eq('collection', collectionName)
+          .eq('id', docId),
+        2,
+        200,
+        8000
+      );
       if (error) {
         console.warn(`[Supabase] Soft delete error:`, error.message);
       }
@@ -358,15 +402,22 @@ export async function hardDeleteDocument(
   const items = getCollectionItems<any>(collectionName);
   const filtered = items.filter((item) => item.id !== docId);
   saveCollectionItems(collectionName, filtered);
+  invalidateQueryCache(`col:${collectionName}`);
+  invalidateQueryCache(`doc:${collectionName}:${docId}`);
 
   if (isSupabaseConfigured() && supabase) {
     try {
       const client = supabase;
-      const { error } = await client
-        .from('documents')
-        .delete()
-        .eq('collection', collectionName)
-        .eq('id', docId);
+      const { error } = await withRetry(
+        async () => client
+          .from('documents')
+          .delete()
+          .eq('collection', collectionName)
+          .eq('id', docId),
+        2,
+        200,
+        8000
+      );
       if (error) {
         console.warn(`[Supabase] Hard delete error:`, error.message);
       }
@@ -378,53 +429,56 @@ export async function hardDeleteDocument(
 
 /**
  * Query documents from a collection with filters, sorting, and pagination.
+ * Scalable Single-Flight request coalescing & TTL caching supports 2,500+ concurrent users.
  */
 export async function queryDocuments<T>(
   collectionName: string,
   options: FirestoreQueryOptions = {},
   excludeDeleted: boolean = true
 ): Promise<T[]> {
-  // If Supabase is active, sync from cloud
+  // If Supabase is active, sync from cloud with Single-Flight coalescing and TTL caching
   if (isSupabaseConfigured() && supabase) {
     try {
-      const client = supabase;
-      let query = client
-        .from('documents')
-        .select('data')
-        .eq('collection', collectionName);
+      const cacheKey = `col:${collectionName}:${excludeDeleted}`;
+      const cloudItems = await cachedQuery(cacheKey, async () => {
+        const client = supabase!;
+        let query = client
+          .from('documents')
+          .select('data')
+          .eq('collection', collectionName);
 
-      if (excludeDeleted) {
-        query = query.eq('is_deleted', false);
-      }
-
-      // Safe 1500ms timeout race to guarantee fast rendering even under slow/offline network
-      const timeoutPromise = new Promise<{ data: null; error: { message: string } }>((resolve) =>
-        setTimeout(() => resolve({ data: null, error: { message: 'Cloud query timeout' } }), 1500)
-      );
-      const { data: rows, error } = (await Promise.race([query, timeoutPromise])) as any;
-      if (!error && Array.isArray(rows)) {
-        if (rows.length > 0) {
-          const cloudItems = rows.map((r: any) => r.data).filter(Boolean);
-          // Silently update local store with latest cloud state
-          saveCollectionItems(collectionName, cloudItems, false);
-          return applyFiltersAndSort<T>(cloudItems, options, excludeDeleted);
-        } else {
-          // If cloud has 0 rows, check if there are initial local items to seed to Supabase
-          const localItems = getCollectionItems<any>(collectionName);
-          if (localItems.length > 0) {
-            const upsertRows = localItems.map((item) => ({
-              collection: collectionName,
-              id: item.id || `${collectionName}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-              data: item,
-              is_deleted: !!item.isDeleted,
-              created_at: item.createdAt || new Date().toISOString(),
-              updated_at: item.updatedAt || new Date().toISOString(),
-            }));
-            await client.from('documents').upsert(upsertRows);
-            return applyFiltersAndSort<T>(localItems, options, excludeDeleted);
-          }
-          return [];
+        if (excludeDeleted) {
+          query = query.eq('is_deleted', false);
         }
+
+        const { data: rows, error } = await withRetry(async () => query, 2, 200, 8000);
+        if (!error && Array.isArray(rows)) {
+          if (rows.length > 0) {
+            const items = rows.map((r: any) => r.data).filter(Boolean);
+            saveCollectionItems(collectionName, items, false);
+            return items;
+          } else {
+            const localItems = getCollectionItems<any>(collectionName);
+            if (localItems.length > 0) {
+              const upsertRows = localItems.map((item) => ({
+                collection: collectionName,
+                id: item.id || `${collectionName}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                data: item,
+                is_deleted: !!item.isDeleted,
+                created_at: item.createdAt || new Date().toISOString(),
+                updated_at: item.updatedAt || new Date().toISOString(),
+              }));
+              await withRetry(async () => client.from('documents').upsert(upsertRows), 2, 200, 8000);
+              return localItems;
+            }
+            return [];
+          }
+        }
+        return null;
+      }, 3000);
+
+      if (cloudItems) {
+        return applyFiltersAndSort<T>(cloudItems, options, excludeDeleted);
       }
     } catch (e) {
       console.warn(`[Supabase] Cloud query fallback to local cache:`, e);
