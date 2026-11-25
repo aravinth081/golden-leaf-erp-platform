@@ -274,11 +274,19 @@ export const AdminDashboard: React.FC = () => {
 
   // Image 1 Reference: Exact value/percentage rendered directly above each bar with smart highlights
   const renderCustomBarLabel = useCallback((props: any) => {
-    const { x, y, width, value, index } = props;
-    if (!value || trendData.length === 0) return null;
+    const { x, y, width, value, index } = props || {};
+    if (
+      !value ||
+      trendData.length === 0 ||
+      !Number.isFinite(x) ||
+      !Number.isFinite(y) ||
+      !Number.isFinite(width)
+    ) {
+      return null;
+    }
 
     const isToday = index === trendData.length - 1;
-    const maxVal = Math.max(...trendData.map((d) => d.amount));
+    const maxVal = Math.max(...trendData.map((d) => Number(d?.amount) || 0));
     const isPeak = value === maxVal;
 
     const formatted = value >= 100000
@@ -539,7 +547,10 @@ export const AdminDashboard: React.FC = () => {
     if (!trendData || trendData.length === 0) {
       return { max: 700000, ticks: [0, 100000, 200000, 300000, 400000, 500000, 600000, 700000] };
     }
-    const maxVal = Math.max(...trendData.map((d) => d.amount || 0));
+    const maxVal = Math.max(...trendData.map((d) => {
+      const n = Number(d?.amount);
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    }));
 
     // Determine clean step size based on data magnitude
     let step = 100000;
@@ -554,12 +565,12 @@ export const AdminDashboard: React.FC = () => {
     } else if (maxVal <= 2500000) {
       step = 250000;
     } else {
-      step = 500000;
+      step = Math.max(500000, Math.ceil((maxVal * 1.1) / 10 / 100000) * 100000);
     }
 
     const ceiling = Math.max(step, Math.ceil((maxVal * 1.1) / step) * step);
     const ticks: number[] = [];
-    for (let t = 0; t <= ceiling; t += step) {
+    for (let t = 0; t <= ceiling && ticks.length < 25; t += step) {
       ticks.push(t);
     }
     return { max: ceiling, ticks };
@@ -1699,7 +1710,7 @@ export const AdminDashboard: React.FC = () => {
                     <td className="py-3.5 px-5 text-left whitespace-nowrap align-middle">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold bg-gradient-to-br from-[#0B1F3A] to-[#1e3a61] text-[#F5D061] border border-[#D4AF37]/30 shrink-0 font-sans shadow-2xs">
-                          {emp.initials || emp.name.charAt(0)}
+                          {emp.initials || (emp.name ? emp.name.charAt(0) : 'S')}
                         </div>
                         <div className="min-w-0">
                           <div className="font-bold text-[#0B1F3A] text-xs sm:text-[13px] font-sans truncate">

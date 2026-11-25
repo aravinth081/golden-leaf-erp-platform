@@ -4,14 +4,14 @@
 // ──────────────────────────────────────────────────
 
 import React, { Suspense, useState, useEffect } from 'react';
-import { createBrowserRouter, Navigate, useRouteError, useNavigate, Link } from 'react-router-dom';
+import { createBrowserRouter, Navigate, useRouteError, useNavigate, useLocation, Link } from 'react-router-dom';
 import { AlertTriangle, RefreshCcw, Home } from 'lucide-react';
 import { AppLayout } from '../layouts/AppLayout';
 import { AuthLayout } from '../layouts/AuthLayout';
 import { ProtectedRoute } from '../components/guards/ProtectedRoute';
 import { PageSkeleton, ErrorBoundary } from '../components/ui';
 import { useAuthStore } from '../store';
-import { lazyWithRetry } from '../utils/lazyWithRetry';
+import { lazyWithRetry, clearLazyModuleCache, isModuleLoadError } from '../utils/lazyWithRetry';
 
 // Auth Pages
 import LoginPage from '../modules/auth/LoginPage';
@@ -112,24 +112,25 @@ const DashboardRouter: React.FC = () => {
 const RouteErrorBoundary: React.FC = () => {
   const error = useRouteError() as any;
   const navigate = useNavigate();
-
-  const isChunkError =
-    error?.name === 'ChunkLoadError' ||
-    (error?.message && (
-      /Failed to fetch dynamically imported module/i.test(error.message) ||
-      /Loading chunk/i.test(error.message) ||
-      /Importing a module script failed/i.test(error.message) ||
-      /NetworkError/i.test(error.message) ||
-      /Load failed/i.test(error.message)
-    ));
+  const isChunkError = isModuleLoadError(error);
 
   const handleRetry = () => {
+    clearLazyModuleCache();
+    if (isChunkError && typeof window !== 'undefined') {
+      window.location.reload();
+      return;
+    }
     // Retry route rendering within client router smoothly without disruptive full browser reload
     navigate(window.location.pathname + window.location.search, { replace: true });
   };
 
   const handleGoDashboard = () => {
-    navigate('/dashboard');
+    clearLazyModuleCache();
+    if (isChunkError && typeof window !== 'undefined') {
+      window.location.assign('/dashboard');
+      return;
+    }
+    navigate('/dashboard', { replace: true });
   };
 
   return (
@@ -169,11 +170,19 @@ const RouteErrorBoundary: React.FC = () => {
   );
 };
 
-const SuspenseWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <ErrorBoundary>
-    <Suspense fallback={<PageSkeleton />}>{children}</Suspense>
-  </ErrorBoundary>
-);
+const SuspenseWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  return (
+    <ErrorBoundary
+      resetKey={location.pathname + location.search}
+      onNavigateDashboard={() => navigate('/dashboard', { replace: true })}
+    >
+      <Suspense fallback={<PageSkeleton />}>{children}</Suspense>
+    </ErrorBoundary>
+  );
+};
 
 const RootRoute: React.FC = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);

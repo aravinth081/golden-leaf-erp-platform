@@ -349,10 +349,13 @@ export const INITIAL_STAFF_SEEDS: StaffProfile[] = [
 ];
 
 export function getStoredStaffProfiles(): StaffProfile[] {
-  let current = readStorage<StaffProfile[]>(STORAGE_KEY_PROFILES, []);
-  
+  const rawList = readStorage<StaffProfile[]>(STORAGE_KEY_PROFILES, []);
+  let current = Array.isArray(rawList)
+    ? rawList.filter((p): p is StaffProfile => Boolean(p && typeof p === 'object' && p.username))
+    : [];
+
   // Clean up any legacy demo test accounts (ramesh.cro, branch.manager, etc.)
-  if (current && current.length > 0) {
+  if (current.length > 0) {
     const filtered = current.filter(
       (p) =>
         p.username !== 'ramesh.cro' &&
@@ -361,29 +364,31 @@ export function getStoredStaffProfiles(): StaffProfile[] {
         p.username !== 'hr.manager' &&
         p.username !== 'admin'
     );
-    if (filtered.length !== current.length) {
+    if (filtered.length !== current.length || filtered.length !== rawList.length) {
       current = filtered;
       writeStorage(STORAGE_KEY_PROFILES, current);
     }
+  } else if (Array.isArray(rawList) && rawList.length > 0) {
+    writeStorage(STORAGE_KEY_PROFILES, current);
   }
 
   // Ensure Master Admin is always available in profile list
-  const hasMasterAdmin = current && current.some(
+  const hasMasterAdmin = current.some(
     (p) =>
-      p.username.toLowerCase() === 'karthikkannan d' ||
-      p.username.toLowerCase() === 'karthikkannan' ||
-      p.fullName.toLowerCase() === 'karthikkannan d'
+      p.username?.toLowerCase() === 'karthikkannan d' ||
+      p.username?.toLowerCase() === 'karthikkannan' ||
+      p.fullName?.toLowerCase() === 'karthikkannan d'
   );
 
   if (!hasMasterAdmin) {
-    current = [MASTER_ADMIN_PROFILE, ...(current || [])];
+    current = [MASTER_ADMIN_PROFILE, ...current];
     writeStorage(STORAGE_KEY_PROFILES, current);
   }
 
   // Ensure Aravinth Admin is always available and active in profile list
-  const aravinthIdx = (current || []).findIndex(
+  const aravinthIdx = current.findIndex(
     (p) =>
-      p.username.toLowerCase() === 'aravinth' ||
+      p.username?.toLowerCase() === 'aravinth' ||
       p.id === 'STF-002-ADMIN-ARAVINTH' ||
       (p.mobile && p.mobile.replace(/\D/g, '') === '6374995585' && p.role === 'ADMIN')
   );

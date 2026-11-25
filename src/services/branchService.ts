@@ -168,22 +168,31 @@ export const getStoredBranches = (): DetailedBranch[] => {
     if (storage) {
       const raw = storage.getItem(STORAGE_KEY);
       if (raw) {
-        const parsed: DetailedBranch[] = JSON.parse(raw);
-        // Automatically purge legacy mock seed branches (BR-02, BR-03, BR-04, BR-05)
-        const cleaned = parsed.filter((b) => !LEGACY_MOCK_BRANCH_IDS.has(b.id));
-        const activeList = cleaned.length > 0 ? cleaned : INITIAL_BRANCHES;
-        if (cleaned.length !== parsed.length) {
-          storage.setItem(STORAGE_KEY, JSON.stringify(activeList));
+        const parsedRaw = JSON.parse(raw);
+        if (Array.isArray(parsedRaw)) {
+          // Automatically purge legacy mock seed branches (BR-02, BR-03, BR-04, BR-05) and invalid items
+          const parsed = parsedRaw.filter((b): b is DetailedBranch => Boolean(b && typeof b === 'object'));
+          const cleaned = parsed.filter((b) => !LEGACY_MOCK_BRANCH_IDS.has(b.id));
+          const activeList = cleaned.length > 0 ? cleaned : INITIAL_BRANCHES;
+          if (cleaned.length !== parsed.length) {
+            storage.setItem(STORAGE_KEY, JSON.stringify(activeList));
+          }
+          return activeList.map((b) => ({
+            ...b,
+            id: b.id || 'BR-01',
+            code: b.code || b.id || 'GL-BR',
+            name: b.name || (b as any).branchName || b.code || 'Branch Office',
+            city: b.city || '',
+            status: b.status || 'Active',
+            manager: b.manager || 'Unassigned',
+            attendanceRecords: Array.isArray(b.attendanceRecords) ? b.attendanceRecords : [],
+            agentPerformance: Array.isArray(b.agentPerformance) ? b.agentPerformance : [],
+            pendingLoansList: Array.isArray(b.pendingLoansList) ? b.pendingLoansList : [],
+            disbursedLoansList: Array.isArray(b.disbursedLoansList) ? b.disbursedLoansList : [],
+            recentActivities: Array.isArray(b.recentActivities) ? b.recentActivities : [],
+            monthlyTrend: Array.isArray(b.monthlyTrend) ? b.monthlyTrend : [],
+          }));
         }
-        return activeList.map((b) => ({
-          ...b,
-          attendanceRecords: b.attendanceRecords || [],
-          agentPerformance: b.agentPerformance || [],
-          pendingLoansList: b.pendingLoansList || [],
-          disbursedLoansList: b.disbursedLoansList || [],
-          recentActivities: b.recentActivities || [],
-          monthlyTrend: b.monthlyTrend || [],
-        }));
       }
       storage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_BRANCHES));
     }
@@ -203,11 +212,15 @@ export const fetchBranchesFromSupabase = async (): Promise<DetailedBranch[]> => 
         .eq('is_deleted', false);
 
       if (!error && Array.isArray(rows) && rows.length > 0) {
-        const cloudBranches = rows.map((r: any) => r.data).filter(Boolean);
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(cloudBranches));
-        } catch {}
-        return cloudBranches;
+        const cloudBranches = rows
+          .map((r: any) => r.data)
+          .filter((b: any) => Boolean(b && typeof b === 'object'));
+        if (cloudBranches.length > 0) {
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(cloudBranches));
+          } catch {}
+          return getStoredBranches();
+        }
       } else if (!error && Array.isArray(rows) && rows.length === 0) {
         // Seed initial branches to Supabase
         const initial = getStoredBranches();

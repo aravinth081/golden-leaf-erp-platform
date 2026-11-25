@@ -96,6 +96,10 @@ export default defineConfig({
         ],
       },
       workbox: {
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
+        navigateFallbackDenylist: [/^\/assets\//],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         globPatterns: ['**/*.{css,html,ico,png,svg,woff2,webp}', 'assets/index-*.js', 'assets/vendor-*.js'],
         globIgnores: ['**/pdfGenerator*', '**/jspdf*', '**/html2canvas*'],
@@ -152,23 +156,23 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (id.includes('node_modules')) {
-            if (id.includes('jspdf') || id.includes('html2canvas')) {
+            if (/[\\/]node_modules[\\/](react|react-dom|scheduler|react-router|react-router-dom|@remix-run)[\\/]/.test(id)) {
+              return 'vendor-react';
+            }
+            if (/[\\/]node_modules[\\/](jspdf|jspdf-autotable|html2canvas)[\\/]/.test(id)) {
               return 'vendor-pdf';
             }
-            if (id.includes('recharts') || id.includes('d3-')) {
+            if (/[\\/]node_modules[\\/](recharts|d3-|victory-vendor|react-is)[\\/]/.test(id)) {
               return 'vendor-charts';
             }
-            if (id.includes('framer-motion')) {
+            if (/[\\/]node_modules[\\/](framer-motion|motion-dom|motion-utils)[\\/]/.test(id)) {
               return 'vendor-animation';
             }
-            if (id.includes('lucide-react')) {
+            if (/[\\/]node_modules[\\/]lucide-react[\\/]/.test(id)) {
               return 'vendor-icons';
             }
-            if (id.includes('@supabase') || id.includes('firebase')) {
+            if (/[\\/]node_modules[\\/](@supabase|firebase|@firebase)[\\/]/.test(id)) {
               return 'vendor-backend';
-            }
-            if (id.includes('react') || id.includes('react-dom') || id.includes('react-router')) {
-              return 'vendor-react';
             }
             return 'vendor-libs';
           }

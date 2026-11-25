@@ -11,6 +11,30 @@ type ComponentFactory = () => Promise<{ default: ComponentType<any> }>;
 const routeLoaderRegistry = new Map<string, ComponentFactory>();
 const loadedModuleCache = new Map<string, Promise<{ default: ComponentType<any> }>>();
 
+const MODULE_LOAD_ERROR_PATTERN =
+  /Failed to fetch dynamically imported module|Loading chunk|Importing a module script failed|error loading dynamically imported module|Unable to preload CSS|NetworkError|Load failed|Unexpected token '<'|not a valid JavaScript MIME type|does not provide an export named|Lazy element type must resolve|Cannot read properties of null|Cannot destructure property 'default'/i;
+
+/**
+ * Checks whether an error was caused by a failed/stale dynamic chunk or lazy module import.
+ */
+export function isModuleLoadError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const err = error as { name?: string; message?: string };
+  if (err.name === 'ChunkLoadError') return true;
+  return Boolean(err.message && MODULE_LOAD_ERROR_PATTERN.test(err.message));
+}
+
+/**
+ * Clears cached lazy module promises so a retry performs a clean import attempt.
+ */
+export function clearLazyModuleCache(routeKey?: string): void {
+  if (routeKey) {
+    loadedModuleCache.delete(routeKey);
+  } else {
+    loadedModuleCache.clear();
+  }
+}
+
 /**
  * Register a route loader factory and return a resilient lazy-loaded component
  * with progressive auto-retry on network/chunk errors.
@@ -38,31 +62,25 @@ export function lazyWithRetry<T extends ComponentType<any>>(
         attempts++;
         factory()
           .then((module) => {
+            if (!module || typeof module !== 'object' || !module.default) {
+              const invalidErr = new Error(
+                `ChunkLoadError: Lazy module "${routeKey || 'unknown'}" resolved without a valid default export.`
+              );
+              invalidErr.name = 'ChunkLoadError';
+              throw invalidErr;
+            }
             resolve(module);
           })
           .catch((error: any) => {
-            const isChunkOrNetworkError =
-              error?.name === 'ChunkLoadError' ||
-              (error?.message && (
-                /Failed to fetch dynamically imported module/i.test(error.message) ||
-                /Loading chunk/i.test(error.message) ||
-                /Importing a module script failed/i.test(error.message) ||
-                /NetworkError/i.test(error.message) ||
-                /Load failed/i.test(error.message)
-              ));
-
             if (attempts <= maxRetries) {
               const backoff = delayMs * Math.pow(1.5, attempts - 1);
               console.warn(
                 `[lazyWithRetry] Retrying module "${routeKey || 'unknown'}" (${attempts}/${maxRetries}) in ${Math.round(backoff)}ms...`
               );
               setTimeout(runAttempt, backoff);
-            } else if (isChunkOrNetworkError) {
-              if (routeKey) loadedModuleCache.delete(routeKey);
-              // Cleanly reject so React ErrorBoundary can handle it without full-page browser refresh
-              reject(error);
             } else {
               if (routeKey) loadedModuleCache.delete(routeKey);
+              // Cleanly reject so React ErrorBoundary can handle recovery
               reject(error);
             }
           });
@@ -80,7 +98,8 @@ export function lazyWithRetry<T extends ComponentType<any>>(
 }
 
 /**
- * Preload a route component on hover, focus, or idle
+ * Preload a route component on hover, focus, or idle.
+ * Never resolves cached promises to null on transient failures.
  */
 export function preloadRoute(routePathOrKey: string): void {
   if (!routePathOrKey) return;
@@ -88,12 +107,21 @@ export function preloadRoute(routePathOrKey: string): void {
 
   const factory = routeLoaderRegistry.get(clean) || routeLoaderRegistry.get(routePathOrKey);
   if (factory && !loadedModuleCache.has(clean)) {
-    // Gracefully handle background prefetch without producing unhandled promise rejections
-    const promise = factory().catch((err) => {
-      loadedModuleCache.delete(clean);
-      console.warn(`[Preload] Module preload deferred for "${routePathOrKey}":`, err);
-      return null as any;
+    const promise = factory().then((module) => {
+      if (!module || typeof module !== 'object' || !module.default) {
+        throw new Error(`Invalid module preload for "${routePathOrKey}"`);
+      }
+      return module;
     });
+
+    // Prevent unhandled promise rejections in background while clearing stale cache on failure
+    promise.catch((err) => {
+      if (loadedModuleCache.get(clean) === promise) {
+        loadedModuleCache.delete(clean);
+      }
+      console.warn(`[Preload] Module preload deferred for "${routePathOrKey}":`, err);
+    });
+
     loadedModuleCache.set(clean, promise);
   }
 }

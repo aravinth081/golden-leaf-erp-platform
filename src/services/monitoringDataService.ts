@@ -118,12 +118,13 @@ export function getBranchCollectionGroups(branchId?: string | null): BranchColle
     })();
   }
 
-  if (!branchId || branchId === 'all') return list;
+  if (!branchId || branchId === 'all') return list.filter(Boolean);
   return list.filter(
     (g) =>
-      g.branchId.toLowerCase() === branchId.toLowerCase() ||
-      g.branchName?.toLowerCase() === branchId.toLowerCase() ||
-      (branchId === 'BR-01' && (g.branchId === 'b1' || g.branchName?.toLowerCase().includes('anna nagar')))
+      Boolean(g) &&
+      (g.branchId?.toLowerCase() === branchId.toLowerCase() ||
+        g.branchName?.toLowerCase() === branchId.toLowerCase() ||
+        (branchId === 'BR-01' && (g.branchId === 'b1' || g.branchName?.toLowerCase().includes('anna nagar'))))
   );
 }
 
@@ -409,7 +410,7 @@ export function getMonitoredLoans(branchId?: string | null): MonitoredLoan[] {
     if (stored) {
       const parsed = JSON.parse(stored);
       if (Array.isArray(parsed)) {
-        list = parsed;
+        list = parsed.filter(Boolean);
       }
     }
   } catch (e) {
@@ -418,7 +419,7 @@ export function getMonitoredLoans(branchId?: string | null): MonitoredLoan[] {
 
   if (!branchId || branchId === 'all') return list;
 
-  return list.filter((l) => l.branchId === branchId || l.branchName === branchId);
+  return list.filter((l) => l && (l.branchId === branchId || l.branchName === branchId));
 }
 
 export function saveMonitoredLoans(loans: MonitoredLoan[]): void {
@@ -524,7 +525,7 @@ export function getMonitoredCollections(
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) {
-          list = parsed;
+          list = parsed.filter(Boolean);
         }
       }
     }
@@ -536,9 +537,11 @@ export function getMonitoredCollections(
   if (branchId && branchId !== 'all') {
     list = list.filter(
       (c) =>
-        c.branchId.toLowerCase() === branchId.toLowerCase() ||
-        c.branchName?.toLowerCase() === branchId.toLowerCase() ||
-        (branchId.toUpperCase() === 'BR-01' && (c.branchId.toLowerCase() === 'b1' || c.branchName?.toLowerCase().includes('anna nagar')))
+        Boolean(c) &&
+        (c.branchId?.toLowerCase() === branchId.toLowerCase() ||
+          c.branchName?.toLowerCase() === branchId.toLowerCase() ||
+          (branchId.toUpperCase() === 'BR-01' &&
+            (c.branchId?.toLowerCase() === 'b1' || c.branchName?.toLowerCase().includes('anna nagar'))))
     );
   }
 

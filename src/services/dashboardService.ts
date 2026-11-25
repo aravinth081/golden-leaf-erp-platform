@@ -171,8 +171,8 @@ function aggregateBranchData(): {
   rejectedLoans: number;
   approvedLoans: number;
 } {
-  const branches = getStoredBranches();
-  const active = branches.filter((b) => b.status === 'Active');
+  const branches = getStoredBranches().filter(Boolean);
+  const active = branches.filter((b) => b && b.status === 'Active');
 
   if (active.length === 0) {
     return {
@@ -225,21 +225,21 @@ function aggregateBranchData(): {
 
 export function getInitialDashboardStats(): DashboardStats {
   const agg = aggregateBranchData();
-  const allLoans = getMonitoredLoans(null);
+  const allLoans = getMonitoredLoans(null).filter(Boolean);
 
   const totalLoans = allLoans.length > 0 ? allLoans.length : (agg.totalLoans || 0);
   const activeLoans = allLoans.length > 0
-    ? allLoans.filter((l) => l.status === 'Active' || l.status === 'Disbursed').length
+    ? allLoans.filter((l) => l && (l.status === 'Active' || l.status === 'Disbursed')).length
     : (agg.totalActiveLoans || 0);
   const closedLoans = allLoans.length > 0
-    ? allLoans.filter((l) => l.status === 'Closed').length
+    ? allLoans.filter((l) => l && l.status === 'Closed').length
     : Math.max(0, totalLoans - activeLoans);
   const overdueLoans = 0;
   const totalDisbursed = allLoans.length > 0
-    ? allLoans.reduce((s, l) => s + (l.principalAmount || 0), 0)
+    ? allLoans.reduce((s, l) => s + (Number(l?.principalAmount) || 0), 0)
     : (agg.totalCollectionAmount || 0);
   const totalOutstanding = allLoans.length > 0
-    ? allLoans.reduce((s, l) => s + (l.outstandingAmount || 0), 0)
+    ? allLoans.reduce((s, l) => s + (Number(l?.outstandingAmount) || 0), 0)
     : 0;
   const totalCollected = Math.max(0, totalDisbursed - totalOutstanding);
   const portfolioHealthPercent =
@@ -281,10 +281,10 @@ export function getInitialTodayCollectionStats(): TodayCollectionStats {
   const cashAmount = Math.round(collectedAmount * 0.7);
   const upiAmount = Math.max(0, collectedAmount - cashAmount);
 
-  const allCollections = getMonitoredCollections(null, 'all');
+  const allCollections = getMonitoredCollections(null, 'all').filter(Boolean);
   const advanceAmount = allCollections
-    .filter((c: any) => c.status === 'Advance' || c.type === 'Advance' || c.isAdvance)
-    .reduce((s: number, c: any) => s + (c.collectedAmount || 0), 0);
+    .filter((c: any) => c && (c.status === 'Advance' || c.type === 'Advance' || c.isAdvance))
+    .reduce((s: number, c: any) => s + (Number(c?.collectedAmount) || 0), 0);
   const tomorrowAmount = 0;
   const tomorrowDuesCount = 0;
 
@@ -422,15 +422,20 @@ export async function getLoanPortfolioBreakdown(): Promise<LoanPortfolioItem[]> 
 // ─── 5. Branch Performance Benchmarks ───
 
 export function getBranchPerformanceData(): BranchPerformanceRow[] {
-  const branches = getStoredBranches();
-  const active = branches.filter((b) => b.status === 'Active');
+  const branches = getStoredBranches().filter(Boolean);
+  const active = branches.filter((b) => b && b.status === 'Active');
 
   let staffProfiles: any[] = [];
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
-      const stored = localStorage.getItem('glf_staff_profiles_master');
+      const stored =
+        localStorage.getItem('glf_staff_profiles_master_v3') ||
+        localStorage.getItem('glf_staff_profiles_master');
       if (stored) {
-        staffProfiles = JSON.parse(stored).filter((p: any) => !p.deletedAt);
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          staffProfiles = parsed.filter((p: any) => p && !p.deletedAt);
+        }
       }
     }
   } catch (e) {
@@ -439,25 +444,26 @@ export function getBranchPerformanceData(): BranchPerformanceRow[] {
 
   return active
     .map((b) => {
-      let cleanName = b.name.replace(/^(Main\s+)?Branch\s*[-–—]?\s*/i, '').trim() || b.name;
+      const rawBranchName = b.name || (b as any).branchName || b.code || 'Branch';
+      let cleanName = rawBranchName.replace(/^(Main\s+)?Branch\s*[-–—]?\s*/i, '').trim() || rawBranchName;
       if (!cleanName.toLowerCase().includes('branch')) {
         cleanName = `${cleanName} Branch`;
       }
 
-      const branchLoans = getMonitoredLoans(b.id);
+      const branchLoans = getMonitoredLoans(b.id).filter(Boolean);
       const activeLoansCount = branchLoans.length > 0
-        ? branchLoans.filter((l) => l.status === 'Active' || l.status === 'Disbursed').length
-        : (b.activeLoans || 0);
+        ? branchLoans.filter((l) => l && (l.status === 'Active' || l.status === 'Disbursed')).length
+        : (Number(b.activeLoans) || 0);
       const outstandingNum = branchLoans.length > 0
-        ? branchLoans.reduce((s, l) => s + (l.outstandingAmount || 0), 0)
+        ? branchLoans.reduce((s, l) => s + (Number(l?.outstandingAmount) || 0), 0)
         : 0;
       const disbursedNum = branchLoans.length > 0
-        ? branchLoans.reduce((s, l) => s + (l.principalAmount || 0), 0)
-        : (b.totalCollectionAmount || 0);
+        ? branchLoans.reduce((s, l) => s + (Number(l?.principalAmount) || 0), 0)
+        : (Number(b.totalCollectionAmount) || 0);
 
-      const branchCollections = getMonitoredCollections(b.id, 'today');
-      const todayInflowNum = branchCollections.reduce((s, c) => s + (c.collectedAmount || 0), 0) || (b.todayCollection || 0);
-      const pendingInflowNum = b.pendingCollection || 0;
+      const branchCollections = getMonitoredCollections(b.id, 'today').filter(Boolean);
+      const todayInflowNum = branchCollections.reduce((s, c) => s + (Number(c?.collectedAmount) || 0), 0) || (Number(b.todayCollection) || 0);
+      const pendingInflowNum = Number(b.pendingCollection) || 0;
       const totalTargetToday = todayInflowNum + pendingInflowNum;
       const collectionRate = totalTargetToday > 0
         ? Math.round((todayInflowNum / totalTargetToday) * 1000) / 10
@@ -466,15 +472,15 @@ export function getBranchPerformanceData(): BranchPerformanceRow[] {
       const calculatedStatus: BranchPerformanceRow['status'] =
         collectionRate >= 95 ? 'Excellent' : collectionRate >= 80 ? 'Good' : 'Operational';
 
-      const branchStaff = staffProfiles.filter((p: any) => p.branchId === b.id || p.branchName === b.name || p.branchId === b.code);
-      const bm = branchStaff.find((p: any) => p.role === 'branch_manager');
-      const managerName = bm ? bm.fullName : (b.manager && b.manager !== 'Unassigned' ? b.manager : 'Unassigned');
+      const branchStaff = staffProfiles.filter((p: any) => p && (p.branchId === b.id || p.branchName === rawBranchName || p.branchId === b.code));
+      const bm = branchStaff.find((p: any) => p.role === 'branch_manager' || p.role === 'BRANCH_MANAGER');
+      const managerName = bm ? (bm.fullName || 'Unassigned') : (b.manager && b.manager !== 'Unassigned' ? b.manager : 'Unassigned');
 
       return {
-        id: b.id,
-        code: b.code,
+        id: b.id || 'BR-01',
+        code: b.code || 'GL-BR',
         name: cleanName,
-        city: b.city,
+        city: b.city || '',
         manager: managerName,
         collectionRate,
         todayCollection: formatINR(todayInflowNum),
@@ -483,12 +489,12 @@ export function getBranchPerformanceData(): BranchPerformanceRow[] {
         disbursedNum,
         outstanding: formatINR(outstandingNum),
         outstandingNum,
-        monthlyCollection: formatINR(b.monthlyCollection || 0),
+        monthlyCollection: formatINR(Number(b.monthlyCollection) || 0),
         npa: '0.0%',
         status: calculatedStatus,
-        customersCount: b.totalCustomers || 0,
+        customersCount: Number(b.totalCustomers) || 0,
         loansCount: activeLoansCount,
-        employeesCount: branchStaff.length > 0 ? branchStaff.length : (b.totalEmployees || 0),
+        employeesCount: branchStaff.length > 0 ? branchStaff.length : (Number(b.totalEmployees) || 0),
       };
     })
     .sort((a, b) => b.todayCollectionNum - a.todayCollectionNum);
