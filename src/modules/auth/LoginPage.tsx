@@ -461,12 +461,12 @@ export const LoginPage: React.FC = () => {
             className="w-full flex flex-col items-center"
           >
             {/* Header section */}
-            <div className="text-center mb-4 sm:mb-6 w-full flex flex-col items-center">
-              <h2 className="text-[25px] sm:text-[clamp(22px,2.2vw,28px)] font-black text-[#0B1F3A] tracking-[0.08em] uppercase leading-tight font-serif drop-shadow-2xs">
+            <div className="text-center mb-2.5 sm:mb-6 w-full flex flex-col items-center">
+              <h2 className="text-[23px] sm:text-[clamp(22px,2.2vw,28px)] font-black text-[#0B1F3A] tracking-[0.08em] uppercase leading-tight font-serif drop-shadow-2xs">
                 SIGN IN
               </h2>
               {/* Sleek Golden Accent Motif */}
-              <div className="flex items-center justify-center gap-2 mt-2 w-32" aria-hidden="true">
+              <div className="flex items-center justify-center gap-2 mt-1.5 w-32" aria-hidden="true">
                 <div className="h-[1.5px] flex-1 bg-gradient-to-r from-transparent to-[#D4AF37]" />
                 <div className="w-1.5 h-1.5 rotate-45 bg-[#D4AF37]" />
                 <div className="h-[1.5px] flex-1 bg-gradient-to-l from-transparent to-[#D4AF37]" />
@@ -474,9 +474,9 @@ export const LoginPage: React.FC = () => {
             </div>
 
             {/* Staff Credential Login Form */}
-            <form onSubmit={handleStaffCredentialLogin} className="w-full space-y-4 sm:space-y-4.5">
+            <form onSubmit={handleStaffCredentialLogin} className="w-full space-y-3 sm:space-y-4.5">
               {staffError && (
-                <div className="p-3.5 sm:p-3 rounded-2xl sm:rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs sm:text-xs font-semibold flex items-start gap-2.5 shadow-xs">
+                <div className="p-3 sm:p-3 rounded-2xl sm:rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs sm:text-xs font-semibold flex items-start gap-2.5 shadow-xs">
                   <AlertCircle size={17} className="shrink-0 mt-0.5 text-rose-600" />
                   <span>{staffError}</span>
                 </div>
@@ -485,7 +485,7 @@ export const LoginPage: React.FC = () => {
               <div>
                 <label
                   htmlFor="staff-username"
-                  className="block text-[12px] sm:text-xs font-bold text-[#0B1F3A] tracking-[0.05em] uppercase mb-1.5"
+                  className="block text-[11.5px] sm:text-xs font-bold text-[#0B1F3A] tracking-[0.05em] uppercase mb-1"
                 >
                   USERNAME
                 </label>
@@ -507,7 +507,7 @@ export const LoginPage: React.FC = () => {
                     autoCapitalize="none"
                     autoCorrect="off"
                     spellCheck={false}
-                    className="w-full h-[52px] sm:h-auto pl-12 pr-4 py-3 sm:py-3 rounded-2xl sm:rounded-xl bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-[#C59B27] focus:ring-3 focus:ring-[#D4AF37]/15 text-[15px] sm:text-sm font-semibold text-[#0B1F3A] placeholder:text-slate-400 placeholder:font-normal focus:outline-none transition-all shadow-xs"
+                    className="w-full h-[50px] sm:h-auto pl-12 pr-4 py-3 sm:py-3 rounded-2xl sm:rounded-xl bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-[#C59B27] focus:ring-3 focus:ring-[#D4AF37]/15 text-[15px] sm:text-sm font-semibold text-[#0B1F3A] placeholder:text-slate-400 placeholder:font-normal focus:outline-none transition-all shadow-xs"
                   />
                 </div>
               </div>
@@ -515,7 +515,7 @@ export const LoginPage: React.FC = () => {
               <div>
                 <label
                   htmlFor="staff-password"
-                  className="block text-[12px] sm:text-xs font-bold text-[#0B1F3A] tracking-[0.05em] uppercase mb-1.5"
+                  className="block text-[11.5px] sm:text-xs font-bold text-[#0B1F3A] tracking-[0.05em] uppercase mb-1"
                 >
                   PASSWORD
                 </label>
@@ -537,7 +537,7 @@ export const LoginPage: React.FC = () => {
                     autoCapitalize="none"
                     autoCorrect="off"
                     spellCheck={false}
-                    className="w-full h-[52px] sm:h-auto pl-12 pr-12 py-3 sm:py-3 rounded-2xl sm:rounded-xl bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-[#C59B27] focus:ring-3 focus:ring-[#D4AF37]/15 text-[15px] sm:text-sm font-semibold text-[#0B1F3A] placeholder:text-slate-400 placeholder:font-normal focus:outline-none transition-all shadow-xs"
+                    className="w-full h-[50px] sm:h-auto pl-12 pr-12 py-3 sm:py-3 rounded-2xl sm:rounded-xl bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-[#C59B27] focus:ring-3 focus:ring-[#D4AF37]/15 text-[15px] sm:text-sm font-semibold text-[#0B1F3A] placeholder:text-slate-400 placeholder:font-normal focus:outline-none transition-all shadow-xs"
                   />
                   <button
                     type="button"
@@ -553,7 +553,7 @@ export const LoginPage: React.FC = () => {
               <button
                 type="submit"
                 disabled={isAuthenticatingStaff || lockoutSeconds > 0}
-                className="w-full h-[52px] sm:h-auto py-3.5 sm:py-3.5 px-4 rounded-2xl sm:rounded-xl bg-[#0B1F3A] hover:bg-[#122A4E] active:scale-[0.99] text-white text-[15px] sm:text-sm font-bold tracking-[0.08em] uppercase transition-all shadow-[0_8px_20px_rgba(11,31,58,0.25)] hover:shadow-[0_8px_24px_rgba(11,31,58,0.35)] flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-50 mt-4 sm:mt-2"
+                className="w-full h-[50px] sm:h-auto py-3.5 sm:py-3.5 px-4 rounded-2xl sm:rounded-xl bg-[#0B1F3A] hover:bg-[#122A4E] active:scale-[0.99] text-white text-[15px] sm:text-sm font-bold tracking-[0.08em] uppercase transition-all shadow-[0_8px_20px_rgba(11,31,58,0.25)] hover:shadow-[0_8px_24px_rgba(11,31,58,0.35)] flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-50 mt-3.5 sm:mt-2"
               >
                 {isAuthenticatingStaff ? (
                   <span className="w-5 h-5 border-2 border-white/30 border-t-[#D4AF37] rounded-full animate-spin" />

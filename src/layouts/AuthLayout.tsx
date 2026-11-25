@@ -58,14 +58,14 @@ export const AuthLayout: React.FC = () => {
     <main
       id="main-content"
       role="main"
-      className="min-h-[100dvh] w-full flex items-center justify-center max-sm:bg-white bg-gradient-to-br from-[#ECE6DC] via-[#F3EDE3] to-[#E7E0D4] font-body selection:bg-[#D4A017]/20 selection:text-[#0A1628] p-0 sm:p-4 md:p-6 overflow-y-auto overflow-x-hidden"
+      className="fixed inset-0 sm:relative sm:inset-auto w-full h-[100dvh] max-h-[100dvh] sm:min-h-[100dvh] flex items-center justify-center bg-white sm:bg-gradient-to-br sm:from-[#ECE6DC] sm:via-[#F3EDE3] sm:to-[#E7E0D4] font-body selection:bg-[#D4A017]/20 selection:text-[#0A1628] p-0 sm:p-4 md:p-6 overflow-hidden sm:overflow-y-auto overscroll-none select-none sm:select-auto"
     >
-      {/* Card Container — Locked to 16:9 on laptops/desktops, clean responsive scrollable layout on mobile */}
+      {/* Card Container — Locked to 16:9 on laptops/desktops, clean responsive layout on mobile */}
       <motion.div
         initial={{ opacity: 0, scale: 0.98 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.15, ease: "easeOut" }}
-        className="login-card-ratio w-full min-h-[100dvh] sm:min-h-0 sm:w-[min(94vw,1160px,calc((100dvh-36px)*1.778))] sm:aspect-[16/9] sm:max-h-[calc(100dvh-24px)] bg-white sm:rounded-[32px] lg:rounded-[36px] sm:shadow-[0_25px_65px_-15px_rgba(15,23,42,0.14),0_0_0_1px_rgba(232,223,200,0.85)] sm:border sm:border-[#E8DFC8] flex flex-col sm:flex-row relative sm:my-auto max-sm:rounded-none max-sm:border-none max-sm:shadow-none max-sm:m-0"
+        className="login-card-ratio w-full h-full sm:h-auto sm:min-h-0 sm:w-[min(94vw,1160px,calc((100dvh-36px)*1.778))] sm:aspect-[16/9] sm:max-h-[calc(100dvh-24px)] bg-white sm:rounded-[32px] lg:rounded-[36px] sm:shadow-[0_25px_65px_-15px_rgba(15,23,42,0.14),0_0_0_1px_rgba(232,223,200,0.85)] sm:border sm:border-[#E8DFC8] flex flex-col sm:flex-row relative sm:my-auto max-sm:rounded-none max-sm:border-none max-sm:shadow-none max-sm:m-0 overflow-hidden"
       >
         {/* Left Panel (Strictly 50% width on laptops/computers) */}
         <div className="hidden sm:flex sm:w-1/2 h-full bg-[#FAF8F5] relative overflow-hidden flex-col items-center justify-center p-6 lg:p-8 text-[#0B1F3A] border-r border-[#E8DFC8] z-10 select-none">
@@ -173,8 +173,8 @@ export const AuthLayout: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Panel - Form Area (Strictly 50% width on laptops/computers, clean scrollable layout on mobile) */}
-        <div className="w-full sm:w-1/2 min-h-full sm:h-full flex flex-col justify-center items-center bg-white px-3 sm:px-8 lg:px-12 pt-3 sm:pt-6 pb-6 sm:pb-6 relative z-10 overflow-y-auto custom-scrollbar">
+        {/* Right Panel - Form Area (Strictly 50% width on laptops/computers, clean locked layout on mobile) */}
+        <div className="w-full sm:w-1/2 h-full max-sm:h-[100dvh] flex flex-col justify-center items-center bg-white px-4 sm:px-8 lg:px-12 py-2 sm:py-6 relative z-10 overflow-hidden sm:overflow-y-auto custom-scrollbar">
           {/* Sweeping Concentric Gold Ribbons — Top Left Corner (Mobile View) */}
           <div className="sm:hidden absolute top-0 left-0 w-[42%] aspect-square pointer-events-none z-0 opacity-90">
             <svg viewBox="0 0 200 200" className="w-full h-full" fill="none">
@@ -288,21 +288,21 @@ export const AuthLayout: React.FC = () => {
           </div>
 
           {/* Mobile-only single brand header */}
-          <div className="sm:hidden flex flex-col items-center pt-2 pb-1 mb-2 text-center relative z-10 w-full shrink-0">
-            <div className="relative w-[84px] h-[84px] mb-2 flex items-center justify-center">
+          <div className="sm:hidden flex flex-col items-center pt-1 pb-1 mb-1 text-center relative z-10 w-full shrink-0">
+            <div className="relative w-[76px] h-[76px] mb-2 flex items-center justify-center">
               {/* Soft ambient golden glow behind the emblem */}
               <div className="absolute inset-0 bg-[#D4AF37]/30 rounded-[22px] blur-md -z-10" />
               <AuthBrandLogo sizeClass="w-full h-full drop-shadow-[0_8px_20px_rgba(212,175,55,0.35)]" isMobile />
             </div>
-            <h1 className="font-serif font-black text-[24px] text-[#0B1F3A] uppercase tracking-[0.08em] leading-tight drop-shadow-2xs">
+            <h1 className="font-serif font-black text-[23px] text-[#0B1F3A] uppercase tracking-[0.08em] leading-tight drop-shadow-2xs">
               GOLDEN LEAF
             </h1>
-            <p className="text-[10.5px] font-extrabold text-[#B8860B] uppercase tracking-[0.24em] mt-1">
+            <p className="text-[10px] font-extrabold text-[#B8860B] uppercase tracking-[0.24em] mt-0.5">
               FINANCE & LOAN MANAGEMENT
             </p>
           </div>
 
-          <div className="w-full max-w-[440px] sm:max-w-[440px] mx-auto relative z-10 my-0 sm:my-auto shrink-0 px-1 sm:px-0">
+          <div className="w-full max-w-[390px] sm:max-w-[440px] mx-auto relative z-10 my-0 sm:my-auto shrink-0 px-1 sm:px-0">
             <Outlet />
           </div>
         </div>
