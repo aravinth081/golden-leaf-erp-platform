@@ -4,7 +4,7 @@
 // ──────────────────────────────────────────────────
 
 import React, { Suspense, useState, useEffect } from 'react';
-import { createBrowserRouter, Navigate, useRouteError } from 'react-router-dom';
+import { createBrowserRouter, Navigate, useRouteError, useNavigate, Link } from 'react-router-dom';
 import { AlertTriangle, RefreshCcw, Home } from 'lucide-react';
 import { AppLayout } from '../layouts/AppLayout';
 import { AuthLayout } from '../layouts/AuthLayout';
@@ -111,7 +111,7 @@ const DashboardRouter: React.FC = () => {
 
 const RouteErrorBoundary: React.FC = () => {
   const error = useRouteError() as any;
-  const [isAutoRecovering, setIsAutoRecovering] = useState(false);
+  const navigate = useNavigate();
 
   const isChunkError =
     error?.name === 'ChunkLoadError' ||
@@ -123,61 +123,37 @@ const RouteErrorBoundary: React.FC = () => {
       /Load failed/i.test(error.message)
     ));
 
-  useEffect(() => {
-    // If it's a chunk or dynamic module error from fast navigation, recover seamlessly
-    if (isChunkError) {
-      const reloadKey = 'glf_auto_recovery_reload';
-      const last = sessionStorage.getItem(reloadKey);
-      const now = Date.now();
-      if (!last || now - Number(last) > 8000) {
-        sessionStorage.setItem(reloadKey, String(now));
-        setIsAutoRecovering(true);
-        const timer = setTimeout(() => {
-          window.location.reload();
-        }, 500);
-        return () => clearTimeout(timer);
-      }
-    }
-  }, [isChunkError]);
-
-  const handleRefresh = () => {
-    window.location.reload();
+  const handleRetry = () => {
+    // Retry route rendering within client router without full page browser teardown
+    navigate(0);
   };
 
   const handleGoDashboard = () => {
-    window.location.href = '/dashboard';
+    navigate('/dashboard');
   };
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[50vh] py-16 px-6 font-sans">
       <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-4 text-[#D4AF37]">
-        {isAutoRecovering ? (
-          <RefreshCcw size={28} className="animate-spin text-[#D4AF37]" />
-        ) : (
-          <AlertTriangle size={30} />
-        )}
+        <AlertTriangle size={30} />
       </div>
       <h3 className="text-xl font-bold text-[#0F1F38] tracking-tight mb-2">
-        {isAutoRecovering
-          ? 'Optimizing Connection...'
-          : isChunkError
-          ? 'Application Updated'
+        {isChunkError
+          ? 'Page Resource Notice'
           : 'Navigation Interrupted'}
       </h3>
       <p className="text-xs sm:text-sm text-[#64748B] text-center max-w-md mb-6 leading-relaxed">
-        {isAutoRecovering
-          ? 'Syncing latest page modules for seamless navigation...'
-          : isChunkError
-          ? 'A newer optimized version of this module is available. Reloading will restore full navigation.'
+        {isChunkError
+          ? 'A newer optimized module is available. Click below to load the updated view smoothly.'
           : error?.message || 'A temporary transition glitch occurred. Click below to proceed smoothly.'}
       </p>
       <div className="flex items-center gap-3">
         <button
-          onClick={handleRefresh}
+          onClick={handleRetry}
           className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#0B1F3A] hover:bg-[#162D4A] text-white font-bold text-xs uppercase tracking-wider shadow-md transition-all cursor-pointer active:scale-[0.98]"
         >
-          <RefreshCcw size={14} className={isAutoRecovering ? 'animate-spin' : ''} />
-          Reload Page
+          <RefreshCcw size={14} />
+          Try Again
         </button>
         <button
           onClick={handleGoDashboard}
@@ -811,12 +787,12 @@ export const router = createBrowserRouter([
             <p className="mt-2 text-sm text-gray-500 max-w-sm text-center">
               Your role does not possess authorization to access this panel. Please navigate to your permitted dashboard.
             </p>
-            <a
-              href="/dashboard"
+            <Link
+              to="/dashboard"
               className="mt-6 px-6 py-2.5 rounded-[10px] bg-[#D4AF37] hover:bg-[#C9A227] text-white font-semibold text-xs transition-colors shadow-sm"
             >
               Return to Authorized Dashboard
-            </a>
+            </Link>
           </div>
         ),
       },

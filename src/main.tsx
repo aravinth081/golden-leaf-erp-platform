@@ -4,10 +4,11 @@ import './index.css';
 import './lib/i18n';
 import App from './App';
 
-// Auto-reload on dynamic import chunk error (handles Vite content hash updates across builds)
+// Graceful dynamic import handling without disruptive full-page reloads
 window.addEventListener('vite:preloadError', (event) => {
-  console.warn('Vite preload error detected, reloading page to fetch latest version...', event);
-  window.location.reload();
+  // Prevent Vite from escalating chunk preloading hiccups into full page crashes/reloads
+  event.preventDefault();
+  console.warn('[Vite] Dynamic import preload issue detected, handling gracefully without page reload:', event);
 });
 
 window.addEventListener('unhandledrejection', (event) => {
@@ -17,12 +18,9 @@ window.addEventListener('unhandledrejection', (event) => {
      /Failed to fetch dynamically imported module/i.test(event.reason.message || '') ||
      /Importing a module script failed/i.test(event.reason.message || ''))
   ) {
-    const key = 'chunk_reload_count';
-    const lastReload = sessionStorage.getItem(key);
-    if (!lastReload || Date.now() - Number(lastReload) > 10000) {
-      sessionStorage.setItem(key, String(Date.now()));
-      window.location.reload();
-    }
+    // Suppress unhandled promise rejection crash on background route prefetch
+    event.preventDefault();
+    console.warn('[App] Dynamic chunk loading rejected in background, suppressed automatic page refresh:', event.reason);
   }
 });
 

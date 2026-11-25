@@ -470,12 +470,9 @@ export const AdminDashboard: React.FC = () => {
     setPinnedTrend(null);
   };
 
-  // Full page reload matching F5 browser refresh
+  // In-memory data refresh without full page reload
   const handleFullRefresh = () => {
-    setIsRefreshing(true);
-    setTimeout(() => {
-      window.location.reload();
-    }, 120);
+    loadDashboardData(true);
   };
 
   useEffect(() => {

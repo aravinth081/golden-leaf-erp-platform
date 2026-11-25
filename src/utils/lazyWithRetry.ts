@@ -59,16 +59,7 @@ export function lazyWithRetry<T extends ComponentType<any>>(
               setTimeout(runAttempt, backoff);
             } else if (isChunkOrNetworkError) {
               if (routeKey) loadedModuleCache.delete(routeKey);
-              // If repeated retries fail due to server deployment hash changes,
-              // safely trigger a clean reload to sync the browser cache
-              const reloadKey = 'glf_chunk_reload_sync';
-              const last = sessionStorage.getItem(reloadKey);
-              const now = Date.now();
-              if (!last || now - Number(last) > 10000) {
-                sessionStorage.setItem(reloadKey, String(now));
-                window.location.reload();
-                return;
-              }
+              // Cleanly reject so React ErrorBoundary can handle it without full-page browser refresh
               reject(error);
             } else {
               if (routeKey) loadedModuleCache.delete(routeKey);
@@ -97,10 +88,11 @@ export function preloadRoute(routePathOrKey: string): void {
 
   const factory = routeLoaderRegistry.get(clean) || routeLoaderRegistry.get(routePathOrKey);
   if (factory && !loadedModuleCache.has(clean)) {
+    // Gracefully handle background prefetch without producing unhandled promise rejections
     const promise = factory().catch((err) => {
       loadedModuleCache.delete(clean);
-      console.warn(`[Preload] Module preload failed for "${routePathOrKey}":`, err);
-      return Promise.reject(err);
+      console.warn(`[Preload] Module preload deferred for "${routePathOrKey}":`, err);
+      return null as any;
     });
     loadedModuleCache.set(clean, promise);
   }

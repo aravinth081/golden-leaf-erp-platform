@@ -497,8 +497,8 @@ export const CreditDashboard: React.FC = () => {
               <span>Credit Manager: <strong className="text-white capitalize">{currentUser?.displayName || 'Credit Manager'}</strong></span>
             </div>
             <button
-              onClick={() => window.location.reload()}
-              title="Refresh Page (F5)"
+              onClick={() => loadData(false)}
+              title="Refresh Data"
               className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center border border-white/15 transition-all cursor-pointer shadow-xs active:scale-95 hover:rotate-180 duration-300"
             >
               <RefreshCw size={15} />

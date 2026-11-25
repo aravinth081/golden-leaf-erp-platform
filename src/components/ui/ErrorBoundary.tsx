@@ -30,26 +30,6 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
     console.error('ErrorBoundary caught:', error, errorInfo);
-
-    // If chunk or dynamic import failure, seamlessly auto-recover once
-    const isChunk =
-      error?.name === 'ChunkLoadError' ||
-      /Failed to fetch dynamically imported module|Loading chunk|Importing a module script failed/i.test(
-        error?.message || ''
-      );
-
-    if (isChunk && typeof window !== 'undefined') {
-      const reloadKey = 'glf_boundary_chunk_reload';
-      const last = sessionStorage.getItem(reloadKey);
-      const now = Date.now();
-      if (!last || now - Number(last) > 10000) {
-        sessionStorage.setItem(reloadKey, String(now));
-        this.setState({ isAutoReloading: true });
-        this.reloadTimeoutId = setTimeout(() => {
-          window.location.reload();
-        }, 500);
-      }
-    }
   }
 
   componentWillUnmount(): void {
@@ -63,8 +43,10 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   handleGoDashboard = (): void => {
+    this.setState({ hasError: false, error: null, isAutoReloading: false });
     if (typeof window !== 'undefined') {
-      window.location.href = '/dashboard';
+      window.history.pushState(null, '', '/dashboard');
+      window.dispatchEvent(new PopStateEvent('popstate'));
     }
   };
 
@@ -81,34 +63,26 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <div className="flex flex-col items-center justify-center py-20 px-6 font-sans">
           <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-4 text-[#D4AF37]">
-            {this.state.isAutoReloading ? (
-              <RefreshCcw size={28} className="animate-spin text-[#D4AF37]" />
-            ) : (
-              <AlertTriangle size={30} className="text-[#D4AF37]" />
-            )}
+            <AlertTriangle size={30} className="text-[#D4AF37]" />
           </div>
           <h3 className="text-lg sm:text-xl font-bold text-[#0B1F3A] tracking-tight text-center">
-            {this.state.isAutoReloading
-              ? 'Restoring Session...'
-              : isChunk
-              ? 'Module Update Available'
+            {isChunk
+              ? 'Module Resource Notice'
               : 'Something went wrong'}
           </h3>
           <p className="mt-1.5 text-xs sm:text-sm text-slate-500 font-normal text-center max-w-md leading-relaxed">
-            {this.state.isAutoReloading
-              ? 'Refreshing with latest secure modules...'
-              : isChunk
+            {isChunk
               ? 'A temporary network lag interrupted loading. Click below to continue seamlessly.'
               : 'An unexpected transition error occurred. Please click below to resume.'}
           </p>
 
           <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
             <button
-              onClick={() => window.location.reload()}
+              onClick={this.handleRetry}
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#0B1F3A] hover:bg-[#162D4A] text-white font-bold text-xs uppercase tracking-wider shadow-md transition-all cursor-pointer active:scale-[0.98]"
             >
-              <RefreshCcw size={14} className={this.state.isAutoReloading ? 'animate-spin' : ''} />
-              Reload Page
+              <RefreshCcw size={14} />
+              Try Again
             </button>
             <button
               onClick={this.handleGoDashboard}

@@ -6,6 +6,7 @@
 import React from 'react';
 import { clsx } from 'clsx';
 import { ChevronRight, Home } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 export interface BreadcrumbItem {
   label: string;
@@ -36,23 +37,23 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
       {/* Breadcrumbs */}
       {breadcrumbs && breadcrumbs.length > 0 && (
         <nav className="flex items-center gap-1.5 mb-2.5 flex-wrap" aria-label="Breadcrumb">
-          <a
-            href="/dashboard"
+          <Link
+            to="/dashboard"
             className="text-slate-400 hover:text-[#D4AF37] transition-colors p-1 rounded-md hover:bg-slate-100"
             title="Dashboard"
           >
             <Home size={13} />
-          </a>
+          </Link>
           {breadcrumbs.map((crumb, i) => (
             <React.Fragment key={i}>
               <ChevronRight size={12} className="text-slate-300" />
               {crumb.href ? (
-                <a
-                  href={crumb.href}
+                <Link
+                  to={crumb.href}
                   className="text-xs font-semibold text-slate-500 hover:text-[#0B1F3A] transition-colors font-body px-1.5 py-0.5 rounded hover:bg-slate-100"
                 >
                   {crumb.label}
-                </a>
+                </Link>
               ) : (
                 <span className="text-xs font-bold text-[#0B1F3A] font-body px-1.5 py-0.5 bg-slate-100/80 rounded-md">
                   {crumb.label}
