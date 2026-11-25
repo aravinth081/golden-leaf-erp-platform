@@ -13,11 +13,12 @@ import type { FixedDeposit, FDStatus } from '../../types/fd.types';
 import type { Investor } from '../../types/investor.types';
 import {
   getFixedDeposits,
+  getLocalFDs,
   approveFixedDeposit,
   rolloverFDRenewal,
   getFDKPIMetrics,
 } from '../../services/fdService';
-import { getInvestors } from '../../services/investorService';
+import { getInvestors, getLocalInvestors } from '../../services/investorService';
 import { formatINR, isFDMaturingSoon, getDaysToMaturity } from '../../utils/fdCalculations';
 import { StatusBadge } from '../../components/ui/Badge';
 import { FDKPIRibbon } from './components/FDKPIRibbon';
@@ -33,10 +34,30 @@ import { useAuthStore } from '../../store';
 type TabKey = 'active' | 'pending' | 'payouts' | 'maturing' | 'preclose';
 
 export const FDListPage: React.FC = () => {
+  const user = useAuthStore((s) => s.user);
+  const role = user?.customClaims?.role || 'admin';
+  const isAdmin = role === 'admin' || role === 'area_manager';
+  const isBranchManager = role === 'branch_manager';
+  const userBranchId = isBranchManager ? user?.customClaims?.branchId : undefined;
+
   const [activeTab, setActiveTab] = useState<TabKey>('active');
-  const [fds, setFDs] = useState<FixedDeposit[]>([]);
-  const [investors, setInvestors] = useState<Investor[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [fds, setFDs] = useState<FixedDeposit[]>(() => {
+    try {
+      const local = getLocalFDs();
+      return userBranchId ? local.filter((f) => f.branchId === userBranchId) : local;
+    } catch {
+      return [];
+    }
+  });
+  const [investors, setInvestors] = useState<Investor[]>(() => {
+    try {
+      const local = getLocalInvestors();
+      return userBranchId ? local.filter((i) => i.branchId === userBranchId) : local;
+    } catch {
+      return [];
+    }
+  });
+  const [loading, setLoading] = useState(false);
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [searchFilter, setSearchFilter] = useState('');
 
@@ -48,15 +69,9 @@ export const FDListPage: React.FC = () => {
   const [lienFD, setLienFD] = useState<FixedDeposit | null>(null);
   const [drawerInvestor, setDrawerInvestor] = useState<Investor | null>(null);
 
-  const user = useAuthStore((s) => s.user);
-  const role = user?.customClaims?.role || 'admin';
-  const isAdmin = role === 'admin' || role === 'area_manager';
-  const isBranchManager = role === 'branch_manager';
-  const userBranchId = isBranchManager ? user?.customClaims?.branchId : undefined;
-
-  const loadData = async () => {
+  const loadData = async (silent = true) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       // Branch Manager sees only own branch records; Admin sees all
       const [fdList, invList] = await Promise.all([
         getFixedDeposits(userBranchId),
@@ -65,12 +80,12 @@ export const FDListPage: React.FC = () => {
       setFDs(fdList);
       setInvestors(invList);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadData();
+    loadData(true);
   }, [userBranchId]);
 
   const metrics = getFDKPIMetrics(userBranchId);

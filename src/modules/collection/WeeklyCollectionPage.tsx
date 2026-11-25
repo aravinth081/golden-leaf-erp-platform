@@ -85,13 +85,172 @@ export interface WeeklyBorrowerRecord {
   totalOutstanding?: number;
 }
 
+function getInitialWeeklyBorrowers(agentName: string): WeeklyBorrowerRecord[] {
+  try {
+    const customers = getMonitoredCustomers(null);
+    const loans = getMonitoredLoans(null);
+    const collections = getMonitoredCollections(null);
+
+    const customerMap = new Map<string, MonitoredCustomer>();
+    for (const c of customers) {
+      if (c.id) customerMap.set(c.id, c);
+    }
+
+    const collectionMap = new Map<string, MonitoredCollection>();
+    for (const col of collections) {
+      if (col.loanId) collectionMap.set(col.loanId, col);
+      if (col.customerId && !collectionMap.has(col.customerId)) {
+        collectionMap.set(col.customerId, col);
+      }
+    }
+
+    const items: WeeklyBorrowerRecord[] = [];
+    const processedLoanIds = new Set<string>();
+
+    for (const loan of loans) {
+      if (loan.status !== 'Active') continue;
+      processedLoanIds.add(loan.id);
+
+      const customer = customerMap.get(loan.customerId);
+      const existingCol = collectionMap.get(loan.id) || (customer ? collectionMap.get(customer.id) : undefined);
+
+      const tenor = loan.tenorWeeks || 20;
+      const week = Math.min(tenor, (loan.weeksCompleted || 0) + 1);
+      const installmentStr = `${String(week).padStart(2, '0')} / ${tenor}`;
+      const dueAmt = loan.weeklyAmount || 2500;
+
+      let colAmt = 0;
+      let pMode: 'Cash' | 'UPI' | 'Bank Transfer' | undefined = undefined;
+      let rcptNo: string | undefined = undefined;
+      let colDate: string | undefined = undefined;
+      let colTime: string | undefined = undefined;
+      let rems: string | undefined = undefined;
+
+      if (existingCol) {
+        colAmt = existingCol.collectedAmount || 0;
+        pMode = existingCol.paymentMode?.toLowerCase().includes('upi')
+          ? 'UPI'
+          : existingCol.paymentMode?.toLowerCase().includes('bank')
+          ? 'Bank Transfer'
+          : 'Cash';
+        rcptNo = existingCol.receiptNumber && existingCol.receiptNumber !== 'Pending' ? existingCol.receiptNumber : undefined;
+        colDate = existingCol.date;
+        colTime = existingCol.time;
+        rems = existingCol.ncRemarks;
+      }
+
+      const pendAmt = Math.max(0, dueAmt - colAmt);
+      const advAmt = Math.max(0, colAmt - dueAmt);
+
+      let calcStatus: WeeklyBorrowerRecord['status'] = 'Pending';
+      if (colAmt === 0) {
+        calcStatus = 'Pending';
+      } else if (colAmt < dueAmt) {
+        calcStatus = 'Partial';
+      } else if (colAmt === dueAmt) {
+        calcStatus = 'Collected';
+      } else {
+        calcStatus = 'Advance';
+      }
+
+      items.push({
+        id: existingCol?.id || `COL-W-${loan.id.replace(/\D/g, '')}-${week}`,
+        customerId: loan.customerId,
+        customerName: loan.customerName || customer?.name || 'Registered Customer',
+        customerPhone: customer?.phone || '',
+        branchId: loan.branchId || 'BR-01',
+        branchName: loan.branchName || customer?.branchName || 'Main Branch',
+        centerName: customer?.centerName || 'Center 01',
+        groupName: customer?.groupName || 'General Group',
+        loanId: loan.id,
+        installmentNo: installmentStr,
+        weekNumber: week,
+        tenorWeeks: tenor,
+        dueAmount: dueAmt,
+        collectedAmount: colAmt,
+        pendingAmount: pendAmt,
+        advanceAmount: advAmt,
+        paymentMode: colAmt > 0 ? pMode : undefined,
+        status: calcStatus,
+        collectionDate: colDate,
+        collectionTime: colTime,
+        receiptNumber: rcptNo,
+        remarks: rems,
+        agentName: existingCol?.agentName || agentName,
+        totalOutstanding: loan.outstandingAmount || 0,
+      });
+    }
+
+    for (const col of collections) {
+      if (processedLoanIds.has(col.loanId)) continue;
+      processedLoanIds.add(col.loanId);
+
+      const customer = customerMap.get(col.customerId);
+      const dueAmt = col.dueAmount || col.expectedAmount || 2500;
+      const colAmt = col.collectedAmount || 0;
+      const pendAmt = Math.max(0, dueAmt - colAmt);
+      const advAmt = Math.max(0, colAmt - dueAmt);
+
+      let calcStatus: WeeklyBorrowerRecord['status'] = 'Pending';
+      if (colAmt === 0) {
+        calcStatus = 'Pending';
+      } else if (colAmt < dueAmt) {
+        calcStatus = 'Partial';
+      } else if (colAmt === dueAmt) {
+        calcStatus = 'Collected';
+      } else {
+        calcStatus = 'Advance';
+      }
+
+      const pMode: 'Cash' | 'UPI' | 'Bank Transfer' = col.paymentMode?.toLowerCase().includes('upi')
+        ? 'UPI'
+        : col.paymentMode?.toLowerCase().includes('bank')
+        ? 'Bank Transfer'
+        : 'Cash';
+
+      items.push({
+        id: col.id,
+        customerId: col.customerId,
+        customerName: col.customerName,
+        customerPhone: col.customerPhone || customer?.phone || '',
+        branchId: col.branchId || 'BR-01',
+        branchName: col.branchName || 'Main Branch',
+        centerName: col.area || customer?.centerName || 'Center 01',
+        groupName: col.groupName || customer?.groupName || 'General Group',
+        loanId: col.loanId,
+        installmentNo: col.installment || '01 / 20',
+        weekNumber: 1,
+        tenorWeeks: 20,
+        dueAmount: dueAmt,
+        collectedAmount: colAmt,
+        pendingAmount: pendAmt,
+        advanceAmount: advAmt,
+        paymentMode: colAmt > 0 ? pMode : undefined,
+        status: calcStatus,
+        collectionDate: col.date,
+        collectionTime: col.time,
+        receiptNumber: col.receiptNumber && col.receiptNumber !== 'Pending' ? col.receiptNumber : undefined,
+        remarks: col.ncRemarks,
+        agentName: col.agentName || agentName,
+        totalOutstanding: customer?.outstandingBalance || 0,
+      });
+    }
+
+    return items;
+  } catch {
+    return [];
+  }
+}
+
 export const WeeklyCollectionPage: React.FC = () => {
   const currentUser = useAuthStore((s) => s.user);
   const addToast = useUIStore((s) => s.addToast);
 
   // Core Data States
-  const [borrowers, setBorrowers] = useState<WeeklyBorrowerRecord[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [borrowers, setBorrowers] = useState<WeeklyBorrowerRecord[]>(() =>
+    getInitialWeeklyBorrowers(currentUser?.displayName || 'Collection Officer')
+  );
+  const [isLoading, setIsLoading] = useState(false);
   const [dataError, setDataError] = useState(false);
 
   // Search & Filter States
@@ -127,9 +286,9 @@ export const WeeklyCollectionPage: React.FC = () => {
   }, [selectedBorrower, isPreviewOpen]);
 
   // ── 1. LOAD WEEKLY COLLECTION DATA FROM CENTRAL REPOSITORIES ──
-  const loadWeeklyCollections = () => {
+  const loadWeeklyCollections = (silent = true) => {
     try {
-      setIsLoading(true);
+      if (!silent) setIsLoading(true);
       setDataError(false);
 
       const customers = getMonitoredCustomers(null);
@@ -291,15 +450,15 @@ export const WeeklyCollectionPage: React.FC = () => {
       console.error('Failed to load weekly collections:', err);
       setDataError(true);
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    loadWeeklyCollections();
+    loadWeeklyCollections(true);
 
     const handleCollectionsUpdated = () => {
-      loadWeeklyCollections();
+      loadWeeklyCollections(true);
     };
     window.addEventListener('glf-collections-updated', handleCollectionsUpdated);
     return () => {
@@ -1010,7 +1169,7 @@ export const WeeklyCollectionPage: React.FC = () => {
             </p>
             <button
               type="button"
-              onClick={loadWeeklyCollections}
+              onClick={() => loadWeeklyCollections(false)}
               className="inline-flex items-center gap-2 px-6 py-2.5 rounded-[10px] bg-[#D4AF37] text-white text-xs font-semibold hover:bg-[#C9A227] transition-colors cursor-pointer"
             >
               <RefreshCw size={14} />

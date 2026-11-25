@@ -38,15 +38,46 @@ export const BranchDashboardPage: React.FC = () => {
   const userBranchNameClaim = user?.customClaims?.branchName || (user as any)?.branchName;
   const isBranchScoped = !isAdmin;
 
-  const [branches, setBranches] = useState<DetailedBranch[]>([]);
-  const [selectedBranch, setSelectedBranch] = useState<DetailedBranch | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
   const addToast = useUIStore((s) => s.addToast);
   const selectedBranchId = useUIStore((s) => s.selectedBranchId);
   const setSelectedBranchId = useUIStore((s) => s.setSelectedBranchId);
 
+  const [branches, setBranches] = useState<DetailedBranch[]>(() => {
+    const list = getStoredBranches();
+    return isBranchScoped ? [] : list;
+  });
+
+  const [selectedBranch, setSelectedBranch] = useState<DetailedBranch | null>(() => {
+    const list = getStoredBranches();
+    if (!list.length) return null;
+    let found: DetailedBranch | undefined;
+    if (isBranchScoped) {
+      const claim = userBranchClaim || userBranchNameClaim;
+      if (claim) {
+        found = list.find((b) => matchBranchId(claim, b.id) || matchBranchId(claim, b.name) || matchBranchId(claim, b.code));
+      }
+      if (!found && userBranchNameClaim) {
+        const claimName = userBranchNameClaim.toLowerCase();
+        found = list.find((b) => b.name.toLowerCase().includes(claimName) || claimName.includes(b.name.toLowerCase()));
+      }
+      if (!found && list.length > 0) {
+        found = list.find((b) => b.name.toLowerCase().includes('gobi') || (b.code && b.code.toLowerCase().includes('6805'))) || list[0];
+      }
+    } else {
+      const targetId = branchId || selectedBranchId;
+      if (targetId) {
+        found = list.find((b) => b.id === targetId || b.code === targetId || matchBranchId(targetId, b.id));
+      }
+    }
+    if (!found && list.length > 0) {
+      found = list[0];
+    }
+    return found || null;
+  });
+
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+
   useEffect(() => {
-    setIsLoading(true);
     const list = getStoredBranches();
 
     let found: DetailedBranch | undefined;
@@ -101,14 +132,12 @@ export const BranchDashboardPage: React.FC = () => {
   }, [branchId, user, userBranchClaim, isBranchScoped]);
 
   const handleBranchSelect = (id: string) => {
-    setIsLoading(true);
     const found = branches.find((b) => b.id === id);
     if (found) {
       setSelectedBranch(found);
       setSelectedBranchId(found.id);
       navigate(`/branches/${found.id}/dashboard`, { replace: true });
     }
-    setIsLoading(false);
   };
 
   const handleDownloadAttendanceReport = () => {
@@ -120,11 +149,27 @@ export const BranchDashboardPage: React.FC = () => {
     });
   };
 
-  if (isLoading || !selectedBranch) {
+  if (isLoading) {
     return (
       <div className="p-12 text-center text-[#0B1F3A] font-sans flex flex-col items-center justify-center">
         <div className="w-10 h-10 border-3 border-[#D4AF37] border-t-transparent rounded-full animate-spin mb-3" />
         <p className="text-xs font-semibold text-[#64748B]">Loading Branch Dashboard...</p>
+      </div>
+    );
+  }
+
+  if (!selectedBranch) {
+    return (
+      <div className="p-12 text-center text-[#0B1F3A] font-sans flex flex-col items-center justify-center">
+        <p className="text-base font-semibold text-[#0B1F3A] mb-2">No Branch Selected or Available</p>
+        <p className="text-xs text-[#64748B] mb-4">Please select a valid branch from the list or contact your administrator.</p>
+        <button
+          type="button"
+          onClick={() => navigate('/branches')}
+          className="px-4 py-2 bg-[#0B1F3A] text-white text-xs font-medium rounded-lg hover:bg-[#1E3A8A] transition-colors"
+        >
+          View Branches
+        </button>
       </div>
     );
   }

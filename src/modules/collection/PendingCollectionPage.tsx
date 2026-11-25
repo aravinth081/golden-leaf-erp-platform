@@ -81,13 +81,119 @@ export interface PendingRecordItem {
 type SortField = 'customer' | 'dueDate' | 'pendingAmount';
 type SortOrder = 'asc' | 'desc';
 
+function buildPendingItems(): PendingRecordItem[] {
+  try {
+    const allCusts = getMonitoredCustomers(null);
+    const allLoans = getMonitoredLoans(null);
+    const allCollections = getMonitoredCollections(null);
+
+    const custMap = new Map<string, MonitoredCustomer>();
+    allCusts.forEach((c) => {
+      if (c.id) custMap.set(c.id, c);
+    });
+
+    const loanMap = new Map<string, MonitoredLoan>();
+    const closedLoanIds = new Set<string>();
+    allLoans.forEach((l) => {
+      if (l.id) {
+        loanMap.set(l.id, l);
+        if (l.status === 'Closed') {
+          closedLoanIds.add(l.id);
+        }
+      }
+    });
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const pendingItems: PendingRecordItem[] = [];
+
+    for (const col of allCollections) {
+      if (col.loanId && closedLoanIds.has(col.loanId)) {
+        continue;
+      }
+
+      if (col.status === 'advance') {
+        continue;
+      }
+
+      const due = col.dueAmount ?? col.expectedAmount ?? 2500;
+      const collected = col.collectedAmount ?? 0;
+      const pending = Math.max(0, due - collected);
+
+      if (pending <= 0 || col.status === 'collected') {
+        continue;
+      }
+
+      const cust = custMap.get(col.customerId);
+      const loan = loanMap.get(col.loanId);
+
+      let isDelayed = false;
+      let delayDays = 0;
+
+      if (col.status === 'delayed' || (col.delayedDays !== undefined && col.delayedDays > 0)) {
+        isDelayed = true;
+        delayDays = col.delayedDays || 1;
+      } else if (col.date && col.date !== 'Today' && col.date !== 'Tomorrow') {
+        const parsedDueDate = new Date(col.date);
+        if (!isNaN(parsedDueDate.getTime())) {
+          parsedDueDate.setHours(0, 0, 0, 0);
+          if (today.getTime() > parsedDueDate.getTime()) {
+            isDelayed = true;
+            delayDays = Math.max(1, Math.floor((today.getTime() - parsedDueDate.getTime()) / (1000 * 60 * 60 * 24)));
+          }
+        }
+      }
+
+      let derivedStatus: 'Pending' | 'Partial' | 'Pending (NC)' | 'Delayed' = 'Pending';
+      if (col.status === 'nc') {
+        derivedStatus = 'Pending (NC)';
+      } else if (isDelayed) {
+        derivedStatus = 'Delayed';
+      } else if (collected > 0 && pending > 0) {
+        derivedStatus = 'Partial';
+      } else {
+        derivedStatus = 'Pending';
+      }
+
+      pendingItems.push({
+        id: col.id,
+        customerId: col.customerId,
+        customerName: col.customerName || cust?.name || 'Registered Customer',
+        customerPhone: col.customerPhone || cust?.phone || '',
+        loanId: col.loanId || (loan ? loan.id : ''),
+        loanPlan: loan?.planName || 'Micro-Loan',
+        centerName: col.area || cust?.centerName || 'Center',
+        groupName: col.groupName || cust?.groupName || 'General Group',
+        branchId: col.branchId || 'BR-01',
+        branchName: col.branchName || 'Main Branch',
+        installment: col.installment || 'Weekly Installment',
+        dueDate: col.date === 'Today' ? new Date().toISOString().slice(0, 10) : col.date,
+        dueAmount: due,
+        collectedAmount: collected,
+        pendingAmount: pending,
+        status: derivedStatus,
+        isDelayed,
+        delayDays,
+        ncReason: col.ncReasonCode,
+        ncRemarks: col.ncRemarks,
+        rawCollection: col,
+      });
+    }
+
+    return pendingItems;
+  } catch {
+    return [];
+  }
+}
+
 export const PendingCollectionPage: React.FC = () => {
   const currentUser = useAuthStore((s) => s.user);
   const { addToast } = useUIStore();
 
   // Core Data States
-  const [records, setRecords] = useState<PendingRecordItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [records, setRecords] = useState<PendingRecordItem[]>(() => buildPendingItems());
+  const [isLoading, setIsLoading] = useState(false);
   const [dataError, setDataError] = useState(false);
 
   // Search & Filter States
@@ -124,131 +230,25 @@ export const PendingCollectionPage: React.FC = () => {
   }, [isModalOpen, isSubmitting, isPreviewOpen]);
 
   // ── 1. LOAD PENDING COLLECTIONS FROM CENTRAL SOURCE OF TRUTH (Section 4, 5, 8, 12) ──
-  const loadPendingData = () => {
+  const loadPendingData = (silent = true) => {
     try {
-      setIsLoading(true);
+      if (!silent) setIsLoading(true);
       setDataError(false);
-
-      const allCusts = getMonitoredCustomers(null);
-      const allLoans = getMonitoredLoans(null);
-      const allCollections = getMonitoredCollections(null);
-
-      // Build customer map
-      const custMap = new Map<string, MonitoredCustomer>();
-      allCusts.forEach((c) => {
-        if (c.id) custMap.set(c.id, c);
-      });
-
-      // Build loan map and track closed loans (Section 51 Test 8)
-      const loanMap = new Map<string, MonitoredLoan>();
-      const closedLoanIds = new Set<string>();
-      allLoans.forEach((l) => {
-        if (l.id) {
-          loanMap.set(l.id, l);
-          if (l.status === 'Closed') {
-            closedLoanIds.add(l.id);
-          }
-        }
-      });
-
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      const pendingItems: PendingRecordItem[] = [];
-
-      for (const col of allCollections) {
-        // Exclude closed loans (Section 51 Test 8)
-        if (col.loanId && closedLoanIds.has(col.loanId)) {
-          continue;
-        }
-
-        // Exclude advance collections (Section 14 & 15 of Advance module)
-        if (col.status === 'advance') {
-          continue;
-        }
-
-        // Calculate pending: Math.max(0, dueAmount - collectedAmount) (Section 8)
-        const due = col.dueAmount ?? col.expectedAmount ?? 2500;
-        const collected = col.collectedAmount ?? 0;
-        const pending = Math.max(0, due - collected);
-
-        // A record is pending if pendingAmount > 0 and status is not 'collected'
-        if (pending <= 0 || col.status === 'collected') {
-          continue;
-        }
-
-        const cust = custMap.get(col.customerId);
-        const loan = loanMap.get(col.loanId);
-
-        // Delay Tracking (Section 12, 13)
-        let isDelayed = false;
-        let delayDays = 0;
-
-        if (col.status === 'delayed' || (col.delayedDays !== undefined && col.delayedDays > 0)) {
-          isDelayed = true;
-          delayDays = col.delayedDays || 1;
-        } else if (col.date && col.date !== 'Today' && col.date !== 'Tomorrow') {
-          const parsedDueDate = new Date(col.date);
-          if (!isNaN(parsedDueDate.getTime())) {
-            parsedDueDate.setHours(0, 0, 0, 0);
-            if (today.getTime() > parsedDueDate.getTime()) {
-              isDelayed = true;
-              delayDays = Math.max(1, Math.floor((today.getTime() - parsedDueDate.getTime()) / (1000 * 60 * 60 * 24)));
-            }
-          }
-        }
-
-        // Determine PDF Status (Section 27: Pending, Partial, Pending (NC), Delayed)
-        let derivedStatus: 'Pending' | 'Partial' | 'Pending (NC)' | 'Delayed' = 'Pending';
-        if (col.status === 'nc') {
-          derivedStatus = 'Pending (NC)';
-        } else if (isDelayed) {
-          derivedStatus = 'Delayed';
-        } else if (collected > 0 && pending > 0) {
-          derivedStatus = 'Partial';
-        } else {
-          derivedStatus = 'Pending';
-        }
-
-        pendingItems.push({
-          id: col.id,
-          customerId: col.customerId,
-          customerName: col.customerName || cust?.name || 'Registered Customer',
-          customerPhone: col.customerPhone || cust?.phone || '',
-          loanId: col.loanId || (loan ? loan.id : ''),
-          loanPlan: loan?.planName || 'Micro-Loan',
-          centerName: col.area || cust?.centerName || 'Center',
-          groupName: col.groupName || cust?.groupName || 'General Group',
-          branchId: col.branchId || 'BR-01',
-          branchName: col.branchName || 'Main Branch',
-          installment: col.installment || 'Weekly Installment',
-          dueDate: col.date === 'Today' ? new Date().toISOString().slice(0, 10) : col.date,
-          dueAmount: due,
-          collectedAmount: collected,
-          pendingAmount: pending,
-          status: derivedStatus,
-          isDelayed,
-          delayDays,
-          ncReason: col.ncReasonCode,
-          ncRemarks: col.ncRemarks,
-          rawCollection: col,
-        });
-      }
-
+      const pendingItems = buildPendingItems();
       setRecords(pendingItems);
     } catch (err) {
       console.error('Failed to load pending collections:', err);
       setDataError(true);
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    loadPendingData();
+    loadPendingData(true);
 
     const handleCollectionsUpdated = () => {
-      loadPendingData();
+      loadPendingData(true);
     };
     window.addEventListener('glf-collections-updated', handleCollectionsUpdated);
     return () => {
@@ -836,7 +836,7 @@ export const PendingCollectionPage: React.FC = () => {
             </p>
             <button
               type="button"
-              onClick={loadPendingData}
+              onClick={() => loadPendingData(false)}
               className="inline-flex items-center gap-2 px-6 py-2.5 rounded-[10px] bg-[#D4AF37] text-white text-xs font-semibold hover:bg-[#C9A227] transition-colors cursor-pointer"
             >
               <RefreshCw size={14} />

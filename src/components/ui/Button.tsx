@@ -39,6 +39,7 @@ const sizeStyles: Record<string, string> = {
 export const Button: React.FC<ButtonProps> = ({
   variant = 'primary',
   size = 'md',
+  type = 'button',
   loading = false,
   icon,
   iconPosition = 'left',
@@ -52,6 +53,7 @@ export const Button: React.FC<ButtonProps> = ({
 
   return (
     <motion.button
+      type={type}
       whileTap={isDisabled ? undefined : { scale: 0.97 }}
       className={clsx(
         'inline-flex items-center justify-center font-semibold font-body',

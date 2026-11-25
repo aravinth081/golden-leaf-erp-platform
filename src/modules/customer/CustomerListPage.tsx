@@ -391,20 +391,23 @@ export const CustomerListPage: React.FC = () => {
   const currentBranchName = currentBranch?.name || 'Main Branch - Anna Nagar';
 
   // ── 2. DATA SOURCE: UNIFIED MASTER CUSTOMERS & GROUPS ──
-  const [allCustomers, setAllCustomers] = useState<MonitoredCustomer[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [allCustomers, setAllCustomers] = useState<MonitoredCustomer[]>(() => {
+    try {
+      return getMonitoredCustomers(null);
+    } catch {
+      return [];
+    }
+  });
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const loadCustomerData = () => {
     try {
-      setIsLoading(true);
       // Fetch all stored customers
       const masterList = getMonitoredCustomers(null);
       setAllCustomers(masterList);
     } catch (err) {
       console.error('Failed to load customers:', err);
       addToast({ type: 'error', title: 'Data Load Error', message: 'Unable to load customer records.' });
-    } finally {
-      setIsLoading(false);
     }
   };
 

@@ -82,6 +82,7 @@ export const Tabs: React.FC<TabsProps> = ({
           const isSelected = activeTab === tab.id;
           return (
             <button
+              type="button"
               key={tab.id}
               ref={(el) => {
                 if (el) tabButtonRefs.current.set(tab.id, el);

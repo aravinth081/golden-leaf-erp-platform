@@ -111,9 +111,45 @@ export const BranchDashboard: React.FC = () => {
   const userBranchNameClaim = user?.customClaims?.branchName || (user as any)?.branchName;
   const isBranchScoped = !isAdmin;
 
-  const [branches, setBranches] = useState<DetailedBranch[]>([]);
-  const [currentBranch, setCurrentBranch] = useState<DetailedBranch | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [branches, setBranches] = useState<DetailedBranch[]>(() => {
+    try {
+      const list = getStoredBranches();
+      return isBranchScoped ? [] : list;
+    } catch {
+      return [];
+    }
+  });
+  const [currentBranch, setCurrentBranch] = useState<DetailedBranch | null>(() => {
+    try {
+      const list = getStoredBranches();
+      if (!list.length) return null;
+      let target: DetailedBranch | undefined;
+      if (isBranchScoped) {
+        const claim = userBranchClaim || userBranchNameClaim;
+        if (claim) {
+          target = list.find((b) => matchBranchId(claim, b.id) || matchBranchId(claim, b.name) || matchBranchId(claim, b.code));
+        }
+        if (!target && userBranchNameClaim) {
+          const claimName = userBranchNameClaim.toLowerCase();
+          target = list.find((b) => b.name.toLowerCase().includes(claimName) || claimName.includes(b.name.toLowerCase()));
+        }
+        if (!target && list.length > 0) {
+          target = list.find((b) => b.name.toLowerCase().includes('gobi') || (b.code && b.code.toLowerCase().includes('6805'))) || list[0];
+        }
+      } else {
+        if (selectedBranchId) {
+          target = list.find((b) => b.id === selectedBranchId || b.code === selectedBranchId);
+        }
+        if (!target && list.length > 0) {
+          target = list[0];
+        }
+      }
+      return target || null;
+    } catch {
+      return null;
+    }
+  });
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   // Custom Dropdown State & Click-Outside Ref
@@ -173,9 +209,9 @@ export const BranchDashboard: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isBranchDropdownOpen, focusedBranchIndex, branches]);
 
-  const loadData = () => {
+  const loadData = (silent = true) => {
     try {
-      setIsLoading(true);
+      if (!silent) setIsLoading(true);
       setLoadError(null);
       const list = getStoredBranches();
 
@@ -228,12 +264,12 @@ export const BranchDashboard: React.FC = () => {
       console.error('Failed to load Branch Dashboard data:', err);
       setLoadError('Unable to load branch data. Please retry.');
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    loadData();
+    loadData(true);
   }, [user, user?.customClaims?.branchId, user?.customClaims?.role]);
 
   // Immediate branch switching without browser reload
@@ -278,7 +314,8 @@ export const BranchDashboard: React.FC = () => {
         <h2 className="text-base font-bold text-[#0B1F3A] mb-1">Dashboard Load Issue</h2>
         <p className="text-xs text-[#64748B] mb-4">{loadError || 'Branch details are currently unavailable.'}</p>
         <button
-          onClick={loadData}
+          type="button"
+          onClick={() => loadData(false)}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0B1F3A] text-white text-xs font-bold hover:bg-[#142B4E] transition-colors cursor-pointer"
         >
           <RefreshCw size={14} /> Retry

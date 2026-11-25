@@ -41,8 +41,14 @@ export const CreditDashboard: React.FC = () => {
   const { addToast } = useUIStore();
   const currentUser = useAuthStore((s) => s.user);
 
-  const [applicants, setApplicants] = useState<CreditApplicant[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [applicants, setApplicants] = useState<CreditApplicant[]>(() => {
+    try {
+      return creditManagerService.getApplicants();
+    } catch {
+      return [];
+    }
+  });
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStage, setFilterStage] = useState<FilterStage>('all');
@@ -84,7 +90,7 @@ export const CreditDashboard: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    loadData();
+    loadData(true);
     const unsubscribe = creditManagerService.subscribe(() => {
       loadData(true);
     });

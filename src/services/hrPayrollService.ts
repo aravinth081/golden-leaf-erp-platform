@@ -54,9 +54,16 @@ const HR_MOCK_PURGE_FLAG = 'glf_hr_mock_purged_v20261107_emp_v2';
 /**
  * Irrevocably purges legacy mock/dummy data across HR & Payroll modules.
  */
+let isMockDataPurged = false;
+
 export function purgeLegacyMockData(): void {
+  if (isMockDataPurged) return;
   try {
     if (typeof window === 'undefined' || !window.localStorage) return;
+    if (localStorage.getItem(HR_MOCK_PURGE_FLAG) === 'true') {
+      isMockDataPurged = true;
+      return;
+    }
 
     const rawSlips = localStorage.getItem(STORAGE_KEYS.PAYROLL_SLIPS);
     const rawRuns = localStorage.getItem(STORAGE_KEYS.PAYROLL_RUNS);
@@ -111,6 +118,7 @@ export function purgeLegacyMockData(): void {
 
       localStorage.setItem(HR_MOCK_PURGE_FLAG, 'true');
     }
+    isMockDataPurged = true;
   } catch (err) {
     console.warn('Auto-purge check error:', err);
   }

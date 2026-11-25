@@ -99,11 +99,13 @@ function useTableScrollChaining() {
     const el = ref.current;
     if (!el) return;
 
-    const handleWheel = (e: WheelEvent) => {
-      // If purely horizontal wheel, let table scroll naturally
-      if (Math.abs(e.deltaY) === 0) return;
+    // Use passive listener and CSS overscroll-behavior to guarantee smooth compositor scrolling
+    // without blocking the main JavaScript UI thread or triggering Chrome Page Unresponsive warnings.
+    el.style.overscrollBehaviorY = 'auto';
+    el.style.overscrollBehaviorX = 'contain';
 
-      // If scrolling vertically or mostly vertically
+    const handleWheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaY) === 0) return;
       if (Math.abs(e.deltaY) >= Math.abs(e.deltaX)) {
         const mainContainer = el.closest('main') || document.querySelector('main');
         if (mainContainer) {
@@ -111,12 +113,11 @@ function useTableScrollChaining() {
             top: e.deltaY,
             behavior: 'auto',
           });
-          e.preventDefault();
         }
       }
     };
 
-    el.addEventListener('wheel', handleWheel, { passive: false });
+    el.addEventListener('wheel', handleWheel, { passive: true });
     return () => {
       el.removeEventListener('wheel', handleWheel);
     };

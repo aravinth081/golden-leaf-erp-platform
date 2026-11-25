@@ -10,8 +10,8 @@ import {
 } from 'lucide-react';
 import type { Investor, InvestorCategory } from '../../types/investor.types';
 import type { FixedDeposit } from '../../types/fd.types';
-import { getInvestors, getInvestorMetrics } from '../../services/investorService';
-import { getFixedDeposits } from '../../services/fdService';
+import { getInvestors, getLocalInvestors, getInvestorMetrics } from '../../services/investorService';
+import { getFixedDeposits, getLocalFDs } from '../../services/fdService';
 import { formatINR } from '../../utils/fdCalculations';
 import { Investor360Drawer } from './components/Investor360Drawer';
 import { InvestorRegistrationModal } from './components/InvestorRegistrationModal';
@@ -21,11 +21,23 @@ import { PageHeader } from '../../components/ui/PageHeader';
 import { useAuthStore } from '../../store';
 
 export const InvestorListPage: React.FC = () => {
-  const [investors, setInvestors] = useState<Investor[]>([]);
-  const [fds, setFDs] = useState<FixedDeposit[]>([]);
+  const [investors, setInvestors] = useState<Investor[]>(() => {
+    try {
+      return getLocalInvestors();
+    } catch {
+      return [];
+    }
+  });
+  const [fds, setFDs] = useState<FixedDeposit[]>(() => {
+    try {
+      return getLocalFDs();
+    } catch {
+      return [];
+    }
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   // Modals & Drawers state
   const [selectedInvestor, setSelectedInvestor] = useState<Investor | null>(null);
@@ -37,9 +49,9 @@ export const InvestorListPage: React.FC = () => {
   const role = user?.customClaims?.role || 'admin';
   const isAdmin = role === 'admin' || role === 'area_manager';
 
-  const loadData = async () => {
+  const loadData = async (silent = true) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const [invList, fdList] = await Promise.all([
         getInvestors(),
         getFixedDeposits(),
@@ -47,13 +59,13 @@ export const InvestorListPage: React.FC = () => {
       setInvestors(invList);
       setFDs(fdList);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadData();
-    const handleSync = () => loadData();
+    loadData(true);
+    const handleSync = () => loadData(true);
     window.addEventListener('glf_fd_updated', handleSync);
     window.addEventListener('glf_investor_updated', handleSync);
     window.addEventListener('storage', handleSync);

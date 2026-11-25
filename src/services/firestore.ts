@@ -397,7 +397,11 @@ export async function queryDocuments<T>(
         query = query.eq('is_deleted', false);
       }
 
-      const { data: rows, error } = await query;
+      // Safe 1500ms timeout race to guarantee fast rendering even under slow/offline network
+      const timeoutPromise = new Promise<{ data: null; error: { message: string } }>((resolve) =>
+        setTimeout(() => resolve({ data: null, error: { message: 'Cloud query timeout' } }), 1500)
+      );
+      const { data: rows, error } = (await Promise.race([query, timeoutPromise])) as any;
       if (!error && Array.isArray(rows)) {
         if (rows.length > 0) {
           const cloudItems = rows.map((r: any) => r.data).filter(Boolean);

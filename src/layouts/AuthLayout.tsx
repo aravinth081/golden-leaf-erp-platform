@@ -7,10 +7,9 @@ import React from 'react';
 import { Outlet } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { GOLDEN_LEAF_LOGO_DATA_URL } from '../utils/logoDataUrl';
-const goldenLeafLogo = GOLDEN_LEAF_LOGO_DATA_URL || '/logo-icon.png';
 
 const AuthBrandLogo: React.FC<{ sizeClass: string; isMobile?: boolean }> = ({ sizeClass, isMobile }) => {
-  const [imgSrc, setImgSrc] = React.useState<string>(GOLDEN_LEAF_LOGO_DATA_URL || '/logo-icon.png');
+  const [imgSrc, setImgSrc] = React.useState<string>('/logo-icon.png');
   const [failed, setFailed] = React.useState(false);
 
   if (failed) {

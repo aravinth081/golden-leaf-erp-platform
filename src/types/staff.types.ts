@@ -131,7 +131,7 @@ export const STAFF_ROLE_META: Record<
     internalRole: 'collection_agent',
     badgeClass: 'bg-emerald-50 text-emerald-800 border-emerald-300',
     requiresBranch: true,
-    landingPath: '/dashboard',
+    landingPath: '/collections',
   },
 };
 

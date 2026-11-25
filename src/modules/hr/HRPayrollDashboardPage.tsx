@@ -231,9 +231,14 @@ export const HRPayrollDashboardPage: React.FC = () => {
   };
 
   useEffect(() => {
-    purgeLegacyMockData();
-    refreshData();
+    if (selectedRunId) {
+      setSlips(getPayrollSlips(selectedRunId));
+    }
   }, [selectedRunId]);
+
+  useEffect(() => {
+    refreshData();
+  }, []);
 
   // Handle draft payroll initiation
   const handleInitiateDraft = (e: React.FormEvent) => {

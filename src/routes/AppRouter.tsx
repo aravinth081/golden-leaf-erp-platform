@@ -124,8 +124,8 @@ const RouteErrorBoundary: React.FC = () => {
     ));
 
   const handleRetry = () => {
-    // Retry route rendering within client router without full page browser teardown
-    navigate(0);
+    // Retry route rendering within client router smoothly without disruptive full browser reload
+    navigate(window.location.pathname + window.location.search, { replace: true });
   };
 
   const handleGoDashboard = () => {
@@ -149,6 +149,7 @@ const RouteErrorBoundary: React.FC = () => {
       </p>
       <div className="flex items-center gap-3">
         <button
+          type="button"
           onClick={handleRetry}
           className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#0B1F3A] hover:bg-[#162D4A] text-white font-bold text-xs uppercase tracking-wider shadow-md transition-all cursor-pointer active:scale-[0.98]"
         >
@@ -156,6 +157,7 @@ const RouteErrorBoundary: React.FC = () => {
           Try Again
         </button>
         <button
+          type="button"
           onClick={handleGoDashboard}
           className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#D4AF37] hover:bg-[#C9A227] text-[#0B1F3A] font-bold text-xs uppercase tracking-wider shadow-md transition-all cursor-pointer active:scale-[0.98]"
         >
@@ -487,6 +489,10 @@ export const router = createBrowserRouter([
             <SuspenseWrapper><CustomerListPage /></SuspenseWrapper>
           </ProtectedRoute>
         ),
+      },
+      {
+        path: '/customer/list',
+        element: <Navigate to="/customers" replace />,
       },
       {
         path: '/customers/new',

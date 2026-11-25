@@ -407,36 +407,8 @@ export const Sidebar: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isMobile, isSidebarOpen, setSidebarOpen, isSidebarCollapsed, setSidebarCollapsed]);
 
-  // Ref to the desktop sidebar container for detecting click outside
+  // Ref to the desktop sidebar container
   const sidebarRef = React.useRef<HTMLElement | null>(null);
-
-  // Desktop view: Close sidebar when clicking on empty space outside
-  React.useEffect(() => {
-    if (isMobile || isSidebarCollapsed) return;
-
-    const handleDesktopClickOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (!target) return;
-
-      // Do nothing if click is inside the sidebar itself
-      if (sidebarRef.current && sidebarRef.current.contains(target)) {
-        return;
-      }
-
-      // Do nothing if click is on the sidebar toggle button
-      if (target.closest('[data-sidebar-toggle="true"]')) {
-        return;
-      }
-
-      // Click is on empty space / outside the sidebar -> close the menu
-      setSidebarCollapsed(true);
-    };
-
-    document.addEventListener('mousedown', handleDesktopClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleDesktopClickOutside);
-    };
-  }, [isMobile, isSidebarCollapsed, setSidebarCollapsed]);
 
   // Ref to the navigation scroll container
   const navRef = React.useRef<HTMLElement | null>(null);
@@ -568,6 +540,7 @@ export const Sidebar: React.FC = () => {
           {/* Close button on mobile */}
           {isMobile && (
             <button
+              type="button"
               onClick={() => setSidebarOpen(false)}
               className="p-2 rounded-lg text-[#8EA1B5] hover:text-white hover:bg-white/10 transition-colors cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
               aria-label="Close menu"
@@ -764,6 +737,7 @@ export const Sidebar: React.FC = () => {
 
           {/* Clean Executive Sign Out Button */}
           <button
+            type="button"
             onClick={handleLogout}
             className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-white/[0.03] hover:bg-rose-500/15 text-slate-300 hover:text-rose-300 text-xs font-semibold font-sans border border-white/[0.06] hover:border-rose-500/30 transition-all duration-200 cursor-pointer group shadow-2xs active:scale-[0.99]"
           >

@@ -24,6 +24,17 @@ window.addEventListener('unhandledrejection', (event) => {
   }
 });
 
+// Guard against unintentional full-page browser reloads on form submit
+window.addEventListener('submit', (event) => {
+  const target = event.target as HTMLElement | null;
+  if (target && target.tagName === 'FORM') {
+    const form = target as HTMLFormElement;
+    if (!form.action || form.action === window.location.href || form.action === window.location.pathname) {
+      event.preventDefault();
+    }
+  }
+});
+
 // Auto-purge legacy mock/dummy data from browser storage across all roles
 (() => {
   try {

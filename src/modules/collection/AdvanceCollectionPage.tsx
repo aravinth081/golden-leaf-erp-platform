@@ -73,15 +73,99 @@ export interface AdvanceRecordItem {
   remarks?: string;
 }
 
+function buildAdvanceItems(currentUser: any): AdvanceRecordItem[] {
+  try {
+    const allCusts = getMonitoredCustomers(null);
+    const allLoans = getMonitoredLoans(null);
+    const allCollections = getMonitoredCollections(null);
+
+    const customerMap = new Map<string, MonitoredCustomer>();
+    for (const c of allCusts) {
+      if (c.id) customerMap.set(c.id, c);
+    }
+
+    const loanMap = new Map<string, MonitoredLoan>();
+    for (const l of allLoans) {
+      if (l.id) loanMap.set(l.id, l);
+      if (l.customerId && !loanMap.has(l.customerId)) {
+        loanMap.set(l.customerId, l);
+      }
+    }
+
+    const advanceItems: AdvanceRecordItem[] = [];
+
+    for (const col of allCollections) {
+      const isAdvance =
+        col.status === 'advance' ||
+        (col.dueAmount !== undefined && col.collectedAmount > col.dueAmount);
+
+      if (!isAdvance) continue;
+
+      const cust = customerMap.get(col.customerId);
+      const loan = loanMap.get(col.loanId) || (cust ? loanMap.get(cust.id) : undefined);
+
+      const advAmt =
+        col.status === 'advance'
+          ? col.collectedAmount
+          : col.dueAmount !== undefined && col.collectedAmount > col.dueAmount
+          ? col.collectedAmount - col.dueAmount
+          : col.collectedAmount;
+
+      const pMode: 'Cash' | 'UPI' | 'Bank Transfer' = col.paymentMode?.toLowerCase().includes('upi')
+        ? 'UPI'
+        : col.paymentMode?.toLowerCase().includes('bank')
+        ? 'Bank Transfer'
+        : 'Cash';
+
+      advanceItems.push({
+        id: col.id.startsWith('COL-') ? col.id.replace('COL-', 'ADV-') : col.id,
+        customerId: col.customerId,
+        customerName: col.customerName || cust?.name || 'Registered Customer',
+        customerPhone: col.customerPhone || cust?.phone || '',
+        loanId: col.loanId || (loan ? loan.id : ''),
+        centerName: col.area || cust?.centerName || 'Center',
+        groupName: col.groupName || cust?.groupName || 'General Group',
+        branchId: col.branchId || 'BR-01',
+        branchName: col.branchName || 'Main Branch',
+        weeklyDemand: col.dueAmount || loan?.weeklyAmount || 0,
+        advanceAmount: advAmt > 0 ? advAmt : col.collectedAmount,
+        paymentMode: pMode,
+        collectionDate: col.date === 'Today' ? new Date().toISOString().slice(0, 10) : col.date,
+        collectionTime: col.time || '',
+        collectedBy: col.agentName || currentUser?.displayName || 'Collection Officer',
+        receiptNumber: col.receiptNumber && col.receiptNumber !== 'Pending' ? col.receiptNumber : `RCP-ADV-${col.id.slice(-4)}`,
+        status: 'Advance Recorded',
+        remarks: col.ncRemarks,
+      });
+    }
+
+    return advanceItems;
+  } catch {
+    return [];
+  }
+}
+
 export const AdvanceCollectionPage: React.FC = () => {
   const currentUser = useAuthStore((s) => s.user);
   const { addToast } = useUIStore();
 
   // Core Data States
-  const [records, setRecords] = useState<AdvanceRecordItem[]>([]);
-  const [customersList, setCustomersList] = useState<MonitoredCustomer[]>([]);
-  const [loansList, setLoansList] = useState<MonitoredLoan[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [records, setRecords] = useState<AdvanceRecordItem[]>(() => buildAdvanceItems(currentUser));
+  const [customersList, setCustomersList] = useState<MonitoredCustomer[]>(() => {
+    try {
+      return getMonitoredCustomers(null);
+    } catch {
+      return [];
+    }
+  });
+  const [loansList, setLoansList] = useState<MonitoredLoan[]>(() => {
+    try {
+      return getMonitoredLoans(null);
+    } catch {
+      return [];
+    }
+  });
+  const [isLoading, setIsLoading] = useState(false);
   const [dataError, setDataError] = useState(false);
 
   // Search & Filter States
@@ -126,9 +210,9 @@ export const AdvanceCollectionPage: React.FC = () => {
   }, [previewBlobUrl]);
 
   // ── 1. LOAD ADVANCE COLLECTIONS FROM SINGLE SOURCE OF TRUTH ──
-  const loadAdvanceData = () => {
+  const loadAdvanceData = (silent = true) => {
     try {
-      setIsLoading(true);
+      if (!silent) setIsLoading(true);
       setDataError(false);
 
       const allCusts = getMonitoredCustomers(null);
@@ -208,15 +292,15 @@ export const AdvanceCollectionPage: React.FC = () => {
       console.error('Failed to load advance collections:', err);
       setDataError(true);
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    loadAdvanceData();
+    loadAdvanceData(true);
 
     const handleCollectionsUpdated = () => {
-      loadAdvanceData();
+      loadAdvanceData(true);
     };
     window.addEventListener('glf-collections-updated', handleCollectionsUpdated);
     return () => {
@@ -807,7 +891,7 @@ export const AdvanceCollectionPage: React.FC = () => {
             </p>
             <button
               type="button"
-              onClick={loadAdvanceData}
+              onClick={() => loadAdvanceData(false)}
               className="inline-flex items-center gap-2 px-6 py-2.5 rounded-[10px] bg-[#D4AF37] text-white text-xs font-semibold hover:bg-[#C9A227] transition-colors cursor-pointer"
             >
               <RefreshCw size={14} />

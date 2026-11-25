@@ -101,8 +101,30 @@ export interface PDFAttendanceOptions {
   fileName?: string;
 }
 
-// Guaranteed instant logo Base64
+// Cached logo Base64 for PDF generation
+let cachedLogoBase64: string | null = null;
+
 export async function getLogoBase64(): Promise<string> {
+  if (cachedLogoBase64) return cachedLogoBase64;
+  try {
+    if (typeof window !== 'undefined' && typeof fetch === 'function') {
+      const response = await fetch('/logo-icon.png');
+      if (response.ok) {
+        const blob = await response.blob();
+        return await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            cachedLogoBase64 = (reader.result as string) || GOLDEN_LEAF_LOGO_DATA_URL;
+            resolve(cachedLogoBase64);
+          };
+          reader.onerror = () => resolve(GOLDEN_LEAF_LOGO_DATA_URL);
+          reader.readAsDataURL(blob);
+        });
+      }
+    }
+  } catch {
+    // Fallback to embedded data URL
+  }
   return GOLDEN_LEAF_LOGO_DATA_URL;
 }
 

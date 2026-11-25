@@ -13,14 +13,23 @@ export function usePlatformSmoothScroll() {
       return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     };
 
-    // ── Helper: Check if element is an editable input/control ─────────────
+    // ── Helper: Check if element is an editable input or custom interactive control ─────
     const isEditableElement = (el: Element | null): boolean => {
       if (!el) return false;
       const tag = el.tagName.toLowerCase();
       if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
       if (el.getAttribute('contenteditable') === 'true') return true;
-      if (el.getAttribute('role') === 'textbox' || el.getAttribute('role') === 'combobox') return true;
-      if (el.closest('input, textarea, select, [contenteditable="true"]')) return true;
+      const role = el.getAttribute('role');
+      if (
+        role === 'textbox' ||
+        role === 'combobox' ||
+        role === 'tab' ||
+        role === 'tablist' ||
+        role === 'listbox' ||
+        role === 'menu' ||
+        role === 'slider'
+      ) return true;
+      if (el.closest('input, textarea, select, [contenteditable="true"], [role="tablist"], [role="listbox"], [role="menu"]')) return true;
       return false;
     };
 
@@ -55,18 +64,12 @@ export function usePlatformSmoothScroll() {
     // ── Helper: Find active horizontal scroll container ───────────────────
     const findHorizontalContainer = (dir: 'left' | 'right'): HTMLElement | null => {
       const active = document.activeElement;
-      if (active) {
+      if (active && active !== document.body && active !== document.documentElement) {
         const tableContainer = active.closest('.overflow-x-auto, [class*="overflow-x-auto"]');
         if (tableContainer instanceof HTMLElement) {
           return tableContainer;
         }
       }
-
-      const visibleTable = document.querySelector('.overflow-x-auto, [class*="overflow-x-auto"]');
-      if (visibleTable instanceof HTMLElement) {
-        return visibleTable;
-      }
-
       return null;
     };
 

@@ -17,12 +17,12 @@ export default defineConfig({
             if (!fs.existsSync(requestedFile)) {
               // Dynamically resolve stale hash chunk requests across deploys/rebuilds
               const basename = path.basename(cleanUrl);
-              const prefix = basename.split('-')[0];
+              const chunkPrefix = basename.replace(/-[A-Za-z0-9_-]+\.js$/, '');
               const assetsDir = path.resolve(import.meta.dirname, 'dist', 'assets');
               if (fs.existsSync(assetsDir)) {
                 try {
                   const files = fs.readdirSync(assetsDir);
-                  const match = files.find(f => f.startsWith(prefix + '-') && f.endsWith('.js'));
+                  const match = files.find(f => f.startsWith(chunkPrefix + '-') && f.endsWith('.js'));
                   if (match) {
                     const content = fs.readFileSync(path.join(assetsDir, match));
                     res.setHeader('Content-Type', 'text/javascript');
@@ -97,9 +97,20 @@ export default defineConfig({
       },
       workbox: {
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,webp}'],
+        globPatterns: ['**/*.{css,html,ico,png,svg,woff2,webp}', 'assets/index-*.js', 'assets/vendor-*.js'],
         globIgnores: ['**/pdfGenerator*', '**/jspdf*', '**/html2canvas*'],
         runtimeCaching: [
+          {
+            urlPattern: /\/assets\/.*\.js$/i,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'app-chunks-cache',
+              expiration: {
+                maxEntries: 60,
+                maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+              },
+            },
+          },
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
             handler: 'CacheFirst',
