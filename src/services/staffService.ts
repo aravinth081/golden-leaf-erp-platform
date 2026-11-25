@@ -1463,6 +1463,21 @@ export async function authenticateStaffCredentials(
     }) || null;
   }
 
+  // Cross-reference with local storage to reflect any immediate local status updates (e.g. deactivation)
+  if (staff) {
+    const localProfiles = getStoredStaffProfiles();
+    const localMatch = localProfiles.find((p) =>
+      p.id === staff!.id || matchesIdentifier(p.username, p.fullName, p.email, p.employeeId, p.mobile)
+    );
+    if (localMatch) {
+      if (localMatch.deletedAt !== null) {
+        staff = null;
+      } else if (localMatch.status === 'inactive') {
+        staff.status = 'inactive';
+      }
+    }
+  }
+
   if (!staff) {
     throw new Error('401 Unauthorized: Invalid username or password.');
   }

@@ -58,7 +58,7 @@ export const AuthLayout: React.FC = () => {
     <main
       id="main-content"
       role="main"
-      className="fixed inset-0 sm:relative sm:inset-auto w-full h-[100dvh] max-h-[100dvh] sm:min-h-[100dvh] flex items-center justify-center bg-white sm:bg-gradient-to-br sm:from-[#ECE6DC] sm:via-[#F3EDE3] sm:to-[#E7E0D4] font-body selection:bg-[#D4A017]/20 selection:text-[#0A1628] p-0 sm:p-4 md:p-6 overflow-hidden sm:overflow-y-auto overscroll-none select-none sm:select-auto"
+      className="fixed inset-0 sm:relative sm:inset-auto w-full h-[100dvh] max-h-[100dvh] sm:min-h-[100dvh] flex items-center justify-center bg-white sm:bg-gradient-to-br sm:from-[#ECE6DC] sm:via-[#F3EDE3] sm:to-[#E7E0D4] font-body selection:bg-[#D4A017]/20 selection:text-[#0A1628] p-0 sm:p-4 md:p-6 overflow-hidden sm:overflow-y-auto overscroll-none select-auto"
     >
       {/* Card Container — Locked to 16:9 on laptops/desktops, clean responsive layout on mobile */}
       <motion.div
@@ -68,7 +68,7 @@ export const AuthLayout: React.FC = () => {
         className="login-card-ratio w-full h-full sm:h-auto sm:min-h-0 sm:w-[min(94vw,1160px,calc((100dvh-36px)*1.778))] sm:aspect-[16/9] sm:max-h-[calc(100dvh-24px)] bg-white sm:rounded-[32px] lg:rounded-[36px] sm:shadow-[0_25px_65px_-15px_rgba(15,23,42,0.14),0_0_0_1px_rgba(232,223,200,0.85)] sm:border sm:border-[#E8DFC8] flex flex-col sm:flex-row relative sm:my-auto max-sm:rounded-none max-sm:border-none max-sm:shadow-none max-sm:m-0 overflow-hidden"
       >
         {/* Left Panel (Strictly 50% width on laptops/computers) */}
-        <div className="hidden sm:flex sm:w-1/2 h-full bg-[#FAF8F5] relative overflow-hidden flex-col items-center justify-center p-6 lg:p-8 text-[#0B1F3A] border-r border-[#E8DFC8] z-10 select-none">
+        <div className="hidden sm:flex sm:w-1/2 h-full bg-[#FAF8F5] relative overflow-hidden flex-col items-center justify-center p-6 lg:p-8 text-[#0B1F3A] border-r border-[#E8DFC8] z-10 select-auto">
 
           {/* Sweeping Concentric Gold Ribbons — Top Left Corner */}
           <div className="absolute top-0 left-0 w-[45%] aspect-square pointer-events-none z-0">

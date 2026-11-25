@@ -448,7 +448,7 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="w-full max-w-[420px] sm:max-w-[390px] px-2 sm:px-0 flex flex-col items-center select-none py-0">
+    <div className="w-full max-w-[420px] sm:max-w-[390px] px-2 sm:px-0 flex flex-col items-center select-auto py-0">
       <AnimatePresence mode="wait">
         {/* VIEW 1: Standard Username & Password Login */}
         {authStep === 'CREDENTIALS' && (
