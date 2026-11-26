@@ -161,6 +161,51 @@ export const INITIAL_BRANCHES: DetailedBranch[] = [
     pendingLoansList: [],
     disbursedLoansList: [],
   },
+  {
+    id: 'BR-0462',
+    code: 'GL-BR-002',
+    name: 'GOBI MAIN BRANCH',
+    address: 'Perumal Kovil Street, Kugalur',
+    city: 'Gobichettipalayam',
+    state: 'Tamil Nadu',
+    pincode: '638313',
+    phone: '+91 4285 220000',
+    email: 'gobi@goldenleaf.finance',
+    manager: 'Branch Manager',
+    openingDate: '2023-01-01',
+    maxCapacity: 25,
+    status: 'Active',
+
+    totalEmployees: 0,
+    activeEmployees: 0,
+    presentEmployees: 0,
+    absentEmployees: 0,
+    attendancePercentage: 0,
+
+    totalCustomers: 0,
+    newCustomers: 0,
+    activeCustomers: 0,
+    pendingVerificationCustomers: 0,
+
+    totalLoanApplications: 0,
+    activeLoans: 0,
+    pendingLoans: 0,
+    approvedLoans: 0,
+    rejectedLoans: 0,
+
+    todayCollection: 0,
+    weeklyCollection: 0,
+    monthlyCollection: 0,
+    pendingCollection: 0,
+    totalCollectionAmount: 0,
+
+    monthlyTrend: [],
+    recentActivities: [],
+    attendanceRecords: [],
+    agentPerformance: [],
+    pendingLoansList: [],
+    disbursedLoansList: [],
+  },
 ];
 
 export const getStoredBranches = (): DetailedBranch[] => {
@@ -174,10 +219,33 @@ export const getStoredBranches = (): DetailedBranch[] => {
           // Automatically purge legacy mock seed branches (BR-02, BR-03, BR-04, BR-05) and invalid items
           const parsed = parsedRaw.filter((b): b is DetailedBranch => Boolean(b && typeof b === 'object'));
           const cleaned = parsed.filter((b) => !LEGACY_MOCK_BRANCH_IDS.has(b.id));
-          const activeList = cleaned.length > 0 ? cleaned : INITIAL_BRANCHES;
-          if (cleaned.length !== parsed.length) {
-            storage.setItem(STORAGE_KEY, JSON.stringify(activeList));
+
+          // Merge INITIAL_BRANCHES so mandatory real branches (BR-01, GOBI MAIN BRANCH) are always present
+          const combined = [...cleaned];
+          for (const initB of INITIAL_BRANCHES) {
+            const exists = combined.some(
+              (x) =>
+                (x.code && x.code.trim().toUpperCase() === initB.code.trim().toUpperCase()) ||
+                (x.name && x.name.trim().toLowerCase() === initB.name.trim().toLowerCase())
+            );
+            if (!exists) {
+              combined.push(initB);
+            }
           }
+
+          // Deduplicate by normalized code (or id/name)
+          const seen = new Set<string>();
+          const deduped: DetailedBranch[] = [];
+          for (const b of combined) {
+            const key = (b.code || b.id || b.name || '').trim().toUpperCase();
+            if (!key || !seen.has(key)) {
+              if (key) seen.add(key);
+              deduped.push(b);
+            }
+          }
+
+          const activeList = deduped.length > 0 ? deduped : INITIAL_BRANCHES;
+          storage.setItem(STORAGE_KEY, JSON.stringify(activeList));
           return activeList.map((b) => ({
             ...b,
             id: b.id || 'BR-01',
@@ -224,10 +292,35 @@ export const fetchBranchesFromSupabase = async (): Promise<DetailedBranch[]> => 
           .map((r: any) => r.data)
           .filter((b: any) => Boolean(b && typeof b === 'object'));
         if (cloudBranches.length > 0) {
+          const combined = [...cloudBranches];
+          for (const initB of INITIAL_BRANCHES) {
+            const exists = combined.some(
+              (x) =>
+                (x.code && x.code.trim().toUpperCase() === initB.code.trim().toUpperCase()) ||
+                (x.name && x.name.trim().toLowerCase() === initB.name.trim().toLowerCase())
+            );
+            if (!exists) {
+              combined.push(initB);
+            }
+          }
+          const seen = new Set<string>();
+          const deduped: DetailedBranch[] = [];
+          for (const b of combined) {
+            const key = (b.code || b.id || b.name || '').trim().toUpperCase();
+            if (!key || !seen.has(key)) {
+              if (key) seen.add(key);
+              deduped.push(b);
+            }
+          }
+
           try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(cloudBranches));
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(deduped));
           } catch {}
-          return getStoredBranches();
+          const finalBranches = getStoredBranches();
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('glf-branches-updated', { detail: finalBranches }));
+          }
+          return finalBranches;
         }
       } else if (!error && Array.isArray(rows) && rows.length === 0) {
         // Seed initial branches to Supabase
@@ -246,7 +339,11 @@ export const fetchBranchesFromSupabase = async (): Promise<DetailedBranch[]> => 
       console.warn('[Supabase] Failed to fetch branches from cloud:', e);
     }
   }
-  return getStoredBranches();
+  const fallback = getStoredBranches();
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('glf-branches-updated', { detail: fallback }));
+  }
+  return fallback;
 };
 
 export const saveStoredBranches = (branches: DetailedBranch[]): void => {
@@ -256,6 +353,9 @@ export const saveStoredBranches = (branches: DetailedBranch[]): void => {
     console.error('Failed to save branches to localStorage:', e);
   }
   invalidateQueryCache('branches:all');
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('glf-branches-updated', { detail: branches }));
+  }
 
   if (isSupabaseConfigured() && supabase) {
     try {

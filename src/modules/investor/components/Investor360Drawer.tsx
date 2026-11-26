@@ -3,16 +3,19 @@
 // Detailed Account View with 4 Operational Tabs (Section 7A)
 // ──────────────────────────────────────────────────
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X, PieChart, FileText, Landmark, ShieldAlert,
   Download, Printer, CheckCircle, Clock,
-  Smartphone, Bell, AlertCircle, ArrowUpRight, Lock, Award
+  Smartphone, Bell, AlertCircle, ArrowUpRight, Lock, Award,
+  Building2, Loader2
 } from 'lucide-react';
 import type { Investor } from '../../../types/investor.types';
 import type { FixedDeposit } from '../../../types/fd.types';
 import { formatINR } from '../../../utils/fdCalculations';
 import { StatusBadge } from '../../../components/ui/Badge';
+import { updateInvestor } from '../../../services/investorService';
+import { getStoredBranches, fetchBranchesFromSupabase, type DetailedBranch } from '../../../services/branchService';
 
 interface Investor360DrawerProps {
   investor: Investor;
@@ -20,6 +23,7 @@ interface Investor360DrawerProps {
   onClose: () => void;
   onViewBond?: (fd: FixedDeposit) => void;
   onViewInvestorBond?: (investor: Investor) => void;
+  onUpdateInvestor?: (investor: Investor) => void;
 }
 
 export const Investor360Drawer: React.FC<Investor360DrawerProps> = ({
@@ -28,12 +32,65 @@ export const Investor360Drawer: React.FC<Investor360DrawerProps> = ({
   onClose,
   onViewBond,
   onViewInvestorBond,
+  onUpdateInvestor,
 }) => {
+  const [currentInvestor, setCurrentInvestor] = useState<Investor>(investor);
   const [activeTab, setActiveTab] = useState<'summary' | 'bonds' | 'ledger' | 'tax'>('summary');
   const [notificationSent, setNotificationSent] = useState<string | null>(null);
 
+  // Branch Editing State
+  const [availableBranches, setAvailableBranches] = useState<DetailedBranch[]>(() => {
+    try {
+      return getStoredBranches();
+    } catch {
+      return [];
+    }
+  });
+  const [isEditingBranch, setIsEditingBranch] = useState(false);
+  const [selectedBranchId, setSelectedBranchId] = useState(investor.branchId || 'BR-01');
+  const [savingBranch, setSavingBranch] = useState(false);
+
+  useEffect(() => {
+    setCurrentInvestor(investor);
+    setSelectedBranchId(investor.branchId || 'BR-01');
+  }, [investor]);
+
+  useEffect(() => {
+    fetchBranchesFromSupabase().then((b) => {
+      if (b && b.length > 0) setAvailableBranches(b);
+    }).catch(() => {});
+
+    const handleBranchUpdate = (e: any) => {
+      if (e.detail && Array.isArray(e.detail)) setAvailableBranches(e.detail);
+      else setAvailableBranches(getStoredBranches());
+    };
+    window.addEventListener('glf-branches-updated', handleBranchUpdate);
+    return () => window.removeEventListener('glf-branches-updated', handleBranchUpdate);
+  }, []);
+
+  const handleSaveBranchChange = async () => {
+    const branch = availableBranches.find((b) => b.id === selectedBranchId) || availableBranches[0];
+    if (!branch) return;
+    try {
+      setSavingBranch(true);
+      const updated = await updateInvestor(currentInvestor.id, {
+        branchId: branch.id,
+        branchName: branch.name,
+      });
+      setCurrentInvestor(updated);
+      setIsEditingBranch(false);
+      onUpdateInvestor?.(updated);
+      window.dispatchEvent(new CustomEvent('glf_investor_updated', { detail: updated }));
+    } catch (err) {
+      console.error('Failed to change investor branch:', err);
+      alert('Failed to update branch. Please try again.');
+    } finally {
+      setSavingBranch(false);
+    }
+  };
+
   const activeFDs = fds.filter((f) => f.status === 'Active' || f.status === 'Lien Marked' || f.status === 'Maturing Soon');
-  const totalPrincipal = activeFDs.reduce((sum, f) => sum + f.principal, 0) || investor.totalPrincipal || investor.investmentAmount || 0;
+  const totalPrincipal = activeFDs.reduce((sum, f) => sum + f.principal, 0) || currentInvestor.totalPrincipal || currentInvestor.investmentAmount || 0;
 
   // Compute weighted average rate
   const weightedRate =
@@ -154,11 +211,15 @@ Authorized Signatory: Golden Leaf Finance Corporate Audit Cell
                   </span>
                 </div>
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-xs text-white/80">
-                  <span className="font-medium">{investor.category}</span>
+                  <span className="font-medium">{currentInvestor.category}</span>
                   <span>·</span>
-                  <span>{investor.primaryMobile}</span>
+                  <span>{currentInvestor.primaryMobile}</span>
                   <span>·</span>
-                  <span>PAN: <strong className="font-mono text-[#D4AF37]">{investor.pan}</strong></span>
+                  <span>PAN: <strong className="font-mono text-[#D4AF37]">{currentInvestor.pan}</strong></span>
+                  <span>·</span>
+                  <span className="inline-flex items-center gap-1 font-semibold text-[#FDE68A]">
+                    <Building2 size={12} /> {currentInvestor.branchName || 'Main Branch - Anna Nagar'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -287,6 +348,77 @@ Authorized Signatory: Golden Leaf Finance Corporate Audit Cell
                     {hasActiveLien ? 'Hard-Locked against closure' : 'Eligible for 75-90% LAFD'}
                   </p>
                 </div>
+              </div>
+
+              {/* Assigned Branch / Head Office Mapping & Change Action */}
+              <div className="bg-white rounded-2xl border border-[#E2E8F0] p-4 shadow-sm">
+                <div className="flex items-center justify-between mb-3 pb-2 border-b border-[#F1F5F9]">
+                  <h3 className="font-display font-bold text-sm text-[#0B1F3A] flex items-center gap-2">
+                    <Building2 size={16} className="text-[#D4AF37]" />
+                    Assigned Golden Leaf Branch
+                  </h3>
+                  {!isEditingBranch ? (
+                    <button
+                      onClick={() => setIsEditingBranch(true)}
+                      className="px-2.5 py-1 rounded-lg bg-[#FAF7F0] hover:bg-[#F3E8C8] text-[#8C6808] border border-[#D4AF37]/40 text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      Change Branch
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={handleSaveBranchChange}
+                        disabled={savingBranch}
+                        className="px-2.5 py-1 rounded-lg bg-[#059669] hover:bg-[#047857] text-white text-xs font-bold transition-colors cursor-pointer flex items-center gap-1 disabled:opacity-50"
+                      >
+                        {savingBranch ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle size={12} />}
+                        Save
+                      </button>
+                      <button
+                        onClick={() => {
+                          setIsEditingBranch(false);
+                          setSelectedBranchId(currentInvestor.branchId || availableBranches[0]?.id || 'BR-01');
+                        }}
+                        className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-medium cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {!isEditingBranch ? (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-bold text-[#0B1F3A]">
+                        {currentInvestor.branchName || 'Main Branch - Anna Nagar'}
+                      </p>
+                      <p className="text-xs text-[#64748B] mt-0.5">
+                        Branch Tag / Code: <span className="font-mono font-semibold text-[#0B1F3A]">{currentInvestor.branchId || 'BR-01'}</span>
+                      </p>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-[#EFF6FF] text-[#1E40AF] border border-[#BFDBFE]">
+                      Active Mapping
+                    </span>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <label className="block text-xs font-bold text-[#475569] uppercase tracking-wider">
+                      Select New Branch Mapping:
+                    </label>
+                    <select
+                      value={selectedBranchId}
+                      onChange={(e) => setSelectedBranchId(e.target.value)}
+                      className="w-full px-3 py-2.5 rounded-xl border border-[#D4AF37] text-xs font-bold text-[#0B1F3A] bg-white outline-none cursor-pointer"
+                    >
+                      {availableBranches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name} ({b.code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
 
               {/* Registered Bank Account Info */}

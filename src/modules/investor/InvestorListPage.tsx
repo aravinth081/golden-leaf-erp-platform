@@ -6,12 +6,13 @@
 import React, { useState, useEffect } from 'react';
 import {
   Users, Plus, Search, Filter, Download, Eye,
-  ShieldCheck, ShieldAlert, DollarSign, TrendingUp, AlertCircle, Award
+  ShieldCheck, ShieldAlert, DollarSign, TrendingUp, AlertCircle, Award, Building2
 } from 'lucide-react';
 import type { Investor, InvestorCategory } from '../../types/investor.types';
 import type { FixedDeposit } from '../../types/fd.types';
 import { getInvestors, getLocalInvestors, getInvestorMetrics } from '../../services/investorService';
 import { getFixedDeposits, getLocalFDs } from '../../services/fdService';
+import { getStoredBranches, fetchBranchesFromSupabase, type DetailedBranch } from '../../services/branchService';
 import { formatINR } from '../../utils/fdCalculations';
 import { Investor360Drawer } from './components/Investor360Drawer';
 import { InvestorRegistrationModal } from './components/InvestorRegistrationModal';
@@ -37,6 +38,14 @@ export const InvestorListPage: React.FC = () => {
   });
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [branchFilter, setBranchFilter] = useState<string>('all');
+  const [branches, setBranches] = useState<DetailedBranch[]>(() => {
+    try {
+      return getStoredBranches();
+    } catch {
+      return [];
+    }
+  });
   const [loading, setLoading] = useState(false);
 
   // Modals & Drawers state
@@ -65,13 +74,23 @@ export const InvestorListPage: React.FC = () => {
 
   useEffect(() => {
     loadData(true);
+    fetchBranchesFromSupabase().then((b) => {
+      if (b && b.length > 0) setBranches(b);
+    }).catch(() => {});
+
     const handleSync = () => loadData(true);
+    const handleBranches = (e: any) => {
+      if (e.detail && Array.isArray(e.detail)) setBranches(e.detail);
+      else setBranches(getStoredBranches());
+    };
     window.addEventListener('glf_fd_updated', handleSync);
     window.addEventListener('glf_investor_updated', handleSync);
+    window.addEventListener('glf-branches-updated', handleBranches);
     window.addEventListener('storage', handleSync);
     return () => {
       window.removeEventListener('glf_fd_updated', handleSync);
       window.removeEventListener('glf_investor_updated', handleSync);
+      window.removeEventListener('glf-branches-updated', handleBranches);
       window.removeEventListener('storage', handleSync);
     };
   }, []);
@@ -137,7 +156,13 @@ export const InvestorListPage: React.FC = () => {
       inv.investorId.toLowerCase().includes(q);
 
     const matchesCategory = categoryFilter === 'all' || inv.category === categoryFilter;
-    return matchesSearch && matchesCategory;
+    const matchesBranch =
+      branchFilter === 'all' ||
+      inv.branchId === branchFilter ||
+      inv.branchName === branchFilter ||
+      branches.find((b) => b.id === branchFilter)?.name === inv.branchName;
+
+    return matchesSearch && matchesCategory && matchesBranch;
   });
 
   const totalCapitalAll = investors.reduce((s, i) => s + getInvestorStats(i).principal, 0);
@@ -316,12 +341,25 @@ export const InvestorListPage: React.FC = () => {
           />
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Filter size={15} className="text-[#64748B]" />
+          <select
+            value={branchFilter}
+            onChange={(e) => setBranchFilter(e.target.value)}
+            className="px-3 py-2 rounded-xl border border-[#CBD5E1] text-xs font-semibold text-[#0B1F3A] bg-white outline-none cursor-pointer"
+          >
+            <option value="all">All Branches ({branches.length})</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name} ({b.code})
+              </option>
+            ))}
+          </select>
+
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="px-3 py-2 rounded-xl border border-[#CBD5E1] text-xs font-semibold text-[#0B1F3A] bg-white outline-none"
+            className="px-3 py-2 rounded-xl border border-[#CBD5E1] text-xs font-semibold text-[#0B1F3A] bg-white outline-none cursor-pointer"
           >
             <option value="all">All Categories ({investors.length})</option>
             <option value="Individual">Individual</option>
@@ -518,6 +556,10 @@ export const InvestorListPage: React.FC = () => {
           onClose={() => setSelectedInvestor(null)}
           onViewBond={(fd) => setViewingBondFD(fd)}
           onViewInvestorBond={(inv) => setViewingInvestorBond(inv)}
+          onUpdateInvestor={(updated) => {
+            setSelectedInvestor(updated);
+            setInvestors((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
+          }}
         />
       )}
 

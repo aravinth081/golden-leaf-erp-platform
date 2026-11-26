@@ -3,7 +3,7 @@
 // Strict Admin-Only 4-Section Form (Section 3 of Functional Spec)
 // ──────────────────────────────────────────────────
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X, User, MapPin, ShieldCheck, Landmark, CheckCircle,
   Upload, ArrowRight, ArrowLeft, Loader2, Coins, TrendingUp,
@@ -12,7 +12,7 @@ import {
 import type { Investor, InvestorCategory, TaxDeclaration, InvestorDocuments } from '../../../types/investor.types';
 import { calculateAge, isSeniorCitizen, numberToWords } from '../../../utils/fdCalculations';
 import { createInvestor } from '../../../services/investorService';
-import { getStoredBranches } from '../../../services/branchService';
+import { getStoredBranches, fetchBranchesFromSupabase } from '../../../services/branchService';
 import { uploadImage } from '../../../services/cloudinary';
 import { DobInput } from '../../../components/ui';
 
@@ -32,10 +32,8 @@ const CATEGORIES: InvestorCategory[] = [
 ];
 
 const FALLBACK_BRANCHES = [
-  { id: 'BR-01', name: 'Chennai Main Branch', code: 'GL-BR-001' },
-  { id: 'BR-02', name: 'Madurai Central Branch', code: 'GL-BR-002' },
-  { id: 'BR-03', name: 'Coimbatore South Branch', code: 'GL-BR-003' },
-  { id: 'BR-04', name: 'Tiruchirappalli Junction Branch', code: 'GL-BR-004' },
+  { id: 'BR-01', name: 'Main Branch - Anna Nagar', code: 'GL-BR-001' },
+  { id: 'BR-0462', name: 'GOBI MAIN BRANCH', code: 'GL-BR-002' },
 ];
 
 const VAULT_DOCS: { key: keyof InvestorDocuments; name: string }[] = [
@@ -50,7 +48,7 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
   onClose,
   onSuccess,
 }) => {
-  const branches = React.useMemo(() => {
+  const [branches, setBranches] = useState<Array<{ id: string; name: string; code: string }>>(() => {
     try {
       const stored = getStoredBranches();
       if (stored && stored.length > 0) {
@@ -60,7 +58,7 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
       console.warn('Failed to load branches for investor registration', e);
     }
     return FALLBACK_BRANCHES;
-  }, []);
+  });
 
   const [activeStep, setActiveStep] = useState<1 | 2 | 3 | 4 | 5>(1);
   const [loading, setLoading] = useState(false);
@@ -82,7 +80,46 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
   const [district, setDistrict] = useState('');
   const [state, setState] = useState('Tamil Nadu');
   const [pinCode, setPinCode] = useState('');
-  const [selectedBranchId, setSelectedBranchId] = useState(branches[0]?.id || 'BR-01');
+  const [selectedBranchId, setSelectedBranchId] = useState<string>(() => {
+    try {
+      const stored = getStoredBranches();
+      return stored[0]?.id || 'BR-01';
+    } catch {
+      return 'BR-01';
+    }
+  });
+
+  // Reactive subscription and fetch for branches from Supabase / localStorage
+  useEffect(() => {
+    const refreshBranches = () => {
+      const stored = getStoredBranches();
+      if (stored && stored.length > 0) {
+        setBranches(stored.map((b) => ({ id: b.id, name: b.name, code: b.code })));
+      }
+    };
+    refreshBranches();
+
+    fetchBranchesFromSupabase()
+      .then((latest) => {
+        if (latest && latest.length > 0) {
+          setBranches(latest.map((b) => ({ id: b.id, name: b.name, code: b.code })));
+        }
+      })
+      .catch((err) => console.warn('Failed to fetch branches in modal:', err));
+
+    const handleUpdate = (e: any) => {
+      if (e.detail && Array.isArray(e.detail) && e.detail.length > 0) {
+        setBranches(e.detail.map((b: any) => ({ id: b.id, name: b.name, code: b.code })));
+      } else {
+        refreshBranches();
+      }
+    };
+
+    window.addEventListener('glf-branches-updated', handleUpdate);
+    return () => {
+      window.removeEventListener('glf-branches-updated', handleUpdate);
+    };
+  }, []);
 
   // 03 Mandatory KYC & Tax
   const [pan, setPan] = useState('');
