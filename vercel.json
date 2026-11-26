@@ -5,7 +5,7 @@
   "outputDirectory": "dist",
   "cleanUrls": true,
   "trailingSlash": false,
-  "regions": ["bom1", "sin1"],
+  "regions": ["bom1"],
   "headers": [
     {
       "source": "/(.*)",
