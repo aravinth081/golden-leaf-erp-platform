@@ -144,7 +144,6 @@ export const LoginPage: React.FC = () => {
   const [otpError, setOtpError] = useState<string>('');
   const [isVerifyingOtp, setIsVerifyingOtp] = useState<boolean>(false);
   const [copiedSecret, setCopiedSecret] = useState<boolean>(false);
-  const [showQrInVerify, setShowQrInVerify] = useState<boolean>(false);
 
   // Staff Credentials Form State
   const [staffUsername, setStaffUsername] = useState('');
@@ -355,10 +354,9 @@ export const LoginPage: React.FC = () => {
       setQrCodeUrl(qrDataUrl);
       setOtpCode('');
       setOtpError('');
-      setShowQrInVerify(false);
 
       if (isMfaEnabled && existingSecret) {
-        // Enrolled: Proceed to enter 6-digit TOTP (with quick scan option for any phone)
+        // Enrolled: Proceed to enter 6-digit TOTP
         setAuthStep('MFA_VERIFY');
       } else {
         // First-time enrollment: Display QR code & require setup OTP confirmation
@@ -567,7 +565,6 @@ export const LoginPage: React.FC = () => {
     setQrCodeUrl('');
     setOtpCode('');
     setOtpError('');
-    setShowQrInVerify(false);
   };
 
   return (
@@ -870,48 +867,6 @@ export const LoginPage: React.FC = () => {
                 Enter code from Google Authenticator on your registered phone.
               </p>
             </div>
-
-            {/* Quick QR code viewer for users on a new device or phone */}
-            {showQrInVerify && qrCodeUrl && (
-              <div className="w-full p-2.5 bg-white rounded-2xl border-2 border-[#D4AF37]/40 shadow-sm flex flex-col items-center mb-2.5">
-                <img
-                  src={qrCodeUrl}
-                  alt="Google Authenticator QR Code"
-                  className="w-36 h-36 sm:w-40 sm:h-40 rounded-xl object-contain"
-                />
-                <p className="text-[11px] text-[#0B1F3A] font-bold mt-1 text-center">
-                  Scan this QR code with Google Authenticator on your phone.
-                </p>
-                {pendingSecret && (
-                  <div className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 mt-1.5 flex items-center justify-between gap-2">
-                    <span className="text-[10px] font-mono font-bold text-[#0B1F3A] truncate select-all">
-                      {pendingSecret}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        navigator.clipboard.writeText(pendingSecret);
-                        setCopiedSecret(true);
-                        setTimeout(() => setCopiedSecret(false), 2000);
-                      }}
-                      className="p-1 rounded text-slate-500 hover:text-[#0B1F3A] transition cursor-pointer"
-                      title="Copy setup key"
-                    >
-                      {copiedSecret ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <button
-              type="button"
-              onClick={() => setShowQrInVerify((prev) => !prev)}
-              className="mb-2 text-[11px] font-bold text-[#B8860B] hover:text-[#0B1F3A] flex items-center gap-1.5 transition underline decoration-dotted cursor-pointer"
-            >
-              <QrCode size={13} />
-              {showQrInVerify ? 'Hide QR Code' : 'Scan QR Code on Google Authenticator / New Phone'}
-            </button>
 
             {/* Verification Form */}
             <form onSubmit={handleVerifyLoginOtp} className="w-full space-y-4 pb-8 sm:pb-0">
