@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import type { Investor, InvestorCategory } from '../../types/investor.types';
 import type { FixedDeposit } from '../../types/fd.types';
-import { getInvestors, getLocalInvestors, getInvestorMetrics } from '../../services/investorService';
+import { getInvestors, getLocalInvestors, getInvestorMetrics, updateInvestor } from '../../services/investorService';
 import { getFixedDeposits, getLocalFDs } from '../../services/fdService';
 import { getStoredBranches, fetchBranchesFromSupabase, type DetailedBranch } from '../../services/branchService';
 import { formatINR } from '../../utils/fdCalculations';
@@ -41,7 +41,19 @@ export const InvestorListPage: React.FC = () => {
   const [branchFilter, setBranchFilter] = useState<string>('all');
   const [branches, setBranches] = useState<DetailedBranch[]>(() => {
     try {
-      return getStoredBranches();
+      const stored = getStoredBranches();
+      const list = [...stored];
+      const fallbackGobi = {
+        id: 'BR-6805',
+        code: 'GL-BR-002',
+        name: 'GOBI MAIN BRANCH',
+        city: 'Gobichettipalayam',
+        status: 'Active',
+      } as DetailedBranch;
+      if (!list.some((b) => b.code === 'GL-BR-002' || b.name?.toLowerCase().includes('gobi') || b.id === 'BR-6805')) {
+        list.push(fallbackGobi);
+      }
+      return list;
     } catch {
       return [];
     }
@@ -99,6 +111,21 @@ export const InvestorListPage: React.FC = () => {
       window.removeEventListener('storage', handleStorageEvent);
     };
   }, []);
+
+  const handleInlineBranchChange = async (investorId: string, newBranchId: string) => {
+    const branch = branches.find((b) => b.id === newBranchId) || branches[0];
+    if (!branch) return;
+    try {
+      const updated = await updateInvestor(investorId, {
+        branchId: branch.id,
+        branchName: branch.name,
+      });
+      setInvestors((prev) => prev.map((i) => (i.id === investorId ? updated : i)));
+      window.dispatchEvent(new CustomEvent('glf_investor_updated', { detail: updated }));
+    } catch (err) {
+      console.error('Failed to change investor branch inline:', err);
+    }
+  };
 
   // Helper to dynamically resolve capital metrics per investor
   const getInvestorStats = (inv: Investor) => {
@@ -418,7 +445,28 @@ export const InvestorListPage: React.FC = () => {
                         <div className="font-display font-bold text-[#0B1F3A] text-xs group-hover:text-[#D4AF37] transition-colors">
                           {inv.fullName}
                         </div>
-                        <div className="text-[10px] text-[#64748B] mt-0.5">{inv.branchName}</div>
+                        <div className="mt-1 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                          <select
+                            value={
+                              branches.find(
+                                (b) =>
+                                  b.id === inv.branchId ||
+                                  (b.code && b.code.toUpperCase() === inv.branchId?.toUpperCase()) ||
+                                  (b.name && b.name.toLowerCase() === (inv.branchName || '').toLowerCase()) ||
+                                  (b.id === 'BR-6805' && inv.branchId === 'BR-0462')
+                              )?.id || branches[0]?.id || 'BR-01'
+                            }
+                            onChange={(e) => handleInlineBranchChange(inv.id, e.target.value)}
+                            className="text-[10px] font-bold text-[#0B1F3A] bg-[#FAF7F0] hover:bg-[#F5EEDB] border border-[#D4AF37]/50 hover:border-[#D4AF37] rounded-lg px-2 py-0.5 outline-none cursor-pointer transition-colors shadow-xs"
+                            title="Click to change investor assigned branch"
+                          >
+                            {branches.map((b) => (
+                              <option key={b.id} value={b.id}>
+                                {b.name} ({b.code})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                       </td>
 
                       {/* Category */}

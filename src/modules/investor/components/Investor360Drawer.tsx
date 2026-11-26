@@ -41,7 +41,19 @@ export const Investor360Drawer: React.FC<Investor360DrawerProps> = ({
   // Branch Editing State
   const [availableBranches, setAvailableBranches] = useState<DetailedBranch[]>(() => {
     try {
-      return getStoredBranches();
+      const stored = getStoredBranches();
+      const list = [...stored];
+      const fallbackGobi = {
+        id: 'BR-6805',
+        code: 'GL-BR-002',
+        name: 'GOBI MAIN BRANCH',
+        city: 'Gobichettipalayam',
+        status: 'Active',
+      } as DetailedBranch;
+      if (!list.some((b) => b.code === 'GL-BR-002' || b.name?.toLowerCase().includes('gobi') || b.id === 'BR-6805')) {
+        list.push(fallbackGobi);
+      }
+      return list;
     } catch {
       return [];
     }
@@ -69,7 +81,15 @@ export const Investor360Drawer: React.FC<Investor360DrawerProps> = ({
   }, []);
 
   const handleSaveBranchChange = async () => {
-    const branch = availableBranches.find((b) => b.id === selectedBranchId) || availableBranches[0];
+    const branch =
+      availableBranches.find(
+        (b) =>
+          b.id === selectedBranchId ||
+          (b.code && b.code.toUpperCase() === selectedBranchId?.toUpperCase()) ||
+          (b.name && b.name.toLowerCase() === selectedBranchId?.toLowerCase()) ||
+          (b.id === 'BR-6805' && selectedBranchId === 'BR-0462') ||
+          (b.id === 'BR-0462' && selectedBranchId === 'BR-6805')
+      ) || availableBranches[0];
     if (!branch) return;
     try {
       setSavingBranch(true);

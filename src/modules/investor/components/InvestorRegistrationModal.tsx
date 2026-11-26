@@ -32,8 +32,8 @@ const CATEGORIES: InvestorCategory[] = [
 ];
 
 const FALLBACK_BRANCHES = [
-  { id: 'BR-01', name: 'Main Branch - Anna Nagar', code: 'GL-BR-001' },
-  { id: 'BR-0462', name: 'GOBI MAIN BRANCH', code: 'GL-BR-002' },
+  { id: 'BR-01', name: 'Main Branch - Anna Nagar', code: 'GL-BR-001', city: 'Chennai' },
+  { id: 'BR-6805', name: 'GOBI MAIN BRANCH', code: 'GL-BR-002', city: 'Gobichettipalayam' },
 ];
 
 const VAULT_DOCS: { key: keyof InvestorDocuments; name: string }[] = [
@@ -98,11 +98,17 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
 }) => {
   const initialDraft = React.useMemo(() => loadDraft(), []);
 
-  const [branches, setBranches] = useState<Array<{ id: string; name: string; code: string }>>(() => {
+  const [branches, setBranches] = useState<Array<{ id: string; name: string; code: string; city?: string }>>(() => {
     try {
       const stored = getStoredBranches();
       if (stored && stored.length > 0) {
-        return stored.map((b) => ({ id: b.id, name: b.name, code: b.code }));
+        const merged = [...stored];
+        for (const fb of FALLBACK_BRANCHES) {
+          if (!merged.some((m) => m.code?.toUpperCase() === fb.code || m.id === fb.id || m.name?.toLowerCase().includes('gobi'))) {
+            merged.push(fb as any);
+          }
+        }
+        return merged.map((b) => ({ id: b.id, name: b.name, code: b.code, city: b.city }));
       }
     } catch (e) {
       console.warn('Failed to load branches for investor registration', e);
@@ -146,7 +152,13 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
     const refreshBranches = () => {
       const stored = getStoredBranches();
       if (stored && stored.length > 0) {
-        setBranches(stored.map((b) => ({ id: b.id, name: b.name, code: b.code })));
+        const merged = [...stored];
+        for (const fb of FALLBACK_BRANCHES) {
+          if (!merged.some((m) => m.code?.toUpperCase() === fb.code || m.id === fb.id || m.name?.toLowerCase().includes('gobi'))) {
+            merged.push(fb as any);
+          }
+        }
+        setBranches(merged.map((b) => ({ id: b.id, name: b.name, code: b.code, city: b.city })));
       }
     };
     refreshBranches();
@@ -154,14 +166,26 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
     fetchBranchesFromSupabase()
       .then((latest) => {
         if (latest && latest.length > 0) {
-          setBranches(latest.map((b) => ({ id: b.id, name: b.name, code: b.code })));
+          const merged = [...latest];
+          for (const fb of FALLBACK_BRANCHES) {
+            if (!merged.some((m) => m.code?.toUpperCase() === fb.code || m.id === fb.id || m.name?.toLowerCase().includes('gobi'))) {
+              merged.push(fb as any);
+            }
+          }
+          setBranches(merged.map((b) => ({ id: b.id, name: b.name, code: b.code, city: b.city })));
         }
       })
       .catch((err) => console.warn('Failed to fetch branches in modal:', err));
 
     const handleUpdate = (e: any) => {
       if (e.detail && Array.isArray(e.detail) && e.detail.length > 0) {
-        setBranches(e.detail.map((b: any) => ({ id: b.id, name: b.name, code: b.code })));
+        const merged = [...e.detail];
+        for (const fb of FALLBACK_BRANCHES) {
+          if (!merged.some((m) => m.code?.toUpperCase() === fb.code || m.id === fb.id || m.name?.toLowerCase().includes('gobi'))) {
+            merged.push(fb as any);
+          }
+        }
+        setBranches(merged.map((b: any) => ({ id: b.id, name: b.name, code: b.code, city: b.city })));
       } else {
         refreshBranches();
       }
@@ -172,6 +196,22 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
       window.removeEventListener('glf-branches-updated', handleUpdate);
     };
   }, []);
+
+  // Auto-detect branch based on Town / District / Pincode
+  useEffect(() => {
+    const text = `${town} ${district} ${pinCode}`.toLowerCase();
+    if (text.includes('gobi') || text.includes('erode') || pinCode.startsWith('638')) {
+      const gobiBranch = branches.find((b) => b.name.toLowerCase().includes('gobi') || b.code === 'GL-BR-002');
+      if (gobiBranch && selectedBranchId !== gobiBranch.id) {
+        setSelectedBranchId(gobiBranch.id);
+      }
+    } else if (text.includes('chennai') || pinCode.startsWith('600')) {
+      const chennaiBranch = branches.find((b) => b.name.toLowerCase().includes('anna') || b.code === 'GL-BR-001');
+      if (chennaiBranch && selectedBranchId !== chennaiBranch.id) {
+        setSelectedBranchId(chennaiBranch.id);
+      }
+    }
+  }, [town, district, pinCode, branches]);
 
   // 03 Mandatory KYC & Tax
   const [pan, setPan] = useState(initialDraft.pan || '');
@@ -408,7 +448,14 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
 
     try {
       setLoading(true);
-      const branchObj = branches.find((b) => b.id === selectedBranchId) || branches[0];
+      const branchObj =
+        branches.find(
+          (b) =>
+            b.id === selectedBranchId ||
+            (b.code && b.code.toUpperCase() === selectedBranchId?.toUpperCase()) ||
+            (b.id === 'BR-6805' && selectedBranchId === 'BR-0462') ||
+            (b.id === 'BR-0462' && selectedBranchId === 'BR-6805')
+        ) || branches[0] || { id: 'BR-01', name: 'Main Branch - Anna Nagar', code: 'GL-BR-001' };
 
       const created = await createInvestor({
         category: isSenior ? 'Senior Citizen' : category,
@@ -866,18 +913,69 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-[#475569] mb-1 uppercase tracking-wider">
-                  Assigned Branch / Head Office Mapping Tag <span className="text-red-500">*</span>
-                </label>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-[#475569] uppercase tracking-wider">
+                    Assigned Branch / Head Office Mapping Tag <span className="text-red-500">*</span>
+                  </label>
+                  <span className="text-[10px] font-bold text-[#8C6808] bg-[#FAF7F0] px-2 py-0.5 rounded border border-[#D4AF37]/30">
+                    {branches.length} Branches Available
+                  </span>
+                </div>
+
+                {/* 1-Click Interactive Branch Selection Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {branches.map((b) => {
+                    const isSelected =
+                      selectedBranchId === b.id ||
+                      (b.code && selectedBranchId === b.code) ||
+                      (b.id === 'BR-6805' && selectedBranchId === 'BR-0462');
+                    return (
+                      <div
+                        key={b.id}
+                        onClick={() => setSelectedBranchId(b.id)}
+                        className={`p-3 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between select-none ${
+                          isSelected
+                            ? 'border-[#D4AF37] bg-[#FAF7F0] shadow-sm'
+                            : 'border-[#E2E8F0] hover:border-[#CBD5E1] bg-white'
+                        }`}
+                      >
+                        <div className="min-w-0 pr-2">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-display font-bold text-xs text-[#0B1F3A]">
+                              {b.name}
+                            </span>
+                            <span className="text-[10px] font-mono font-bold bg-[#0B1F3A]/5 text-[#0B1F3A] px-1.5 py-0.5 rounded">
+                              {b.code}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-[#64748B] mt-0.5 truncate">
+                            {b.city || (b.code === 'GL-BR-001' ? 'Chennai' : 'Gobichettipalayam, Erode')}
+                          </p>
+                        </div>
+                        <div
+                          className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 border ${
+                            isSelected
+                              ? 'bg-[#D4AF37] border-[#D4AF37] text-white'
+                              : 'border-[#CBD5E1] bg-white'
+                          }`}
+                        >
+                          {isSelected && <CheckCircle size={13} className="text-white" />}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Standard Select Dropdown */}
                 <select
                   value={selectedBranchId}
                   onChange={(e) => setSelectedBranchId(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl border border-[#CBD5E1] text-xs font-semibold text-[#0B1F3A] bg-white outline-none"
+                  className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] text-xs font-semibold text-[#0B1F3A] bg-white outline-none cursor-pointer mt-1"
                 >
                   {branches.map((b) => (
                     <option key={b.id} value={b.id}>
-                      {b.name} ({b.code})
+                      {b.name} ({b.code}) {b.city ? `— ${b.city}` : ''}
                     </option>
                   ))}
                 </select>

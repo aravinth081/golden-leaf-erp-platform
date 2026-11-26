@@ -162,16 +162,16 @@ export const INITIAL_BRANCHES: DetailedBranch[] = [
     disbursedLoansList: [],
   },
   {
-    id: 'BR-0462',
+    id: 'BR-6805',
     code: 'GL-BR-002',
     name: 'GOBI MAIN BRANCH',
-    address: 'Perumal Kovil Street, Kugalur',
+    address: 'PACHAMALAI ROAD GOBI',
     city: 'Gobichettipalayam',
     state: 'Tamil Nadu',
     pincode: '638313',
-    phone: '+91 4285 220000',
-    email: 'gobi@goldenleaf.finance',
-    manager: 'Branch Manager',
+    phone: '9363136575',
+    email: 'gl-br-002@goldenleaf.finance',
+    manager: 'VINAYAGAM',
     openingDate: '2023-01-01',
     maxCapacity: 25,
     status: 'Active',
@@ -255,21 +255,28 @@ export const getStoredBranches = (): DetailedBranch[] => {
           }
 
           const activeList = deduped.length > 0 ? deduped : INITIAL_BRANCHES;
-          const result = activeList.map((b) => ({
-            ...b,
-            id: b.id || 'BR-01',
-            code: b.code || b.id || 'GL-BR',
-            name: b.name || (b as any).branchName || b.code || 'Branch Office',
-            city: b.city || '',
-            status: b.status || 'Active',
-            manager: b.manager || 'Unassigned',
-            attendanceRecords: Array.isArray(b.attendanceRecords) ? b.attendanceRecords : [],
-            agentPerformance: Array.isArray(b.agentPerformance) ? b.agentPerformance : [],
-            pendingLoansList: Array.isArray(b.pendingLoansList) ? b.pendingLoansList : [],
-            disbursedLoansList: Array.isArray(b.disbursedLoansList) ? b.disbursedLoansList : [],
-            recentActivities: Array.isArray(b.recentActivities) ? b.recentActivities : [],
-            monthlyTrend: Array.isArray(b.monthlyTrend) ? b.monthlyTrend : [],
-          }));
+          const result = activeList.map((b) => {
+            const isGobi =
+              (b.code && b.code.trim().toUpperCase() === 'GL-BR-002') ||
+              (b.name && b.name.trim().toUpperCase().includes('GOBI')) ||
+              b.id === 'BR-0462' ||
+              b.id === 'BR-6805';
+            return {
+              ...b,
+              id: isGobi ? 'BR-6805' : (b.id || 'BR-01'),
+              code: isGobi ? 'GL-BR-002' : (b.code || b.id || 'GL-BR'),
+              name: isGobi ? 'GOBI MAIN BRANCH' : (b.name || (b as any).branchName || b.code || 'Branch Office'),
+              city: b.city || (isGobi ? 'Gobichettipalayam' : ''),
+              status: b.status || 'Active',
+              manager: b.manager || (isGobi ? 'VINAYAGAM' : 'Unassigned'),
+              attendanceRecords: Array.isArray(b.attendanceRecords) ? b.attendanceRecords : [],
+              agentPerformance: Array.isArray(b.agentPerformance) ? b.agentPerformance : [],
+              pendingLoansList: Array.isArray(b.pendingLoansList) ? b.pendingLoansList : [],
+              disbursedLoansList: Array.isArray(b.disbursedLoansList) ? b.disbursedLoansList : [],
+              recentActivities: Array.isArray(b.recentActivities) ? b.recentActivities : [],
+              monthlyTrend: Array.isArray(b.monthlyTrend) ? b.monthlyTrend : [],
+            };
+          });
           inMemoryBranchesCache = result;
           return result;
         }
