@@ -127,10 +127,44 @@ function applyFiltersAndSort<T>(
   return items as T[];
 }
 
+// ── Deep Merge Utility for Dotted Field Keys ──
+
+/**
+ * Expands dotted keys (e.g., 'kyc.aadhaarNumber') into proper nested objects
+ * and deep-merges them into an existing object, preserving all other fields.
+ */
+function deepMergeWithDottedKeys(
+  existing: Record<string, any>,
+  updates: Record<string, any>
+): Record<string, any> {
+  const result = JSON.parse(JSON.stringify(existing)); // deep clone
+
+  for (const [key, value] of Object.entries(updates)) {
+    if (key.includes('.')) {
+      // Expand dotted key into nested path
+      const parts = key.split('.');
+      let current = result;
+      for (let i = 0; i < parts.length - 1; i++) {
+        if (current[parts[i]] === undefined || current[parts[i]] === null || typeof current[parts[i]] !== 'object') {
+          current[parts[i]] = {};
+        }
+        current = current[parts[i]];
+      }
+      current[parts[parts.length - 1]] = value;
+    } else {
+      result[key] = value;
+    }
+  }
+
+  return result;
+}
+
 // ── CRUD Operations ──
 
 /**
  * Create a new document with auto-generated ID.
+ * Supabase is the primary store; localStorage is a secondary cache.
+ * Returns only after Supabase confirms (or if Supabase is unavailable, falls back to localStorage).
  */
 export async function createDocument<T extends { id: string }>(
   collectionName: string,
@@ -146,13 +180,8 @@ export async function createDocument<T extends { id: string }>(
     updatedAt: now,
   } as unknown as T;
 
-  // 1. Instant local optimistic write
-  const items = getCollectionItems<T>(collectionName);
-  items.unshift(newDoc);
-  saveCollectionItems(collectionName, items);
-  invalidateQueryCache(`col:${collectionName}`);
-
-  // 2. Persistent cloud sync to Supabase PostgreSQL with retry
+  // 1. Persistent cloud sync to Supabase PostgreSQL with retry (PRIMARY)
+  let supabaseSaved = false;
   if (isSupabaseConfigured() && supabase) {
     try {
       const client = supabase;
@@ -173,10 +202,22 @@ export async function createDocument<T extends { id: string }>(
       );
       if (error) {
         console.warn(`[Supabase] Create doc error (${collectionName}/${newId}):`, error.message);
+      } else {
+        supabaseSaved = true;
       }
     } catch (err) {
       console.warn(`[Supabase] Create network error:`, err);
     }
+  }
+
+  // 2. Local cache write (always, for instant reads)
+  const items = getCollectionItems<T>(collectionName);
+  items.unshift(newDoc);
+  saveCollectionItems(collectionName, items);
+  invalidateQueryCache(`col:${collectionName}`);
+
+  if (!supabaseSaved && isSupabaseConfigured()) {
+    console.warn(`[Supabase] Document ${collectionName}/${newId} saved to local cache only — Supabase write failed.`);
   }
 
   return newId;
@@ -184,6 +225,7 @@ export async function createDocument<T extends { id: string }>(
 
 /**
  * Create or replace a document with a specific ID.
+ * Supabase is the primary store; localStorage is a secondary cache.
  */
 export async function createDocumentWithId<T extends { id: string }>(
   collectionName: string,
@@ -201,18 +243,8 @@ export async function createDocumentWithId<T extends { id: string }>(
     updatedAt: now,
   } as unknown as T;
 
-  if (existingIndex >= 0) {
-    items[existingIndex] = newDoc;
-  } else {
-    items.unshift(newDoc);
-  }
-
-  // 1. Instant local write
-  saveCollectionItems(collectionName, items);
-  invalidateQueryCache(`col:${collectionName}`);
-  invalidateQueryCache(`doc:${collectionName}:${docId}`);
-
-  // 2. Sync to Supabase with retry
+  // 1. Sync to Supabase with retry (PRIMARY)
+  let supabaseSaved = false;
   if (isSupabaseConfigured() && supabase) {
     try {
       const client = supabase;
@@ -224,6 +256,7 @@ export async function createDocumentWithId<T extends { id: string }>(
             id: docId,
             data: newDoc,
             is_deleted: false,
+            created_at: existingIndex >= 0 ? (items[existingIndex] as any).createdAt || now : now,
             updated_at: now,
           }),
         2,
@@ -232,25 +265,38 @@ export async function createDocumentWithId<T extends { id: string }>(
       );
       if (error) {
         console.warn(`[Supabase] Upsert error (${collectionName}/${docId}):`, error.message);
+      } else {
+        supabaseSaved = true;
       }
     } catch (err) {
       console.warn(`[Supabase] Upsert network error:`, err);
     }
   }
+
+  // 2. Local cache write (always)
+  if (existingIndex >= 0) {
+    items[existingIndex] = newDoc;
+  } else {
+    items.unshift(newDoc);
+  }
+  saveCollectionItems(collectionName, items);
+  invalidateQueryCache(`col:${collectionName}`);
+  invalidateQueryCache(`doc:${collectionName}:${docId}`);
+
+  if (!supabaseSaved && isSupabaseConfigured()) {
+    console.warn(`[Supabase] Document ${collectionName}/${docId} saved to local cache only — Supabase write failed.`);
+  }
 }
 
 /**
  * Get a single document by ID.
+ * Prefers Supabase data over localStorage cache for reliability.
  */
 export async function getDocument<T>(
   collectionName: string,
   docId: string
 ): Promise<T | null> {
-  // Check local cache first
-  const items = getCollectionItems<T>(collectionName);
-  const found = items.find((item: any) => item.id === docId);
-
-  // Attempt fetch from Supabase for fresh data with Single-Flight coalescing
+  // Attempt fetch from Supabase first (source of truth) with Single-Flight coalescing
   if (isSupabaseConfigured() && supabase) {
     try {
       const cacheKey = `doc:${collectionName}:${docId}`;
@@ -262,6 +308,7 @@ export async function getDocument<T>(
             .select('data')
             .eq('collection', collectionName)
             .eq('id', docId)
+            .eq('is_deleted', false)
             .maybeSingle(),
           2,
           150,
@@ -269,6 +316,15 @@ export async function getDocument<T>(
         );
 
         if (!error && row?.data) {
+          // Update local cache with Supabase data
+          const items = getCollectionItems<any>(collectionName);
+          const idx = items.findIndex((item: any) => item.id === docId);
+          if (idx >= 0) {
+            items[idx] = row.data;
+          } else {
+            items.unshift(row.data);
+          }
+          saveCollectionItems(collectionName, items, false);
           return row.data as T;
         }
         return null;
@@ -282,11 +338,16 @@ export async function getDocument<T>(
     }
   }
 
+  // Fallback to local cache
+  const items = getCollectionItems<T>(collectionName);
+  const found = items.find((item: any) => item.id === docId);
   return (found as T) || null;
 }
 
 /**
  * Update an existing document.
+ * Properly handles dotted field keys (e.g., 'kyc.aadhaarNumber') via deep merge.
+ * Supabase is updated first, then local cache.
  */
 export async function updateDocument(
   collectionName: string,
@@ -297,28 +358,24 @@ export async function updateDocument(
   const items = getCollectionItems<any>(collectionName);
   const index = items.findIndex((item) => item.id === docId);
 
-  let mergedDoc: Record<string, unknown>;
+  // Build merged document using deep merge for dotted keys
+  let existingDoc: Record<string, unknown> = index >= 0 ? items[index] : { id: docId };
+  const mergedDoc = deepMergeWithDottedKeys(existingDoc as Record<string, any>, {
+    ...data,
+    updatedAt: now,
+  });
 
+  // 1. Update local cache first for instant UI
   if (index >= 0) {
-    mergedDoc = {
-      ...items[index],
-      ...data,
-      updatedAt: now,
-    };
     items[index] = mergedDoc;
-    saveCollectionItems(collectionName, items);
   } else {
-    mergedDoc = {
-      id: docId,
-      ...data,
-      updatedAt: now,
-    };
+    items.unshift(mergedDoc);
   }
-
+  saveCollectionItems(collectionName, items);
   invalidateQueryCache(`col:${collectionName}`);
   invalidateQueryCache(`doc:${collectionName}:${docId}`);
 
-  // Sync to Supabase with retry
+  // 2. Sync to Supabase with retry (PRIMARY) - fetch cloud version and deep merge
   if (isSupabaseConfigured() && supabase) {
     try {
       const client = supabase;
@@ -329,7 +386,13 @@ export async function updateDocument(
         .eq('id', docId)
         .maybeSingle();
 
-      const cloudMerged = { ...(row?.data || {}), ...data, updatedAt: now };
+      // Deep merge with cloud data to avoid overwriting fields not in this update
+      const cloudBase = row?.data || existingDoc;
+      const cloudMerged = deepMergeWithDottedKeys(cloudBase as Record<string, any>, {
+        ...data,
+        updatedAt: now,
+      });
+
       const { error } = await withRetry(
         async () => client
           .from('documents')
@@ -337,6 +400,7 @@ export async function updateDocument(
             collection: collectionName,
             id: docId,
             data: cloudMerged,
+            is_deleted: false,
             updated_at: now,
           }),
         2,
@@ -346,6 +410,12 @@ export async function updateDocument(
 
       if (error) {
         console.warn(`[Supabase] Update error (${collectionName}/${docId}):`, error.message);
+      } else {
+        // Sync cloud-merged version back to local cache
+        if (index >= 0) {
+          items[index] = cloudMerged;
+          saveCollectionItems(collectionName, items, false);
+        }
       }
     } catch (err) {
       console.warn(`[Supabase] Update network error:`, err);
@@ -429,14 +499,16 @@ export async function hardDeleteDocument(
 
 /**
  * Query documents from a collection with filters, sorting, and pagination.
- * Scalable Single-Flight request coalescing & TTL caching supports 2,500+ concurrent users.
+ * Supabase is the primary source of truth.
+ * Falls back to localStorage only when Supabase is unavailable.
+ * Uses Single-Flight request coalescing & TTL caching for performance.
  */
 export async function queryDocuments<T>(
   collectionName: string,
   options: FirestoreQueryOptions = {},
   excludeDeleted: boolean = true
 ): Promise<T[]> {
-  // If Supabase is active, sync from cloud with Single-Flight coalescing and TTL caching
+  // If Supabase is active, fetch from cloud (source of truth)
   if (isSupabaseConfigured() && supabase) {
     try {
       const cacheKey = `col:${collectionName}:${excludeDeleted}`;
@@ -453,26 +525,12 @@ export async function queryDocuments<T>(
 
         const { data: rows, error } = await withRetry(async () => query, 2, 200, 8000);
         if (!error && Array.isArray(rows)) {
-          if (rows.length > 0) {
-            const items = rows.map((r: any) => r.data).filter(Boolean);
+          const items = rows.map((r: any) => r.data).filter(Boolean);
+          if (items.length > 0) {
+            // Update local cache with Supabase data
             saveCollectionItems(collectionName, items, false);
-            return items;
-          } else {
-            const localItems = getCollectionItems<any>(collectionName);
-            if (localItems.length > 0) {
-              const upsertRows = localItems.map((item) => ({
-                collection: collectionName,
-                id: item.id || `${collectionName}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-                data: item,
-                is_deleted: !!item.isDeleted,
-                created_at: item.createdAt || new Date().toISOString(),
-                updated_at: item.updatedAt || new Date().toISOString(),
-              }));
-              await withRetry(async () => client.from('documents').upsert(upsertRows), 2, 200, 8000);
-              return localItems;
-            }
-            return [];
           }
+          return items;
         }
         return null;
       }, 3000);
@@ -485,7 +543,7 @@ export async function queryDocuments<T>(
     }
   }
 
-  // Instant local cache query
+  // Fallback: local cache query (only when Supabase is unavailable)
   const localItems = getCollectionItems<any>(collectionName);
   return applyFiltersAndSort<T>(localItems, options, excludeDeleted);
 }

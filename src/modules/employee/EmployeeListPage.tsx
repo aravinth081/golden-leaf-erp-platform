@@ -153,7 +153,9 @@ export const EmployeeListPage: React.FC = () => {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }));
-      supabase.from('documents').upsert(upsertRows).then();
+      supabase.from('documents').upsert(upsertRows).then(({ error }) => {
+        if (error) console.warn('[Supabase] Employee sync error:', error);
+      }).catch((e: unknown) => console.warn('[Supabase] Employee sync failed:', e));
     }
   }, [employees]);
 

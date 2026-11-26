@@ -184,7 +184,7 @@ function writeStorage<T>(key: string, value: T): void {
   }
 
   if (isSupabaseConfigured() && supabase) {
-    void supabase
+    supabase
       .from('documents')
       .upsert({
         collection: 'hr_payroll',
@@ -192,6 +192,14 @@ function writeStorage<T>(key: string, value: T): void {
         data: value,
         is_deleted: false,
         updated_at: new Date().toISOString(),
+      })
+      .then(({ error }) => {
+        if (error) {
+          console.warn(`[Supabase] HR Payroll writeStorage error for ${key}:`, error.message);
+        }
+      })
+      .catch((err) => {
+        console.warn(`[Supabase] HR Payroll writeStorage network error for ${key}:`, err);
       });
   }
 }

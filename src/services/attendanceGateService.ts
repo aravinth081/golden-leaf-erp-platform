@@ -200,7 +200,7 @@ export const markAttendanceToday = (
   window.dispatchEvent(new CustomEvent('glf-attendance-checked-in', { detail: record }));
 
   if (isSupabaseConfigured() && supabase) {
-    void supabase
+    supabase
       .from('documents')
       .upsert({
         collection: 'attendance_checkins',
@@ -209,6 +209,14 @@ export const markAttendanceToday = (
         is_deleted: false,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
+      })
+      .then(({ error }) => {
+        if (error) {
+          console.warn('[Supabase] Attendance check-in save error:', error.message);
+        }
+      })
+      .catch((err) => {
+        console.warn('[Supabase] Attendance check-in network error:', err);
       });
   }
 

@@ -51,7 +51,7 @@ function addBMAuditEntry(entry: Omit<BMAuditEntry, 'id' | 'timestamp'>): void {
     localStorage.setItem(AUDIT_STORAGE_KEY, JSON.stringify(existing.slice(0, 200)));
 
     if (isSupabaseConfigured() && supabase) {
-      void supabase
+      supabase
         .from('documents')
         .upsert({
           collection: 'bm_audit_logs',
@@ -60,7 +60,9 @@ function addBMAuditEntry(entry: Omit<BMAuditEntry, 'id' | 'timestamp'>): void {
           is_deleted: false,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-        });
+        }).then(({ error }) => {
+          if (error) console.warn('[Supabase] BM audit log sync error:', error);
+        }).catch((e: unknown) => console.warn('[Supabase] BM audit log sync failed:', e));
     }
   } catch (e) {
     console.warn('Failed to write BM audit entry:', e);

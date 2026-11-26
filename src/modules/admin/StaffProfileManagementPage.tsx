@@ -353,12 +353,12 @@ export const StaffProfileManagementPage: React.FC = () => {
   };
 
   // Submit Edit
-  const handleEditSubmit = (e: React.FormEvent) => {
+  const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser || !selectedProfile) return;
 
     try {
-      updateStaffProfile(selectedProfile.id, editForm, currentUser);
+      await updateStaffProfile(selectedProfile.id, editForm, currentUser);
       setShowEditModal(false);
       setSelectedProfile(null);
       loadProfiles();
@@ -377,11 +377,11 @@ export const StaffProfileManagementPage: React.FC = () => {
   };
 
   // Toggle Status
-  const handleToggleStatus = (profile: StaffProfile) => {
+  const handleToggleStatus = async (profile: StaffProfile) => {
     if (!currentUser) return;
     const nextStatus: StaffStatus = profile.status === 'active' ? 'inactive' : 'active';
     try {
-      updateStaffStatus(profile.id, nextStatus, currentUser);
+      await updateStaffStatus(profile.id, nextStatus, currentUser);
       loadProfiles();
       addToast({
         type: 'success',

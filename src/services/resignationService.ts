@@ -58,7 +58,7 @@ class ResignationService {
     }
   }
 
-  private saveState() {
+  private async saveState() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.records));
       window.dispatchEvent(new Event('glf_resignation_updated'));
@@ -67,15 +67,22 @@ class ResignationService {
     }
 
     if (isSupabaseConfigured() && supabase && this.records.length > 0) {
-      const upsertRows = this.records.map((r) => ({
-        collection: 'resignations',
-        id: r.id,
-        data: r,
-        is_deleted: false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }));
-      supabase.from('documents').upsert(upsertRows).then();
+      try {
+        const upsertRows = this.records.map((r) => ({
+          collection: 'resignations',
+          id: r.id,
+          data: r,
+          is_deleted: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }));
+        const { error } = await supabase.from('documents').upsert(upsertRows);
+        if (error) {
+          console.warn('[Supabase] Resignation save error:', error.message);
+        }
+      } catch (err) {
+        console.warn('[Supabase] Resignation save network error:', err);
+      }
     }
   }
 

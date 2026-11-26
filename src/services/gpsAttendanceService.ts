@@ -145,7 +145,9 @@ const saveAllRecords = (records: GPSAttendanceRecord[]): void => {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }));
-    supabase.from('documents').upsert(upsertRows).then();
+    supabase.from('documents').upsert(upsertRows).then(({ error }) => {
+      if (error) console.warn('[Supabase] GPS attendance sync error:', error);
+    }).catch((e: unknown) => console.warn('[Supabase] GPS attendance sync failed:', e));
   }
 };
 

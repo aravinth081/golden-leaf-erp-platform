@@ -110,7 +110,7 @@ function saveDailyClosingRecord(record: DailyClosingRecord): void {
   }
 
   if (isSupabaseConfigured() && supabase) {
-    void supabase
+    supabase
       .from('documents')
       .upsert({
         collection: 'daily_closings',
@@ -119,7 +119,9 @@ function saveDailyClosingRecord(record: DailyClosingRecord): void {
         is_deleted: false,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-      });
+      }).then(({ error }) => {
+        if (error) console.warn('[Supabase] Daily closing sync error:', error);
+      }).catch((e: unknown) => console.warn('[Supabase] Daily closing sync failed:', e));
   }
 }
 

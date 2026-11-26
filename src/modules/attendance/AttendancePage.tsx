@@ -668,7 +668,7 @@ export const AttendancePage: React.FC = () => {
     }
 
     if (isSupabaseConfigured() && supabase) {
-      void supabase
+      supabase
         .from('documents')
         .upsert({
           collection: 'user_timesheets',
@@ -676,7 +676,9 @@ export const AttendancePage: React.FC = () => {
           data: updated,
           is_deleted: false,
           updated_at: new Date().toISOString(),
-        });
+        }).then(({ error }) => {
+          if (error) console.warn('[Supabase] Timesheet sync error:', error);
+        }).catch((e: unknown) => console.warn('[Supabase] Timesheet sync failed:', e));
     }
   };
 

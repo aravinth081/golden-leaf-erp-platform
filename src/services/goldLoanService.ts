@@ -169,7 +169,7 @@ class GoldLoanService {
     }
   }
 
-  private saveState() {
+  private async saveState() {
     try {
       localStorage.setItem(RATE_STORAGE_KEY, JSON.stringify(this.rateMaster));
       localStorage.setItem(LOANS_STORAGE_KEY, JSON.stringify(this.loans));
@@ -203,7 +203,10 @@ class GoldLoanService {
             updated_at: new Date().toISOString(),
           },
         ];
-        supabase.from('documents').upsert(upsertRows).then();
+        const { error } = await supabase.from('documents').upsert(upsertRows);
+        if (error) {
+          console.warn('[Supabase] Gold loan sync error:', error.message);
+        }
       } catch (err) {
         console.warn('[Supabase] Gold loan sync error:', err);
       }

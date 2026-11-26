@@ -267,7 +267,11 @@ export const saveStoredBranches = (branches: DetailedBranch[]): void => {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }));
-      withRetry(async () => supabase!.from('documents').upsert(upsertRows), 2, 200, 8000).then();
+      withRetry(async () => supabase!.from('documents').upsert(upsertRows), 2, 200, 8000)
+        .then(({ error }: any) => {
+          if (error) console.warn('[Supabase] Branch sync error:', error.message);
+        })
+        .catch((err: any) => console.warn('[Supabase] Branch sync network error:', err));
     } catch (e) {
       console.warn('[Supabase] Branch sync error:', e);
     }

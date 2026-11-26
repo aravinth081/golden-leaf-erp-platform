@@ -145,7 +145,9 @@ export function saveBranchCollectionGroups(groups: BranchCollectionGroup[]): voi
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }));
-    supabase.from('documents').upsert(upsertRows).then();
+    supabase.from('documents').upsert(upsertRows).then(({ error }) => {
+      if (error) console.warn('[Supabase] Collection groups sync error:', error);
+    }).catch((e: unknown) => console.warn('[Supabase] Collection groups sync failed:', e));
   }
 }
 
@@ -337,7 +339,9 @@ export function saveMonitoredCustomers(customers: MonitoredCustomer[]): void {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }));
-    supabase.from('documents').upsert(upsertRows).then();
+    supabase.from('documents').upsert(upsertRows).then(({ error }) => {
+      if (error) console.warn('[Supabase] Collection groups sync error:', error);
+    }).catch((e: unknown) => console.warn('[Supabase] Collection groups sync failed:', e));
   }
 }
 
@@ -439,7 +443,9 @@ export function saveMonitoredLoans(loans: MonitoredLoan[]): void {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }));
-    void supabase.from('documents').upsert(upsertRows);
+    supabase.from('documents').upsert(upsertRows).then(({ error }) => {
+      if (error) console.warn('[Supabase] Loans sync error:', error);
+    }).catch((e: unknown) => console.warn('[Supabase] Loans sync failed:', e));
   }
 }
 
@@ -509,7 +515,9 @@ export function saveMonitoredCollections(collections: MonitoredCollection[]): vo
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }));
-    supabase.from('documents').upsert(upsertRows).then();
+    supabase.from('documents').upsert(upsertRows).then(({ error }) => {
+      if (error) console.warn('[Supabase] Collection groups sync error:', error);
+    }).catch((e: unknown) => console.warn('[Supabase] Collection groups sync failed:', e));
   }
 }
 

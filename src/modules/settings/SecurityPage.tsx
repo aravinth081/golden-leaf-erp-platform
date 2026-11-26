@@ -63,14 +63,16 @@ export const SecurityPage: React.FC = () => {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
         if (isSupabaseConfigured() && supabase) {
-          void supabase.from('documents').upsert({
+          supabase.from('documents').upsert({
             collection: 'security_events',
             id: newEvt.id,
             data: newEvt,
             is_deleted: false,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
-          });
+          }).then(({ error }) => {
+            if (error) console.warn('[Supabase] Security event sync error:', error);
+          }).catch((e: unknown) => console.warn('[Supabase] Security event sync failed:', e));
         }
       } catch (e) {
         console.error('Failed to save security log', e);

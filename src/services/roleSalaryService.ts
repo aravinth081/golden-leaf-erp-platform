@@ -262,7 +262,10 @@ function writeData<T>(key: string, val: T): void {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
-      .then();
+      .then(({ error }: any) => {
+        if (error) console.warn(`[Supabase] Role salary sync error for ${key}:`, error.message);
+      })
+      .catch((err: any) => console.warn(`[Supabase] Role salary sync network error:`, err));
   }
 }
 

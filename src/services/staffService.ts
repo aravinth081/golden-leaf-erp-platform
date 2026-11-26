@@ -746,11 +746,11 @@ export function getStaffProfileById(id: string, actor: AuthUser): StaffProfile |
 /**
  * Updates an existing staff profile.
  */
-export function updateStaffProfile(
+export async function updateStaffProfile(
   id: string,
   data: StaffProfileUpdateDTO,
   actor: AuthUser
-): StaffProfile {
+): Promise<StaffProfile> {
   assertAdminRole(actor);
 
   const profiles = getStoredStaffProfiles();
@@ -804,28 +804,30 @@ export function updateStaffProfile(
 
   // Sync update to Supabase
   if (isSupabaseConfigured() && supabase) {
-    void (async () => {
-      try {
-        await supabase!.from('staff_users').update({
-          full_name: updated.fullName,
-          email: updated.email,
-          mobile: updated.mobile,
-          role: updated.role,
-          branch_id: updated.branchId,
-          updated_at: updated.updatedAt,
-        }).eq('id', updated.id);
+    try {
+      const { error: staffErr } = await supabase.from('staff_users').update({
+        full_name: updated.fullName,
+        email: updated.email,
+        mobile: updated.mobile,
+        role: updated.role,
+        branch_id: updated.branchId,
+        updated_at: updated.updatedAt,
+      }).eq('id', updated.id);
 
-        await supabase!.from('documents').upsert({
-          collection: 'staff_users',
-          id: updated.id,
-          data: updated,
-          updated_at: updated.updatedAt,
-        });
-        invalidateQueryCache('staff:');
-      } catch (err: unknown) {
-        console.warn('[Supabase] Staff profile update error:', err);
-      }
-    })();
+      if (staffErr) console.warn('[Supabase] Staff profile update error:', staffErr.message);
+
+      const { error: docErr } = await supabase.from('documents').upsert({
+        collection: 'staff_users',
+        id: updated.id,
+        data: updated,
+        updated_at: updated.updatedAt,
+      });
+
+      if (docErr) console.warn('[Supabase] Staff profile document update error:', docErr.message);
+      invalidateQueryCache('staff:');
+    } catch (err: unknown) {
+      console.warn('[Supabase] Staff profile update network error:', err);
+    }
   }
 
   appendStaffAuditLog(actor, 'UPDATE', updated.id, updated.username, oldValue, {
@@ -842,11 +844,11 @@ export function updateStaffProfile(
 /**
  * Toggles status (Active / Inactive).
  */
-export function updateStaffStatus(
+export async function updateStaffStatus(
   id: string,
   status: StaffStatus,
   actor: AuthUser
-): StaffProfile {
+): Promise<StaffProfile> {
   assertAdminRole(actor);
 
   const profiles = getStoredStaffProfiles();
@@ -865,24 +867,22 @@ export function updateStaffStatus(
 
   // Sync status to Supabase
   if (isSupabaseConfigured() && supabase) {
-    void (async () => {
-      try {
-        await supabase!.from('staff_users').update({
-          status: existing.status,
-          updated_at: existing.updatedAt,
-        }).eq('id', existing.id);
+    try {
+      await supabase!.from('staff_users').update({
+        status: existing.status,
+        updated_at: existing.updatedAt,
+      }).eq('id', existing.id);
 
-        await supabase!.from('documents').upsert({
-          collection: 'staff_users',
-          id: existing.id,
-          data: existing,
-          updated_at: existing.updatedAt,
-        });
-        invalidateQueryCache('staff:');
-      } catch (err: unknown) {
-        console.warn('[Supabase] Staff status sync error:', err);
-      }
-    })();
+      await supabase!.from('documents').upsert({
+        collection: 'staff_users',
+        id: existing.id,
+        data: existing,
+        updated_at: existing.updatedAt,
+      });
+      invalidateQueryCache('staff:');
+    } catch (err: unknown) {
+      console.warn('[Supabase] Staff status sync error:', err);
+    }
   }
 
   appendStaffAuditLog(actor, 'STATUS_CHANGE', existing.id, existing.username, { status: oldStatus }, { status });
@@ -951,7 +951,7 @@ export async function resetStaffPassword(
 /**
  * Soft deletes a staff profile.
  */
-export function deleteStaffProfile(id: string, actor: AuthUser): void {
+export async function deleteStaffProfile(id: string, actor: AuthUser): Promise<void> {
   assertAdminRole(actor);
 
   const profiles = getStoredStaffProfiles();
@@ -972,15 +972,17 @@ export function deleteStaffProfile(id: string, actor: AuthUser): void {
   // Sync soft-delete to Supabase
   if (isSupabaseConfigured() && supabase) {
     try {
-      supabase.from('staff_users').update({
+      const { error: staffErr } = await supabase.from('staff_users').update({
         deleted_at: now,
         updated_at: now,
-      }).or(`id.eq.${id},username.eq.${id}`).then();
+      }).or(`id.eq.${id},username.eq.${id}`);
+      if (staffErr) console.warn('[Supabase] Staff delete (staff_users) error:', staffErr);
 
-      supabase.from('documents').update({
+      const { error: docErr } = await supabase.from('documents').update({
         is_deleted: true,
         updated_at: now,
-      }).eq('collection', 'staff_users').eq('id', id).then();
+      }).eq('collection', 'staff_users').eq('id', id);
+      if (docErr) console.warn('[Supabase] Staff delete (documents) error:', docErr);
 
       invalidateQueryCache('staff:');
     } catch (err) {

@@ -264,7 +264,7 @@ class BusinessLoanService {
     });
   }
 
-  private saveState() {
+  private async saveState() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.loans));
       if (typeof window !== 'undefined') {
@@ -275,19 +275,27 @@ class BusinessLoanService {
     }
 
     if (isSupabaseConfigured() && supabase && this.loans.length > 0) {
-      const upsertRows = this.loans.map((loan) => ({
-        collection: 'business_loans',
-        id: loan.id,
-        data: loan,
-        is_deleted: false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }));
-      void supabase.from('documents').upsert(upsertRows);
+      try {
+        const upsertRows = this.loans.map((loan) => ({
+          collection: 'business_loans',
+          id: loan.id,
+          data: loan,
+          is_deleted: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }));
+        const { error } = await supabase.from('documents').upsert(upsertRows);
+        if (error) {
+          console.warn('[Supabase] Business loan save error:', error.message);
+        }
+      } catch (err) {
+        console.warn('[Supabase] Business loan save network error:', err);
+      }
     }
   }
 
   public getLoans(): BusinessLoanRecord[] {
+    // If Supabase data has been loaded, use it; otherwise fall back to localStorage
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {

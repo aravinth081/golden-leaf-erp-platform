@@ -71,7 +71,9 @@ export const SettingsPage: React.FC = () => {
         is_deleted: false,
         updated_at: new Date().toISOString(),
       }));
-      void supabase.from('documents').upsert(upsertRows);
+      supabase.from('documents').upsert(upsertRows).then(({ error }) => {
+        if (error) console.warn('[Supabase] Loan plans sync error:', error);
+      }).catch((e: unknown) => console.warn('[Supabase] Loan plans sync failed:', e));
     }
   };
 

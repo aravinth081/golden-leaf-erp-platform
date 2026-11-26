@@ -553,7 +553,7 @@ class CreditManagerService {
     }
   }
 
-  private saveState() {
+  private async saveState() {
     this.applicants = this.deduplicateApplicants(this.applicants);
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.applicants));
@@ -563,15 +563,22 @@ class CreditManagerService {
     }
 
     if (isSupabaseConfigured() && supabase && this.applicants.length > 0) {
-      const upsertRows = this.applicants.map((app) => ({
-        collection: 'credit_applicants',
-        id: app.id,
-        data: app,
-        is_deleted: false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }));
-      supabase.from('documents').upsert(upsertRows).then();
+      try {
+        const upsertRows = this.applicants.map((app) => ({
+          collection: 'credit_applicants',
+          id: app.id,
+          data: app,
+          is_deleted: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }));
+        const { error } = await supabase.from('documents').upsert(upsertRows);
+        if (error) {
+          console.warn('[Supabase] Credit applicant save error:', error.message);
+        }
+      } catch (err) {
+        console.warn('[Supabase] Credit applicant save network error:', err);
+      }
     }
   }
 

@@ -164,7 +164,9 @@ export function saveStoredLeaveRequests(records: LeaveODRequest[]): void {
       created_at: rec.appliedAt || new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }));
-    void supabase.from('documents').upsert(upsertRows);
+    supabase.from('documents').upsert(upsertRows).then(({ error }) => {
+      if (error) console.warn('[Supabase] Leave requests sync error:', error);
+    }).catch((e: unknown) => console.warn('[Supabase] Leave requests sync failed:', e));
   }
 }
 
