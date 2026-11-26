@@ -19,6 +19,22 @@ import {
 import { useAuthStore, useUIStore } from '../../store';
 import { PageHeader, Card, Button, Modal } from '../../components/ui';
 
+type EditableSlab = Omit<
+  GroupLoanSlab,
+  'minWeeks' | 'maxWeeks' | 'interestRate' | 'insuranceFeeValue' | 'documentFeeValue'
+> & {
+  minWeeks: string;
+  maxWeeks: string;
+  interestRate: string;
+  insuranceFeeValue: string;
+  documentFeeValue: string;
+};
+
+const sanitizeNumericInput = (raw: string): string => {
+  if (raw === '') return '';
+  return raw.replace(/^0+(?=\d)/, '');
+};
+
 export const GroupLoanRateSlabsPage: React.FC = () => {
   const { addToast } = useUIStore();
   const user = useAuthStore((s) => s.user);
@@ -27,15 +43,18 @@ export const GroupLoanRateSlabsPage: React.FC = () => {
   const isAuthorized = role === 'admin' || role === 'branch_manager' || role === 'credit_manager' || role === 'area_manager';
 
   const [slabs, setSlabs] = useState<GroupLoanSlab[]>(() => getGroupLoanSlabs());
-  const [editingSlab, setEditingSlab] = useState<GroupLoanSlab | null>(null);
+  const [editingSlab, setEditingSlab] = useState<EditableSlab | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isNew, setIsNew] = useState(false);
 
   // Live Calculator Simulator State
-  const [testPrincipal, setTestPrincipal] = useState(10000);
-  const [testWeeks, setTestWeeks] = useState(18);
+  const [testPrincipal, setTestPrincipal] = useState<string>('10000');
+  const [testWeeks, setTestWeeks] = useState<string>('18');
 
-  const testCalc = calculateGroupLoanFees(testPrincipal, testWeeks);
+  const testCalc = calculateGroupLoanFees(
+    Number(testPrincipal) || 0,
+    Number(testWeeks) || 0
+  );
 
   if (!isAuthorized) {
     return (
@@ -56,14 +75,14 @@ export const GroupLoanRateSlabsPage: React.FC = () => {
     setIsNew(true);
     setEditingSlab({
       id: `slab-${Date.now()}`,
-      minWeeks: 1,
-      maxWeeks: 12,
+      minWeeks: '1',
+      maxWeeks: '12',
       label: 'New Custom Tenor Slab',
-      interestRate: 24.0,
+      interestRate: '24',
       insuranceFeeType: 'percentage',
-      insuranceFeeValue: 1.0,
+      insuranceFeeValue: '1',
       documentFeeType: 'fixed',
-      documentFeeValue: 300,
+      documentFeeValue: '300',
       isActive: true,
     });
     setIsModalOpen(true);
@@ -71,26 +90,52 @@ export const GroupLoanRateSlabsPage: React.FC = () => {
 
   const handleOpenEdit = (slab: GroupLoanSlab) => {
     setIsNew(false);
-    setEditingSlab({ ...slab });
+    setEditingSlab({
+      ...slab,
+      minWeeks: String(slab.minWeeks),
+      maxWeeks: String(slab.maxWeeks),
+      interestRate: String(slab.interestRate),
+      insuranceFeeValue: String(slab.insuranceFeeValue),
+      documentFeeValue: String(slab.documentFeeValue),
+    });
     setIsModalOpen(true);
   };
 
   const handleSaveModal = () => {
     if (!editingSlab) return;
-    if (editingSlab.minWeeks <= 0 || editingSlab.maxWeeks <= 0 || editingSlab.minWeeks > editingSlab.maxWeeks) {
+    const minWeeks = Number(editingSlab.minWeeks) || 0;
+    const maxWeeks = Number(editingSlab.maxWeeks) || 0;
+    const interestRate = Number(editingSlab.interestRate) || 0;
+    const insuranceFeeValue = editingSlab.insuranceFeeValue === '' ? 0 : Number(editingSlab.insuranceFeeValue);
+    const documentFeeValue = editingSlab.documentFeeValue === '' ? 0 : Number(editingSlab.documentFeeValue);
+
+    if (minWeeks <= 0 || maxWeeks <= 0 || minWeeks > maxWeeks) {
       addToast({ type: 'error', title: 'Invalid Weeks', message: 'Min weeks must be greater than 0 and less than or equal to Max weeks.' });
       return;
     }
-    if (editingSlab.interestRate <= 0) {
+    if (interestRate <= 0) {
       addToast({ type: 'error', title: 'Invalid Rate', message: 'Interest rate must be greater than 0%.' });
       return;
     }
+    if (isNaN(insuranceFeeValue) || insuranceFeeValue < 0 || isNaN(documentFeeValue) || documentFeeValue < 0) {
+      addToast({ type: 'error', title: 'Invalid Fee', message: 'Insurance and document fees must be 0 or greater.' });
+      return;
+    }
+
+    const savedSlab: GroupLoanSlab = {
+      ...editingSlab,
+      minWeeks,
+      maxWeeks,
+      interestRate,
+      insuranceFeeValue,
+      documentFeeValue,
+    };
 
     let updated: GroupLoanSlab[];
     if (isNew) {
-      updated = [...slabs, editingSlab].sort((a, b) => a.minWeeks - b.minWeeks);
+      updated = [...slabs, savedSlab].sort((a, b) => a.minWeeks - b.minWeeks);
     } else {
-      updated = slabs.map((s) => (s.id === editingSlab.id ? editingSlab : s)).sort((a, b) => a.minWeeks - b.minWeeks);
+      updated = slabs.map((s) => (s.id === savedSlab.id ? savedSlab : s)).sort((a, b) => a.minWeeks - b.minWeeks);
     }
 
     setSlabs(updated);
@@ -100,7 +145,7 @@ export const GroupLoanRateSlabsPage: React.FC = () => {
     addToast({
       type: 'success',
       title: isNew ? 'Slab Added' : 'Slab Updated',
-      message: `${editingSlab.label} has been saved and will automatically apply in field registrations.`,
+      message: `${savedSlab.label} has been saved and will automatically apply in field registrations.`,
     });
   };
 
@@ -285,9 +330,10 @@ export const GroupLoanRateSlabsPage: React.FC = () => {
                 </label>
                 <input
                   type="number"
+                  min="0"
                   step="1000"
                   value={testPrincipal}
-                  onChange={(e) => setTestPrincipal(Number(e.target.value))}
+                  onChange={(e) => setTestPrincipal(sanitizeNumericInput(e.target.value))}
                   className="w-full px-3 py-2 rounded-xl bg-white border border-gray-200 text-sm font-bold text-[#0B1F3A] focus:outline-none focus:border-[#D4AF37]"
                 />
               </div>
@@ -302,7 +348,7 @@ export const GroupLoanRateSlabsPage: React.FC = () => {
                     min="1"
                     max="104"
                     value={testWeeks}
-                    onChange={(e) => setTestWeeks(Number(e.target.value))}
+                    onChange={(e) => setTestWeeks(sanitizeNumericInput(e.target.value))}
                     className="w-full px-3 py-2 rounded-xl bg-white border border-gray-200 text-sm font-bold text-[#0B1F3A] focus:outline-none focus:border-[#D4AF37]"
                   />
                   <span className="text-xs font-bold text-gray-500 whitespace-nowrap">Weeks</span>
@@ -315,9 +361,9 @@ export const GroupLoanRateSlabsPage: React.FC = () => {
                   <button
                     key={w}
                     type="button"
-                    onClick={() => setTestWeeks(w)}
+                    onClick={() => setTestWeeks(String(w))}
                     className={`px-2 py-0.5 rounded text-[11px] font-bold ${
-                      testWeeks === w ? 'bg-[#0B1F3A] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      Number(testWeeks) === w ? 'bg-[#0B1F3A] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                     }`}
                   >
                     {w}w
@@ -408,7 +454,7 @@ export const GroupLoanRateSlabsPage: React.FC = () => {
                   min="1"
                   max="104"
                   value={editingSlab.minWeeks}
-                  onChange={(e) => setEditingSlab({ ...editingSlab, minWeeks: Number(e.target.value) })}
+                  onChange={(e) => setEditingSlab({ ...editingSlab, minWeeks: sanitizeNumericInput(e.target.value) })}
                   className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm font-bold text-[#0B1F3A] focus:outline-none focus:border-[#D4AF37]"
                 />
               </div>
@@ -419,7 +465,7 @@ export const GroupLoanRateSlabsPage: React.FC = () => {
                   min="1"
                   max="104"
                   value={editingSlab.maxWeeks}
-                  onChange={(e) => setEditingSlab({ ...editingSlab, maxWeeks: Number(e.target.value) })}
+                  onChange={(e) => setEditingSlab({ ...editingSlab, maxWeeks: sanitizeNumericInput(e.target.value) })}
                   className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm font-bold text-[#0B1F3A] focus:outline-none focus:border-[#D4AF37]"
                 />
               </div>
@@ -437,7 +483,7 @@ export const GroupLoanRateSlabsPage: React.FC = () => {
                   min="1"
                   max="40"
                   value={editingSlab.interestRate}
-                  onChange={(e) => setEditingSlab({ ...editingSlab, interestRate: Number(e.target.value) })}
+                  onChange={(e) => setEditingSlab({ ...editingSlab, interestRate: sanitizeNumericInput(e.target.value) })}
                   className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm font-bold text-[#0B1F3A] focus:outline-none focus:border-[#D4AF37]"
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">% p.a.</span>
@@ -461,9 +507,10 @@ export const GroupLoanRateSlabsPage: React.FC = () => {
                 <div className="relative">
                   <input
                     type="number"
+                    min="0"
                     step={editingSlab.insuranceFeeType === 'percentage' ? '0.1' : '10'}
                     value={editingSlab.insuranceFeeValue}
-                    onChange={(e) => setEditingSlab({ ...editingSlab, insuranceFeeValue: Number(e.target.value) })}
+                    onChange={(e) => setEditingSlab({ ...editingSlab, insuranceFeeValue: sanitizeNumericInput(e.target.value) })}
                     className="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs font-bold text-[#0B1F3A] bg-white"
                   />
                   <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">
@@ -490,9 +537,10 @@ export const GroupLoanRateSlabsPage: React.FC = () => {
                 <div className="relative">
                   <input
                     type="number"
+                    min="0"
                     step={editingSlab.documentFeeType === 'percentage' ? '0.1' : '10'}
                     value={editingSlab.documentFeeValue}
-                    onChange={(e) => setEditingSlab({ ...editingSlab, documentFeeValue: Number(e.target.value) })}
+                    onChange={(e) => setEditingSlab({ ...editingSlab, documentFeeValue: sanitizeNumericInput(e.target.value) })}
                     className="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs font-bold text-[#0B1F3A] bg-white"
                   />
                   <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">
