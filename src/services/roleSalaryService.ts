@@ -264,8 +264,7 @@ function writeData<T>(key: string, val: T): void {
       })
       .then(({ error }: any) => {
         if (error) console.warn(`[Supabase] Role salary sync error for ${key}:`, error.message);
-      })
-      .catch((err: any) => console.warn(`[Supabase] Role salary sync network error:`, err));
+      }, (err: any) => console.warn(`[Supabase] Role salary sync network error:`, err));
   }
 }
 

@@ -72,7 +72,7 @@ export const SecurityPage: React.FC = () => {
             updated_at: new Date().toISOString(),
           }).then(({ error }) => {
             if (error) console.warn('[Supabase] Security event sync error:', error);
-          }).catch((e: unknown) => console.warn('[Supabase] Security event sync failed:', e));
+          }, (e: unknown) => console.warn('[Supabase] Security event sync failed:', e));
         }
       } catch (e) {
         console.error('Failed to save security log', e);

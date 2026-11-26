@@ -109,7 +109,7 @@ export function saveGroupLoanSlabs(slabs: GroupLoanSlab[]): void {
       }));
       supabase.from('documents').upsert(upsertRows).then(({ error }) => {
         if (error) console.warn('[Supabase] Group loan slabs sync error:', error);
-      }).catch((e: unknown) => console.warn('[Supabase] Group loan slabs sync failed:', e));
+      }, (e: unknown) => console.warn('[Supabase] Group loan slabs sync failed:', e));
     }
   } catch (err) {
     console.error('Failed to save group loan slabs:', err);

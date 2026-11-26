@@ -62,7 +62,7 @@ function addBMAuditEntry(entry: Omit<BMAuditEntry, 'id' | 'timestamp'>): void {
           updated_at: new Date().toISOString(),
         }).then(({ error }) => {
           if (error) console.warn('[Supabase] BM audit log sync error:', error);
-        }).catch((e: unknown) => console.warn('[Supabase] BM audit log sync failed:', e));
+        }, (e: unknown) => console.warn('[Supabase] BM audit log sync failed:', e));
     }
   } catch (e) {
     console.warn('Failed to write BM audit entry:', e);

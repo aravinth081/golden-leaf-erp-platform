@@ -121,7 +121,7 @@ function saveDailyClosingRecord(record: DailyClosingRecord): void {
         updated_at: new Date().toISOString(),
       }).then(({ error }) => {
         if (error) console.warn('[Supabase] Daily closing sync error:', error);
-      }).catch((e: unknown) => console.warn('[Supabase] Daily closing sync failed:', e));
+      }, (e: unknown) => console.warn('[Supabase] Daily closing sync failed:', e));
   }
 }
 

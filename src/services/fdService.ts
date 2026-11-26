@@ -74,7 +74,7 @@ function saveLocalFDs(list: FixedDeposit[]): void {
     }));
     supabase.from('documents').upsert(upsertRows).then(({ error }) => {
       if (error) console.warn('[Supabase] FD sync error:', error);
-    }).catch((e: unknown) => console.warn('[Supabase] FD sync failed:', e));
+    }, (e: unknown) => console.warn('[Supabase] FD sync failed:', e));
   }
 }
 
@@ -108,7 +108,7 @@ function saveLocalReferrals(list: FDReferral[]): void {
     }));
     supabase.from('documents').upsert(upsertRows).then(({ error }) => {
       if (error) console.warn('[Supabase] FD sync error:', error);
-    }).catch((e: unknown) => console.warn('[Supabase] FD sync failed:', e));
+    }, (e: unknown) => console.warn('[Supabase] FD sync failed:', e));
   }
 }
 

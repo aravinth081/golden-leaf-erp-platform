@@ -214,8 +214,7 @@ export const markAttendanceToday = (
         if (error) {
           console.warn('[Supabase] Attendance check-in save error:', error.message);
         }
-      })
-      .catch((err) => {
+      }, (err: unknown) => {
         console.warn('[Supabase] Attendance check-in network error:', err);
       });
   }

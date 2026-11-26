@@ -119,7 +119,7 @@ export function saveLocalInvestors(list: Investor[]): void {
     }));
     supabase.from('documents').upsert(upsertRows).then(({ error }) => {
       if (error) console.warn('[Supabase] Investor sync error:', error);
-    }).catch((e: unknown) => console.warn('[Supabase] Investor sync failed:', e));
+    }, (e: unknown) => console.warn('[Supabase] Investor sync failed:', e));
   }
 }
 

@@ -678,7 +678,7 @@ export const AttendancePage: React.FC = () => {
           updated_at: new Date().toISOString(),
         }).then(({ error }) => {
           if (error) console.warn('[Supabase] Timesheet sync error:', error);
-        }).catch((e: unknown) => console.warn('[Supabase] Timesheet sync failed:', e));
+        }, (e: unknown) => console.warn('[Supabase] Timesheet sync failed:', e));
     }
   };
 

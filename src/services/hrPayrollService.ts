@@ -197,8 +197,7 @@ function writeStorage<T>(key: string, value: T): void {
         if (error) {
           console.warn(`[Supabase] HR Payroll writeStorage error for ${key}:`, error.message);
         }
-      })
-      .catch((err) => {
+      }, (err: unknown) => {
         console.warn(`[Supabase] HR Payroll writeStorage network error for ${key}:`, err);
       });
   }

@@ -179,7 +179,7 @@ export function saveStoredEODSettlements(records: EODSettlementRecord[]): void {
     }));
     supabase.from('documents').upsert(upsertRows).then(({ error }) => {
       if (error) console.warn('[Supabase] EOD settlements sync error:', error);
-    }).catch((e: unknown) => console.warn('[Supabase] EOD settlements sync failed:', e));
+    }, (e: unknown) => console.warn('[Supabase] EOD settlements sync failed:', e));
   }
 }
 

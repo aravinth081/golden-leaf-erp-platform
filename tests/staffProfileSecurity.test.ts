@@ -189,7 +189,7 @@ async function runStaffTestSuite() {
 
   // ── 6. PROFILE UPDATE & ACCESS CONTROL ──
   console.log('\n6. PROFILE UPDATE & ACCESS CONTROL:');
-  const updatedProfile = updateStaffProfile(
+  const updatedProfile = await updateStaffProfile(
     created.profile.id,
     {
       fullName: 'Kavitha Murugan Updated',
@@ -202,7 +202,7 @@ async function runStaffTestSuite() {
 
   let nonAdminUpdateBlocked = false;
   try {
-    updateStaffProfile(created.profile.id, { fullName: 'Hacked Name' }, hrActor);
+    await updateStaffProfile(created.profile.id, { fullName: 'Hacked Name' }, hrActor);
   } catch (err: any) {
     if (err.message.includes('403 Forbidden')) nonAdminUpdateBlocked = true;
   }
