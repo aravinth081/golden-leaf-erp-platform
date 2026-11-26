@@ -44,7 +44,7 @@ const VAULT_DOCS: { key: keyof InvestorDocuments; name: string }[] = [
   { key: 'signatureUrl', name: '5) Signature Specimen' },
 ];
 
-const DRAFT_STORAGE_KEY = 'glf_investor_form_draft';
+const DRAFT_STORAGE_KEY = 'glf_investor_form_draft_permanent';
 
 interface InvestorFormDraft {
   activeStep?: 1 | 2 | 3 | 4 | 5;
@@ -86,7 +86,7 @@ interface InvestorFormDraft {
 
 const loadDraft = (): InvestorFormDraft => {
   try {
-    const raw = sessionStorage.getItem(DRAFT_STORAGE_KEY);
+    const raw = localStorage.getItem(DRAFT_STORAGE_KEY) || sessionStorage.getItem('glf_investor_form_draft');
     if (raw) return JSON.parse(raw);
   } catch {}
   return {};
@@ -147,9 +147,9 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
     }
   });
 
-  // Reactive subscription and fetch for branches from Supabase / localStorage
+  // Load branches once cleanly on mount
   useEffect(() => {
-    const refreshBranches = () => {
+    try {
       const stored = getStoredBranches();
       if (stored && stored.length > 0) {
         const merged = [...stored];
@@ -160,45 +160,12 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
         }
         setBranches(merged.map((b) => ({ id: b.id, name: b.name, code: b.code, city: b.city })));
       }
-    };
-    refreshBranches();
-
-    fetchBranchesFromSupabase()
-      .then((latest) => {
-        if (latest && latest.length > 0) {
-          const merged = [...latest];
-          for (const fb of FALLBACK_BRANCHES) {
-            if (!merged.some((m) => m.code?.toUpperCase() === fb.code || m.id === fb.id || m.name?.toLowerCase().includes('gobi'))) {
-              merged.push(fb as any);
-            }
-          }
-          setBranches(merged.map((b) => ({ id: b.id, name: b.name, code: b.code, city: b.city })));
-        }
-      })
-      .catch((err) => console.warn('Failed to fetch branches in modal:', err));
-
-    const handleUpdate = (e: any) => {
-      if (e.detail && Array.isArray(e.detail) && e.detail.length > 0) {
-        const merged = [...e.detail];
-        for (const fb of FALLBACK_BRANCHES) {
-          if (!merged.some((m) => m.code?.toUpperCase() === fb.code || m.id === fb.id || m.name?.toLowerCase().includes('gobi'))) {
-            merged.push(fb as any);
-          }
-        }
-        setBranches(merged.map((b: any) => ({ id: b.id, name: b.name, code: b.code, city: b.city })));
-      } else {
-        refreshBranches();
-      }
-    };
-
-    window.addEventListener('glf-branches-updated', handleUpdate);
-    return () => {
-      window.removeEventListener('glf-branches-updated', handleUpdate);
-    };
+    } catch {}
   }, []);
 
   // Auto-detect branch based on Town / District / Pincode
   useEffect(() => {
+    if (!town && !district && !pinCode) return;
     const text = `${town} ${district} ${pinCode}`.toLowerCase();
     if (text.includes('gobi') || text.includes('erode') || pinCode.startsWith('638')) {
       const gobiBranch = branches.find((b) => b.name.toLowerCase().includes('gobi') || b.code === 'GL-BR-002');
@@ -211,7 +178,7 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
         setSelectedBranchId(chennaiBranch.id);
       }
     }
-  }, [town, district, pinCode, branches]);
+  }, [town, district, pinCode]);
 
   // 03 Mandatory KYC & Tax
   const [pan, setPan] = useState(initialDraft.pan || '');
@@ -256,48 +223,52 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
   const [accountType, setAccountType] = useState<'Savings' | 'Current'>(initialDraft.accountType || 'Savings');
   const [payoutMode, setPayoutMode] = useState<'NEFT' | 'RTGS' | 'IMPS' | 'UPI'>(initialDraft.payoutMode || 'NEFT');
 
-  // Auto-save form inputs to sessionStorage so user inputs are NEVER lost on accidental reload or crash
+  // Debounced Auto-save to localStorage (survives any crash or reload)
   useEffect(() => {
-    const draft: InvestorFormDraft = {
-      activeStep,
-      category,
-      fullName,
-      fatherSpouseName,
-      dob,
-      gender,
-      primaryMobile,
-      secondaryMobile,
-      email,
-      doorNo,
-      street,
-      town,
-      district,
-      state,
-      pinCode,
-      selectedBranchId,
-      pan,
-      aadhaar,
-      taxDeclaration,
-      documents,
-      investmentAmount,
-      investmentDisplay,
-      interestRate,
-      tenureYears,
-      tenureMonths,
-      payoutFrequency,
-      investmentDate,
-      bankHolderName,
-      bankName,
-      bankBranch,
-      accountNumber,
-      accountNumberConfirm,
-      ifsc,
-      accountType,
-      payoutMode,
-    };
-    try {
-      sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
-    } catch {}
+    const timer = setTimeout(() => {
+      const draft: InvestorFormDraft = {
+        activeStep,
+        category,
+        fullName,
+        fatherSpouseName,
+        dob,
+        gender,
+        primaryMobile,
+        secondaryMobile,
+        email,
+        doorNo,
+        street,
+        town,
+        district,
+        state,
+        pinCode,
+        selectedBranchId,
+        pan,
+        aadhaar,
+        taxDeclaration,
+        documents,
+        investmentAmount,
+        investmentDisplay,
+        interestRate,
+        tenureYears,
+        tenureMonths,
+        payoutFrequency,
+        investmentDate,
+        bankHolderName,
+        bankName,
+        bankBranch,
+        accountNumber,
+        accountNumberConfirm,
+        ifsc,
+        accountType,
+        payoutMode,
+      };
+      try {
+        localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+      } catch {}
+    }, 300);
+
+    return () => clearTimeout(timer);
   }, [
     activeStep, category, fullName, fatherSpouseName, dob, gender,
     primaryMobile, secondaryMobile, email, doorNo, street, town, district,
@@ -310,7 +281,8 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
   const handleClearDraft = () => {
     if (confirm('Clear saved draft and start fresh?')) {
       try {
-        sessionStorage.removeItem(DRAFT_STORAGE_KEY);
+        localStorage.removeItem(DRAFT_STORAGE_KEY);
+        sessionStorage.removeItem('glf_investor_form_draft');
       } catch {}
       setFullName('');
       setFatherSpouseName('');
@@ -498,7 +470,8 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
       });
 
       try {
-        sessionStorage.removeItem(DRAFT_STORAGE_KEY);
+        localStorage.removeItem(DRAFT_STORAGE_KEY);
+        sessionStorage.removeItem('glf_investor_form_draft');
       } catch {}
       onSuccess(created);
     } catch (err: any) {
@@ -669,9 +642,8 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
         {/* Form Body */}
         <div ref={formScrollRef} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-5 custom-scrollbar">
           {/* STEP 1: Basic Identity */}
-          {activeStep === 1 && (
-            <div key="step-1" className="space-y-4 animate-in fade-in duration-100">
-              <div className="pb-2 border-b border-[#F1F5F9]">
+          <div className={activeStep === 1 ? 'space-y-4' : 'hidden'}>
+            <div className="pb-2 border-b border-[#F1F5F9]">
                 <h3 className="font-display font-bold text-sm text-[#0B1F3A] uppercase tracking-wider">
                   01 Basic Identity & Investor Category Inputs
                 </h3>
@@ -786,12 +758,10 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
                 )}
               </div>
             </div>
-          )}
 
           {/* STEP 2: Contact & Branch Mapping */}
-          {activeStep === 2 && (
-            <div key="step-2" className="space-y-4 animate-in fade-in duration-100">
-              <div className="pb-2 border-b border-[#F1F5F9]">
+          <div className={activeStep === 2 ? 'space-y-4' : 'hidden'}>
+            <div className="pb-2 border-b border-[#F1F5F9]">
                 <h3 className="font-display font-bold text-sm text-[#0B1F3A] uppercase tracking-wider">
                   02 Contact & Branch Mapping Inputs
                 </h3>
@@ -981,12 +951,10 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
                 </select>
               </div>
             </div>
-          )}
 
           {/* STEP 3: Mandatory KYC & Tax Compliance */}
-          {activeStep === 3 && (
-            <div key="step-3" className="space-y-4 animate-in fade-in duration-100">
-              <div className="pb-2 border-b border-[#F1F5F9]">
+          <div className={activeStep === 3 ? 'space-y-4' : 'hidden'}>
+            <div className="pb-2 border-b border-[#F1F5F9]">
                 <h3 className="font-display font-bold text-sm text-[#0B1F3A] uppercase tracking-wider">
                   03 Mandatory KYC & Tax Compliance Inputs
                 </h3>
@@ -1245,11 +1213,9 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
                 </div>
               </div>
             </div>
-          )}
 
           {/* STEP 4: Capital Investment & Interest Terms (New Column / Section before Payout Bank) */}
-          {activeStep === 4 && (
-            <div key="step-4" className="space-y-4 animate-in fade-in duration-100">
+          <div className={activeStep === 4 ? 'space-y-4' : 'hidden'}>
               <div className="pb-2 border-b border-[#F1F5F9] flex items-center justify-between">
                 <div>
                   <h3 className="font-display font-bold text-sm text-[#0B1F3A] uppercase tracking-wider flex items-center gap-1.5">
@@ -1527,11 +1493,9 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
                 </div>
               </div>
             </div>
-          )}
 
           {/* STEP 5: Payout Bank Account Inputs */}
-          {activeStep === 5 && (
-            <div key="step-5" className="space-y-4 animate-in fade-in duration-100">
+          <div className={activeStep === 5 ? 'space-y-4' : 'hidden'}>
               <div className="pb-2 border-b border-[#F1F5F9]">
                 <h3 className="font-display font-bold text-sm text-[#0B1F3A] uppercase tracking-wider">
                   05 Investor Payout Bank Account Inputs
@@ -1648,8 +1612,7 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
                 </div>
               </div>
             </div>
-          )}
-        </div>
+          </div>
 
         {/* Pinned Footer Navigation */}
         <div className="px-5 sm:px-6 py-3.5 bg-white border-t border-[#E2E8F0] shrink-0 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2.5 z-10">

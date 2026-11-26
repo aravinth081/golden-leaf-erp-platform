@@ -3,7 +3,7 @@
 // Visible in Admin Row Only (Section 1 & 3 of Functional Spec)
 // ──────────────────────────────────────────────────
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Users, Plus, Search, Filter, Download, Eye,
   ShieldCheck, ShieldAlert, DollarSign, TrendingUp, AlertCircle, Award, Building2
@@ -96,7 +96,11 @@ export const InvestorListPage: React.FC = () => {
       else setBranches(getStoredBranches());
     };
     const handleStorageEvent = (e: StorageEvent) => {
-      if (e.key && (e.key.includes('investor') || e.key.includes('fd'))) {
+      if (
+        e.key &&
+        !e.key.includes('draft') &&
+        (e.key === 'glf_investors_master' || e.key === 'glf_fixed_deposits_master')
+      ) {
         loadData(true);
       }
     };
@@ -110,6 +114,17 @@ export const InvestorListPage: React.FC = () => {
       window.removeEventListener('glf-branches-updated', handleBranches);
       window.removeEventListener('storage', handleStorageEvent);
     };
+  }, []);
+
+  const handleRegisterClose = useCallback(() => {
+    setIsRegisterOpen(false);
+  }, []);
+
+  const handleRegisterSuccess = useCallback((newInv: Investor) => {
+    setIsRegisterOpen(false);
+    loadData();
+    setSelectedInvestor(newInv);
+    setViewingInvestorBond(newInv);
   }, []);
 
   const handleInlineBranchChange = async (investorId: string, newBranchId: string) => {
@@ -619,13 +634,8 @@ export const InvestorListPage: React.FC = () => {
       {/* Register Modal */}
       {isRegisterOpen && (
         <InvestorRegistrationModal
-          onClose={() => setIsRegisterOpen(false)}
-          onSuccess={(newInv) => {
-            setIsRegisterOpen(false);
-            loadData();
-            setSelectedInvestor(newInv);
-            setViewingInvestorBond(newInv); // Instantly open Official Investor Bond!
-          }}
+          onClose={handleRegisterClose}
+          onSuccess={handleRegisterSuccess}
         />
       )}
 
