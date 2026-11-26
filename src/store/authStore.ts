@@ -8,6 +8,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { type AuthUser, type UserRole, normalizeUserRole } from '../types';
 import { useUIStore } from './uiStore';
+import { markUserOffline, markUserOnline } from '../services/presenceService';
 
 interface AuthStore {
   user: AuthUser | null;
@@ -106,6 +107,7 @@ export const useAuthStore = create<AuthStore>()(
       lastActivity: Date.now(),
 
       setUser: (rawUser) => {
+        const prevUser = get().user;
         const user = sanitizeUser(rawUser);
         if (user) {
           try {
@@ -113,7 +115,11 @@ export const useAuthStore = create<AuthStore>()(
           } catch (e) {
             console.warn('Failed to cache session user:', e);
           }
+          void markUserOnline(user);
         } else {
+          if (prevUser) {
+            void markUserOffline(prevUser);
+          }
           try {
             sessionStorage.removeItem('glf_user_session');
             sessionStorage.removeItem('glf-session-auth');
@@ -138,6 +144,10 @@ export const useAuthStore = create<AuthStore>()(
 
       // Terminate active session and purge storage
       logout: () => {
+        const prevUser = get().user;
+        if (prevUser) {
+          void markUserOffline(prevUser);
+        }
         try {
           if (typeof window !== 'undefined') {
             sessionStorage.removeItem('glf-session-auth');

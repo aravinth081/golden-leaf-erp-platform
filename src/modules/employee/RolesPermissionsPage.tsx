@@ -10,7 +10,7 @@
 // • Live Online / Offline Presence Tracking
 // ──────────────────────────────────────────────────
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users, UserPlus, Shield, Key, Lock, Eye, EyeOff, CheckCircle2,
@@ -31,6 +31,13 @@ import {
   MASTER_ADMIN_PROFILE,
   getStoredStaffProfiles,
 } from '../../services/staffService';
+import {
+  type UserPresenceRecord,
+  readCachedPresenceRecords,
+  subscribeToPresenceUpdates,
+  resolveAccountPresence,
+  markUserOfflineByIdentity,
+} from '../../services/presenceService';
 
 export type UserRoleType = 'admin' | 'hr_payroll_manager' | 'branch_manager' | 'credit_manager' | 'collection_agent';
 
@@ -99,6 +106,7 @@ const RoleIcon: React.FC<{ role: UserRoleType; size?: number; className?: string
 export const RolesPermissionsPage: React.FC = () => {
   const { addToast } = useUIStore();
   const currentUser = useAuthStore((s) => s.user);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const currentActorRole = (currentUser?.customClaims?.role || 'admin') as UserRole;
 
   // Hierarchically assignable roles for the current user
@@ -118,8 +126,8 @@ export const RolesPermissionsPage: React.FC = () => {
           role: staffRoleToUserRole(p.role) as UserRoleType,
           branchName: p.branchName || 'Main Branch (Chennai)',
           status: (p.status === 'inactive' ? 'on_hold' : 'active') as 'active' | 'on_hold',
-          isOnline: p.status === 'active',
-          lastSeen: 'Registered record',
+          isOnline: false,
+          lastSeen: 'Offline',
           createdAt: new Date(p.createdAt).toLocaleDateString('en-IN', {
             day: '2-digit',
             month: 'short',
@@ -174,8 +182,8 @@ export const RolesPermissionsPage: React.FC = () => {
         role: 'admin',
         branchName: 'Corporate HQ (All Branches)',
         status: 'active',
-        isOnline: true,
-        lastSeen: 'System Master Authority',
+        isOnline: false,
+        lastSeen: 'Offline',
         createdAt: '01 Jan 2026',
         phone: '+91 9840000001',
         email: MASTER_ADMIN_PROFILE.email,
@@ -183,8 +191,30 @@ export const RolesPermissionsPage: React.FC = () => {
     ];
   });
 
+  // Live Presence state (synced from Supabase + Realtime Presence across all roles)
+  const [presenceRecords, setPresenceRecords] = useState<UserPresenceRecord[]>(() =>
+    readCachedPresenceRecords()
+  );
+  const [realtimeOnlineMap, setRealtimeOnlineMap] = useState<Map<string, string>>(() => new Map());
+  const [presenceTick, setPresenceTick] = useState(0);
+
   // Available branches from branchService
   const [branches, setBranches] = useState<string[]>([]);
+
+  useEffect(() => {
+    const unsubscribePresence = subscribeToPresenceUpdates((records, rtMap) => {
+      setPresenceRecords(records);
+      setRealtimeOnlineMap(rtMap);
+    });
+    const ttlCheckTimer = window.setInterval(() => {
+      setPresenceTick((t) => t + 1);
+    }, 15 * 1000);
+
+    return () => {
+      unsubscribePresence();
+      window.clearInterval(ttlCheckTimer);
+    };
+  }, []);
 
   useEffect(() => {
     const list = getStoredBranches().map((b) => b.name);
@@ -200,8 +230,8 @@ export const RolesPermissionsPage: React.FC = () => {
             role: staffRoleToUserRole(p.role) as UserRoleType,
             branchName: p.branchName || 'Main Branch (Chennai)',
             status: (p.status === 'inactive' ? 'on_hold' : 'active') as 'active' | 'on_hold',
-            isOnline: p.status === 'active',
-            lastSeen: 'Registered record',
+            isOnline: false,
+            lastSeen: 'Offline',
             createdAt: new Date(p.createdAt).toLocaleDateString('en-IN', {
               day: '2-digit',
               month: 'short',
@@ -391,8 +421,8 @@ export const RolesPermissionsPage: React.FC = () => {
         role: createForm.role,
         branchName: createdStaff.branchName || 'Main Branch (Chennai)',
         status: createForm.status,
-        isOnline: createForm.status === 'active',
-        lastSeen: `Registered on ${getCurrentFormattedDateTime()}`,
+        isOnline: false,
+        lastSeen: 'Offline',
         createdAt: getCurrentFormattedDateTime(),
         phone: `+91 ${createdStaff.mobile}`,
         email: createdStaff.email,
@@ -546,6 +576,15 @@ export const RolesPermissionsPage: React.FC = () => {
             : a
         )
       );
+      if (newStatus === 'on_hold') {
+        void markUserOfflineByIdentity({
+          userId: acc.id,
+          username: acc.username,
+          displayName: acc.name,
+          email: acc.email,
+          role: acc.role,
+        });
+      }
       window.dispatchEvent(new CustomEvent('glf-staff-updated'));
 
       addToast({
@@ -558,28 +597,6 @@ export const RolesPermissionsPage: React.FC = () => {
     } finally {
       setAccountToHold(null);
     }
-  };
-
-  // Toggle Live Online / Offline state
-  const handleToggleOnline = (acc: UserAccount) => {
-    const nextOnline = !acc.isOnline;
-    setAccounts((prev) =>
-      prev.map((a) =>
-        a.id === acc.id
-          ? {
-              ...a,
-              isOnline: nextOnline,
-              lastSeen: nextOnline ? 'Online now' : `Went offline on ${getCurrentFormattedDateTime()}`,
-            }
-          : a
-      )
-    );
-
-    addToast({
-      type: nextOnline ? 'success' : 'info',
-      title: nextOnline ? 'User Online' : 'User Offline',
-      message: `@${acc.username} presence marked as ${nextOnline ? 'Online' : 'Offline'}.`,
-    });
   };
 
   // Confirm Delete Account
@@ -598,8 +615,32 @@ export const RolesPermissionsPage: React.FC = () => {
     const removedName = accountToDelete.name;
     const removedUsername = accountToDelete.username;
     try {
-      deleteStaffProfile(accountToDelete.id, currentUser || { uid: 'admin', email: 'admin@goldenleaf.finance', displayName: 'Administrator', photoURL: null, phoneNumber: null, emailVerified: true, customClaims: { role: 'admin', companyId: 'default' } });
-      setAccounts((prev) => prev.filter((a) => a.id !== removedId && a.username.toLowerCase() !== removedUsername.toLowerCase()));
+      await deleteStaffProfile(
+        accountToDelete.id,
+        currentUser || {
+          uid: 'admin',
+          email: 'admin@goldenleaf.finance',
+          displayName: 'Administrator',
+          photoURL: null,
+          phoneNumber: null,
+          emailVerified: true,
+          customClaims: { role: 'admin', companyId: 'default' },
+        }
+      );
+      void markUserOfflineByIdentity({
+        userId: removedId,
+        username: removedUsername,
+        displayName: removedName,
+        email: accountToDelete.email,
+        role: accountToDelete.role,
+      });
+      setAccounts((prev) =>
+        prev.filter(
+          (a) =>
+            a.id !== removedId &&
+            a.username.toLowerCase() !== removedUsername.toLowerCase()
+        )
+      );
       window.dispatchEvent(new CustomEvent('glf-staff-updated'));
       addToast({
         type: 'info',
@@ -613,16 +654,35 @@ export const RolesPermissionsPage: React.FC = () => {
     }
   };
 
+  // Merge live login/logout presence across all roles into accounts list
+  const accountsWithPresence = useMemo(() => {
+    void presenceTick;
+    return accounts.map((acc) => {
+      const resolved = resolveAccountPresence(
+        acc,
+        presenceRecords,
+        realtimeOnlineMap,
+        currentUser,
+        isAuthenticated
+      );
+      return {
+        ...acc,
+        isOnline: resolved.isOnline,
+        lastSeen: resolved.lastSeen,
+      };
+    });
+  }, [accounts, presenceRecords, realtimeOnlineMap, currentUser, isAuthenticated, presenceTick]);
+
   // Metrics
-  const totalCount = accounts.length;
-  const onlineCount = accounts.filter((a) => a.isOnline).length;
-  const activeCount = accounts.filter((a) => a.status === 'active').length;
-  const holdCount = accounts.filter((a) => a.status === 'on_hold').length;
+  const totalCount = accountsWithPresence.length;
+  const onlineCount = accountsWithPresence.filter((a) => a.isOnline).length;
+  const activeCount = accountsWithPresence.filter((a) => a.status === 'active').length;
+  const holdCount = accountsWithPresence.filter((a) => a.status === 'on_hold').length;
 
   // Filtered Accounts with guaranteed deduplication by clean username
   const displayedAccounts = (() => {
     const seen = new Set<string>();
-    return accounts
+    return accountsWithPresence
       .filter((a) => {
         // Role filter
         if (roleFilter !== 'all' && a.role !== roleFilter) return false;
@@ -1024,14 +1084,12 @@ export const RolesPermissionsPage: React.FC = () => {
                       {/* ONLINE PRESENCE */}
                       <td className="py-4 px-4 text-center">
                         <div className="inline-flex flex-col items-center">
-                          <button
-                            type="button"
-                            onClick={() => handleToggleOnline(acc)}
-                            title="Click to toggle Online/Offline simulation"
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold cursor-pointer transition-all ${
+                          <span
+                            title="Live authentication presence (auto-updated on login & logout)"
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold transition-all ${
                               acc.isOnline
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
-                                : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-slate-100 text-slate-600 border border-slate-200'
                             }`}
                           >
                             <span
@@ -1040,7 +1098,7 @@ export const RolesPermissionsPage: React.FC = () => {
                               }`}
                             />
                             <span>{acc.isOnline ? 'Online' : 'Offline'}</span>
-                          </button>
+                          </span>
                           <span className="text-[10px] text-[#94A3B8] mt-1 font-medium max-w-[140px] truncate">
                             {acc.lastSeen}
                           </span>
@@ -1329,14 +1387,10 @@ export const RolesPermissionsPage: React.FC = () => {
                     <label className="block font-semibold text-[#0B1F3A] uppercase mb-1">
                       Initial Presence
                     </label>
-                    <select
-                      value={createForm.isOnline ? 'online' : 'offline'}
-                      onChange={(e) => setCreateForm({ ...createForm, isOnline: e.target.value === 'online' })}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-[#E2E8F0] focus:outline-none focus:border-[#D4AF37] text-xs min-h-[40px] bg-white cursor-pointer"
-                    >
-                      <option value="offline">Offline</option>
-                      <option value="online">Online (Active now)</option>
-                    </select>
+                    <div className="w-full px-3.5 py-2.5 rounded-xl border border-[#E2E8F0] text-xs min-h-[40px] bg-slate-50 text-slate-600 flex items-center gap-2 font-medium">
+                      <span className="w-2 h-2 rounded-full bg-slate-400 flex-shrink-0" />
+                      <span>Offline (Auto-updates on login/logout)</span>
+                    </div>
                   </div>
                 </div>
 

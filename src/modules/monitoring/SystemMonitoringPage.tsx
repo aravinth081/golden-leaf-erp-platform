@@ -14,6 +14,12 @@ import {
 import { useUIStore, useAuthStore } from '../../store';
 import { PageHeader } from '../../components/ui';
 import { getStoredBranches, type DetailedBranch } from '../../services/branchService';
+import {
+  PRESENCE_TTL_MS,
+  subscribeToPresenceUpdates,
+  markUserOfflineByIdentity,
+  type UserPresenceRecord,
+} from '../../services/presenceService';
 
 interface ActiveSession {
   id: string;
@@ -46,22 +52,71 @@ export const SystemMonitoringPage: React.FC = () => {
   const { addToast } = useUIStore();
 
   React.useEffect(() => {
-    if (currentUser) {
-      const activeCurrent: ActiveSession = {
-        id: currentUser.uid || 'session_current',
-        user: currentUser.displayName || currentUser.email || 'Current Authenticated User',
-        role: currentUser.customClaims?.role
-          ? currentUser.customClaims.role.replace('_', ' ').toUpperCase()
-          : 'ADMINISTRATOR',
-        ipAddress: '127.0.0.1 (Local Session)',
+    const buildSessions = (records: UserPresenceRecord[], rtMap: Map<string, string>) => {
+      const nowMs = Date.now();
+      const activeList: ActiveSession[] = [];
+      const seenUserIds = new Set<string>();
+
+      const toActiveSession = (
+        id: string,
+        name: string,
+        roleStr: string,
+        loginAt?: string,
+        lastActiveStr: string = 'Online now'
+      ): ActiveSession => ({
+        id,
+        user: name,
+        role: roleStr.replace(/_/g, ' ').toUpperCase(),
+        ipAddress: id === currentUser?.uid ? 'Current Browser Session' : 'Live Cloud Session',
         location: 'Tamil Nadu, IN',
         device: 'Enterprise Web Client',
-        loginTime: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
-        lastActive: 'Just now',
+        loginTime: loginAt
+          ? new Date(loginAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+          : new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
+        lastActive: lastActiveStr,
         status: 'Online',
-      };
-      setSessions([activeCurrent]);
-    }
+      });
+
+      if (currentUser?.uid) {
+        seenUserIds.add(currentUser.uid);
+        const ownRec = records.find((r) => r.userId === currentUser.uid);
+        activeList.push(
+          toActiveSession(
+            currentUser.uid,
+            currentUser.displayName || currentUser.email || 'Current Authenticated User',
+            currentUser.customClaims?.role || 'ADMINISTRATOR',
+            ownRec?.loginAt,
+            'Just now'
+          )
+        );
+      }
+
+      records.forEach((rec) => {
+        if (!rec.userId || seenUserIds.has(rec.userId)) return;
+        const hbMs = new Date(rec.lastHeartbeatAt || rec.updatedAt).getTime();
+        const hasRt = rtMap.has(rec.userId);
+        const isAlive = rec.isOnline && ((!Number.isNaN(hbMs) && nowMs - hbMs <= PRESENCE_TTL_MS) || hasRt);
+        if (isAlive) {
+          seenUserIds.add(rec.userId);
+          activeList.push(
+            toActiveSession(
+              rec.userId,
+              rec.displayName || rec.username || rec.email || rec.userId,
+              rec.role || 'STAFF',
+              rec.loginAt,
+              'Online now'
+            )
+          );
+        }
+      });
+
+      setSessions(activeList);
+    };
+
+    const unsubscribe = subscribeToPresenceUpdates((records, rtMap) => {
+      buildSessions(records, rtMap);
+    });
+    return () => unsubscribe();
   }, [currentUser]);
 
   const handleRefresh = () => {
@@ -78,11 +133,12 @@ export const SystemMonitoringPage: React.FC = () => {
 
   const handleTerminateSession = (id: string, name: string) => {
     if (window.confirm(`Force terminate active session for ${name}?`)) {
+      void markUserOfflineByIdentity({ userId: id, displayName: name });
       setSessions(prev => prev.filter(s => s.id !== id));
       addToast({
         type: 'info',
         title: 'Session Revoked',
-        message: `Active session for ${name} terminated.`
+        message: `Active session for ${name} marked offline.`
       });
     }
   };

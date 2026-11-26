@@ -34,6 +34,7 @@ import { useAuthStore, useUIStore } from '../../store';
 import { type AuthUser, type UserRole, getRoleLandingPath } from '../../types';
 import { authenticateStaffCredentials, getStoredStaffProfiles } from '../../services/staffService';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+import { markUserOnline } from '../../services/presenceService';
 
 export interface RoleLoginProfile {
   role: UserRole;
@@ -191,6 +192,7 @@ export const LoginPage: React.FC = () => {
   const completeLogin = (result: { authUser: AuthUser; profile: any; landingPath: string }) => {
     isLoggingInRef.current = true;
     setUser(result.authUser);
+    void markUserOnline(result.authUser, result.profile?.username);
     if (result.authUser.customClaims?.branchId) {
       useUIStore.getState().setSelectedBranchId(result.authUser.customClaims.branchId);
     }
