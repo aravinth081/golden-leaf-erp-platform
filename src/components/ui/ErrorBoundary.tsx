@@ -54,6 +54,19 @@ export class ErrorBoundary extends Component<Props, State> {
 
     if (isModuleLoadError(error)) {
       clearLazyModuleCache();
+
+      // Automatically reload page once if chunk is outdated due to new deployment
+      try {
+        const lastSync = Number(sessionStorage.getItem(CHUNK_SYNC_STORAGE_KEY) || '0');
+        const now = Date.now();
+        if (now - lastSync > CHUNK_SYNC_COOLDOWN_MS) {
+          sessionStorage.setItem(CHUNK_SYNC_STORAGE_KEY, String(now));
+          this.setState({ isAutoReloading: true });
+          this.reloadTimeoutId = setTimeout(() => {
+            window.location.reload();
+          }, 400);
+        }
+      } catch {}
     }
   }
 

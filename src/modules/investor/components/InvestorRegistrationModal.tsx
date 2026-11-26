@@ -3,11 +3,11 @@
 // Strict Admin-Only 4-Section Form (Section 3 of Functional Spec)
 // ──────────────────────────────────────────────────
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo } from 'react';
 import {
   X, User, MapPin, ShieldCheck, Landmark, CheckCircle,
   Upload, ArrowRight, ArrowLeft, Loader2, Coins, TrendingUp,
-  Calendar, Percent, Calculator, ChevronDown, Eye, Trash2
+  Calendar, Percent, Calculator, ChevronDown, Eye, Trash2, AlertCircle
 } from 'lucide-react';
 import type { Investor, InvestorCategory, TaxDeclaration, InvestorDocuments } from '../../../types/investor.types';
 import { calculateAge, isSeniorCitizen, numberToWords } from '../../../utils/fdCalculations';
@@ -44,10 +44,60 @@ const VAULT_DOCS: { key: keyof InvestorDocuments; name: string }[] = [
   { key: 'signatureUrl', name: '5) Signature Specimen' },
 ];
 
-export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps> = ({
+const DRAFT_STORAGE_KEY = 'glf_investor_form_draft';
+
+interface InvestorFormDraft {
+  activeStep?: 1 | 2 | 3 | 4 | 5;
+  category?: InvestorCategory;
+  fullName?: string;
+  fatherSpouseName?: string;
+  dob?: string;
+  gender?: 'Male' | 'Female' | 'Other';
+  primaryMobile?: string;
+  secondaryMobile?: string;
+  email?: string;
+  doorNo?: string;
+  street?: string;
+  town?: string;
+  district?: string;
+  state?: string;
+  pinCode?: string;
+  selectedBranchId?: string;
+  pan?: string;
+  aadhaar?: string;
+  taxDeclaration?: TaxDeclaration;
+  documents?: InvestorDocuments;
+  investmentAmount?: number | string;
+  investmentDisplay?: string;
+  interestRate?: string;
+  tenureYears?: number;
+  tenureMonths?: number;
+  payoutFrequency?: 'Monthly' | 'Quarterly' | 'Cumulative';
+  investmentDate?: string;
+  bankHolderName?: string;
+  bankName?: string;
+  bankBranch?: string;
+  accountNumber?: string;
+  accountNumberConfirm?: string;
+  ifsc?: string;
+  accountType?: 'Savings' | 'Current';
+  payoutMode?: 'NEFT' | 'RTGS' | 'IMPS' | 'UPI';
+}
+
+const loadDraft = (): InvestorFormDraft => {
+  try {
+    const raw = sessionStorage.getItem(DRAFT_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return {};
+};
+
+export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps> = memo(({
   onClose,
   onSuccess,
 }) => {
+  const initialDraft = React.useMemo(() => loadDraft(), []);
+
   const [branches, setBranches] = useState<Array<{ id: string; name: string; code: string }>>(() => {
     try {
       const stored = getStoredBranches();
@@ -60,27 +110,29 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
     return FALLBACK_BRANCHES;
   });
 
-  const [activeStep, setActiveStep] = useState<1 | 2 | 3 | 4 | 5>(1);
+  const [activeStep, setActiveStep] = useState<1 | 2 | 3 | 4 | 5>(initialDraft.activeStep || 1);
   const [loading, setLoading] = useState(false);
+  const [stepError, setStepError] = useState<string | null>(null);
 
   // 01 Basic Identity
-  const [category, setCategory] = useState<InvestorCategory>('Individual');
-  const [fullName, setFullName] = useState('');
-  const [fatherSpouseName, setFatherSpouseName] = useState('');
-  const [dob, setDob] = useState('1980-01-01');
-  const [gender, setGender] = useState<'Male' | 'Female' | 'Other'>('Male');
+  const [category, setCategory] = useState<InvestorCategory>(initialDraft.category || 'Individual');
+  const [fullName, setFullName] = useState(initialDraft.fullName || '');
+  const [fatherSpouseName, setFatherSpouseName] = useState(initialDraft.fatherSpouseName || '');
+  const [dob, setDob] = useState(initialDraft.dob || '1980-01-01');
+  const [gender, setGender] = useState<'Male' | 'Female' | 'Other'>(initialDraft.gender || 'Male');
 
   // 02 Contact & Branch
-  const [primaryMobile, setPrimaryMobile] = useState('');
-  const [secondaryMobile, setSecondaryMobile] = useState('');
-  const [email, setEmail] = useState('');
-  const [doorNo, setDoorNo] = useState('');
-  const [street, setStreet] = useState('');
-  const [town, setTown] = useState('');
-  const [district, setDistrict] = useState('');
-  const [state, setState] = useState('Tamil Nadu');
-  const [pinCode, setPinCode] = useState('');
+  const [primaryMobile, setPrimaryMobile] = useState(initialDraft.primaryMobile || '');
+  const [secondaryMobile, setSecondaryMobile] = useState(initialDraft.secondaryMobile || '');
+  const [email, setEmail] = useState(initialDraft.email || '');
+  const [doorNo, setDoorNo] = useState(initialDraft.doorNo || '');
+  const [street, setStreet] = useState(initialDraft.street || '');
+  const [town, setTown] = useState(initialDraft.town || '');
+  const [district, setDistrict] = useState(initialDraft.district || '');
+  const [state, setState] = useState(initialDraft.state || 'Tamil Nadu');
+  const [pinCode, setPinCode] = useState(initialDraft.pinCode || '');
   const [selectedBranchId, setSelectedBranchId] = useState<string>(() => {
+    if (initialDraft.selectedBranchId) return initialDraft.selectedBranchId;
     try {
       const stored = getStoredBranches();
       return stored[0]?.id || 'BR-01';
@@ -122,20 +174,20 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
   }, []);
 
   // 03 Mandatory KYC & Tax
-  const [pan, setPan] = useState('');
-  const [aadhaar, setAadhaar] = useState('');
-  const [taxDeclaration, setTaxDeclaration] = useState<TaxDeclaration>('Standard TDS');
-  const [documents, setDocuments] = useState<InvestorDocuments>({});
+  const [pan, setPan] = useState(initialDraft.pan || '');
+  const [aadhaar, setAadhaar] = useState(initialDraft.aadhaar || '');
+  const [taxDeclaration, setTaxDeclaration] = useState<TaxDeclaration>(initialDraft.taxDeclaration || 'Standard TDS');
+  const [documents, setDocuments] = useState<InvestorDocuments>(initialDraft.documents || {});
   const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
 
   // 04 Investment & Interest Terms (New Column / Section Before Payout Bank)
-  const [investmentAmount, setInvestmentAmount] = useState<number | string>(500000);
-  const [investmentDisplay, setInvestmentDisplay] = useState<string>((500000).toLocaleString('en-IN'));
-  const [interestRate, setInterestRate] = useState<string>('12.00');
-  const [tenureYears, setTenureYears] = useState<number>(1);
-  const [tenureMonths, setTenureMonths] = useState<number>(12);
-  const [payoutFrequency, setPayoutFrequency] = useState<'Monthly' | 'Quarterly' | 'Cumulative'>('Monthly');
-  const [investmentDate, setInvestmentDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [investmentAmount, setInvestmentAmount] = useState<number | string>(initialDraft.investmentAmount ?? 500000);
+  const [investmentDisplay, setInvestmentDisplay] = useState<string>(initialDraft.investmentDisplay || (500000).toLocaleString('en-IN'));
+  const [interestRate, setInterestRate] = useState<string>(initialDraft.interestRate || '12.00');
+  const [tenureYears, setTenureYears] = useState<number>(initialDraft.tenureYears ?? 1);
+  const [tenureMonths, setTenureMonths] = useState<number>(initialDraft.tenureMonths ?? 12);
+  const [payoutFrequency, setPayoutFrequency] = useState<'Monthly' | 'Quarterly' | 'Cumulative'>(initialDraft.payoutFrequency || 'Monthly');
+  const [investmentDate, setInvestmentDate] = useState<string>(initialDraft.investmentDate || new Date().toISOString().slice(0, 10));
 
   const handleInvestmentChange = (rawStr: string) => {
     const raw = rawStr.replace(/,/g, '').replace(/\D/g, '');
@@ -155,14 +207,100 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
   };
 
   // 05 Bank Account
-  const [bankHolderName, setBankHolderName] = useState('');
-  const [bankName, setBankName] = useState('State Bank of India');
-  const [bankBranch, setBankBranch] = useState('Main Branch');
-  const [accountNumber, setAccountNumber] = useState('');
-  const [accountNumberConfirm, setAccountNumberConfirm] = useState('');
-  const [ifsc, setIfsc] = useState('');
-  const [accountType, setAccountType] = useState<'Savings' | 'Current'>('Savings');
-  const [payoutMode, setPayoutMode] = useState<'NEFT' | 'RTGS' | 'IMPS' | 'UPI'>('NEFT');
+  const [bankHolderName, setBankHolderName] = useState(initialDraft.bankHolderName || '');
+  const [bankName, setBankName] = useState(initialDraft.bankName || 'State Bank of India');
+  const [bankBranch, setBankBranch] = useState(initialDraft.bankBranch || 'Main Branch');
+  const [accountNumber, setAccountNumber] = useState(initialDraft.accountNumber || '');
+  const [accountNumberConfirm, setAccountNumberConfirm] = useState(initialDraft.accountNumberConfirm || '');
+  const [ifsc, setIfsc] = useState(initialDraft.ifsc || '');
+  const [accountType, setAccountType] = useState<'Savings' | 'Current'>(initialDraft.accountType || 'Savings');
+  const [payoutMode, setPayoutMode] = useState<'NEFT' | 'RTGS' | 'IMPS' | 'UPI'>(initialDraft.payoutMode || 'NEFT');
+
+  // Auto-save form inputs to sessionStorage so user inputs are NEVER lost on accidental reload or crash
+  useEffect(() => {
+    const draft: InvestorFormDraft = {
+      activeStep,
+      category,
+      fullName,
+      fatherSpouseName,
+      dob,
+      gender,
+      primaryMobile,
+      secondaryMobile,
+      email,
+      doorNo,
+      street,
+      town,
+      district,
+      state,
+      pinCode,
+      selectedBranchId,
+      pan,
+      aadhaar,
+      taxDeclaration,
+      documents,
+      investmentAmount,
+      investmentDisplay,
+      interestRate,
+      tenureYears,
+      tenureMonths,
+      payoutFrequency,
+      investmentDate,
+      bankHolderName,
+      bankName,
+      bankBranch,
+      accountNumber,
+      accountNumberConfirm,
+      ifsc,
+      accountType,
+      payoutMode,
+    };
+    try {
+      sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+    } catch {}
+  }, [
+    activeStep, category, fullName, fatherSpouseName, dob, gender,
+    primaryMobile, secondaryMobile, email, doorNo, street, town, district,
+    state, pinCode, selectedBranchId, pan, aadhaar, taxDeclaration, documents,
+    investmentAmount, investmentDisplay, interestRate, tenureYears, tenureMonths,
+    payoutFrequency, investmentDate, bankHolderName, bankName, bankBranch,
+    accountNumber, accountNumberConfirm, ifsc, accountType, payoutMode
+  ]);
+
+  const handleClearDraft = () => {
+    if (confirm('Clear saved draft and start fresh?')) {
+      try {
+        sessionStorage.removeItem(DRAFT_STORAGE_KEY);
+      } catch {}
+      setFullName('');
+      setFatherSpouseName('');
+      setDob('1980-01-01');
+      setPrimaryMobile('');
+      setSecondaryMobile('');
+      setEmail('');
+      setDoorNo('');
+      setStreet('');
+      setTown('');
+      setDistrict('');
+      setState('Tamil Nadu');
+      setPinCode('');
+      setPan('');
+      setAadhaar('');
+      setTaxDeclaration('Standard TDS');
+      setDocuments({});
+      setInvestmentAmount(500000);
+      setInvestmentDisplay((500000).toLocaleString('en-IN'));
+      setInterestRate('12.00');
+      setTenureYears(1);
+      setTenureMonths(12);
+      setBankHolderName('');
+      setAccountNumber('');
+      setAccountNumberConfirm('');
+      setIfsc('');
+      setActiveStep(1);
+      setStepError(null);
+    }
+  };
 
   const age = calculateAge(dob);
   const isSenior = isSeniorCitizen(dob);
@@ -224,28 +362,47 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setStepError(null);
 
-    if (accountNumber !== accountNumberConfirm) {
-      alert('Bank Account numbers do not match. Please verify double-entry.');
-      setActiveStep(5);
+    if (!fullName.trim()) {
+      setStepError('Please enter investor full name matching PAN.');
+      setActiveStep(1);
+      return;
+    }
+
+    if (!primaryMobile || primaryMobile.replace(/\D/g, '').length < 10) {
+      setStepError('Please enter a valid 10-digit primary mobile number.');
+      setActiveStep(2);
+      return;
+    }
+
+    if (!doorNo.trim() || !street.trim() || !town.trim() || !district.trim()) {
+      setStepError('Please fill in complete residential address details.');
+      setActiveStep(2);
       return;
     }
 
     if (pan.trim().length !== 10) {
-      alert('PAN must be exactly 10 characters.');
+      setStepError('PAN Card number must be exactly 10 characters.');
       setActiveStep(3);
       return;
     }
 
     if (principalNum <= 0) {
-      alert('Please enter a valid investment amount.');
+      setStepError('Please enter a valid investment amount.');
       setActiveStep(4);
       return;
     }
 
     if (rateNum <= 0) {
-      alert('Please enter an agreed annual rate of interest.');
+      setStepError('Please enter an agreed annual rate of interest.');
       setActiveStep(4);
+      return;
+    }
+
+    if (accountNumber !== accountNumberConfirm) {
+      setStepError('Bank Account numbers do not match. Please verify double-entry.');
+      setActiveStep(5);
       return;
     }
 
@@ -293,9 +450,12 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
         documents,
       });
 
+      try {
+        sessionStorage.removeItem(DRAFT_STORAGE_KEY);
+      } catch {}
       onSuccess(created);
     } catch (err: any) {
-      alert(`Registration error: ${err.message}`);
+      setStepError(`Registration error: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -305,7 +465,7 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
 
   React.useEffect(() => {
     if (formScrollRef.current) {
-      formScrollRef.current.scrollTo({ top: 0, behavior: 'instant' });
+      formScrollRef.current.scrollTop = 0;
     }
   }, [activeStep]);
 
@@ -314,50 +474,53 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
       e.preventDefault();
       e.stopPropagation();
     }
+    setStepError(null);
+
     if (activeStep === 1) {
       if (!fullName.trim()) {
-        alert('Please enter investor full name.');
+        setStepError('Please enter investor full name matching PAN.');
         return;
       }
       if (!investmentAmount || Number(investmentAmount) <= 0) {
-        alert('Please enter a valid investor investment amount.');
+        setStepError('Please enter a valid investor investment amount.');
         return;
       }
     }
     if (activeStep === 2) {
       if (!primaryMobile || primaryMobile.replace(/\D/g, '').length < 10) {
-        alert('Please enter a valid 10-digit primary mobile number.');
+        setStepError('Please enter a valid 10-digit primary mobile number.');
         return;
       }
       if (!doorNo.trim() || !street.trim() || !town.trim() || !district.trim()) {
-        alert('Please fill in complete residential address details (Door No, Street, City, District).');
+        setStepError('Please fill in complete residential address details (Door No, Street, City, District).');
         return;
       }
       if (!pinCode || pinCode.replace(/\D/g, '').length !== 6) {
-        alert('Please enter a valid 6-digit PIN code.');
+        setStepError('Please enter a valid 6-digit PIN code.');
         return;
       }
     }
     if (activeStep === 3) {
       if (pan.trim().length !== 10) {
-        alert('PAN must be exactly 10 characters.');
+        setStepError('PAN Card number must be exactly 10 characters.');
         return;
       }
       if (aadhaar && aadhaar.replace(/\D/g, '').length !== 12) {
-        alert('Aadhaar must be exactly 12 digits.');
+        setStepError('Aadhaar number must be exactly 12 digits.');
         return;
       }
     }
     if (activeStep === 4) {
       if (!investmentAmount || Number(investmentAmount) <= 0) {
-        alert('Please enter a valid investment amount.');
+        setStepError('Please enter a valid investment amount.');
         return;
       }
       if (!interestRate || Number(interestRate) <= 0) {
-        alert('Please enter an agreed annual rate of interest.');
+        setStepError('Please enter an agreed annual rate of interest.');
         return;
       }
     }
+    setStepError(null);
     setActiveStep((s) => (Math.min(s + 1, 5)) as any);
   };
 
@@ -378,13 +541,23 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
               Admin Master Directory Registration (Promoters, Directors, HNW Individuals)
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 rounded-xl hover:bg-white/10 text-white/70 hover:text-white transition-colors cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center shrink-0 touch-manipulation"
-          >
-            <X size={20} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleClearDraft}
+              className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-[#D4AF37] hover:text-white text-[11px] font-semibold transition-colors cursor-pointer"
+              title="Clear saved draft inputs and start fresh"
+            >
+              Reset Form
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-2 rounded-xl hover:bg-white/10 text-white/70 hover:text-white transition-colors cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center shrink-0 touch-manipulation"
+            >
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
         {/* Wizard Steps Bar */}
@@ -399,7 +572,10 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
             <button
               type="button"
               key={s.num}
-              onClick={() => setActiveStep(s.num as any)}
+              onClick={() => {
+                setStepError(null);
+                setActiveStep(s.num as any);
+              }}
               className={`py-2.5 sm:py-3 px-1.5 sm:px-2 text-center font-bold border-b-2 transition-all cursor-pointer touch-manipulation select-none ${
                 activeStep === s.num
                   ? 'border-[#D4AF37] text-[#0B1F3A] bg-white'
@@ -426,11 +602,28 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
           ))}
         </div>
 
+        {/* Validation Error Banner (Non-Blocking, Instant) */}
+        {stepError && (
+          <div className="mx-4 sm:mx-6 mt-3 p-3 bg-red-50 border border-red-200 rounded-xl text-xs font-bold text-red-600 flex items-center justify-between animate-in fade-in duration-150 shrink-0">
+            <span className="flex items-center gap-2">
+              <AlertCircle size={15} className="text-red-500 shrink-0" />
+              {stepError}
+            </span>
+            <button
+              type="button"
+              onClick={() => setStepError(null)}
+              className="text-red-400 hover:text-red-600 font-bold ml-2 text-base leading-none cursor-pointer p-1"
+            >
+              ×
+            </button>
+          </div>
+        )}
+
         {/* Form Body */}
         <div ref={formScrollRef} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-5 custom-scrollbar">
           {/* STEP 1: Basic Identity */}
           {activeStep === 1 && (
-            <div className="space-y-4">
+            <div key="step-1" className="space-y-4 animate-in fade-in duration-100">
               <div className="pb-2 border-b border-[#F1F5F9]">
                 <h3 className="font-display font-bold text-sm text-[#0B1F3A] uppercase tracking-wider">
                   01 Basic Identity & Investor Category Inputs
@@ -550,7 +743,7 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
 
           {/* STEP 2: Contact & Branch Mapping */}
           {activeStep === 2 && (
-            <div className="space-y-4">
+            <div key="step-2" className="space-y-4 animate-in fade-in duration-100">
               <div className="pb-2 border-b border-[#F1F5F9]">
                 <h3 className="font-display font-bold text-sm text-[#0B1F3A] uppercase tracking-wider">
                   02 Contact & Branch Mapping Inputs
@@ -694,7 +887,7 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
 
           {/* STEP 3: Mandatory KYC & Tax Compliance */}
           {activeStep === 3 && (
-            <div className="space-y-4">
+            <div key="step-3" className="space-y-4 animate-in fade-in duration-100">
               <div className="pb-2 border-b border-[#F1F5F9]">
                 <h3 className="font-display font-bold text-sm text-[#0B1F3A] uppercase tracking-wider">
                   03 Mandatory KYC & Tax Compliance Inputs
@@ -958,7 +1151,7 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
 
           {/* STEP 4: Capital Investment & Interest Terms (New Column / Section before Payout Bank) */}
           {activeStep === 4 && (
-            <div className="space-y-4">
+            <div key="step-4" className="space-y-4 animate-in fade-in duration-100">
               <div className="pb-2 border-b border-[#F1F5F9] flex items-center justify-between">
                 <div>
                   <h3 className="font-display font-bold text-sm text-[#0B1F3A] uppercase tracking-wider flex items-center gap-1.5">
@@ -1240,7 +1433,7 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
 
           {/* STEP 5: Payout Bank Account Inputs */}
           {activeStep === 5 && (
-            <div className="space-y-4">
+            <div key="step-5" className="space-y-4 animate-in fade-in duration-100">
               <div className="pb-2 border-b border-[#F1F5F9]">
                 <h3 className="font-display font-bold text-sm text-[#0B1F3A] uppercase tracking-wider">
                   05 Investor Payout Bank Account Inputs
@@ -1405,4 +1598,7 @@ export const InvestorRegistrationModal: React.FC<InvestorRegistrationModalProps>
       </form>
     </div>
   );
-};
+});
+
+InvestorRegistrationModal.displayName = 'InvestorRegistrationModal';
+

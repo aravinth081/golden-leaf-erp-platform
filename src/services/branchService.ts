@@ -208,7 +208,17 @@ export const INITIAL_BRANCHES: DetailedBranch[] = [
   },
 ];
 
+let inMemoryBranchesCache: DetailedBranch[] | null = null;
+
+export const invalidateBranchesCache = (): void => {
+  inMemoryBranchesCache = null;
+};
+
 export const getStoredBranches = (): DetailedBranch[] => {
+  if (inMemoryBranchesCache && inMemoryBranchesCache.length > 0) {
+    return inMemoryBranchesCache;
+  }
+
   try {
     const storage = typeof window !== 'undefined' ? window.localStorage : (globalThis as any).localStorage;
     if (storage) {
@@ -245,8 +255,7 @@ export const getStoredBranches = (): DetailedBranch[] => {
           }
 
           const activeList = deduped.length > 0 ? deduped : INITIAL_BRANCHES;
-          storage.setItem(STORAGE_KEY, JSON.stringify(activeList));
-          return activeList.map((b) => ({
+          const result = activeList.map((b) => ({
             ...b,
             id: b.id || 'BR-01',
             code: b.code || b.id || 'GL-BR',
@@ -261,6 +270,8 @@ export const getStoredBranches = (): DetailedBranch[] => {
             recentActivities: Array.isArray(b.recentActivities) ? b.recentActivities : [],
             monthlyTrend: Array.isArray(b.monthlyTrend) ? b.monthlyTrend : [],
           }));
+          inMemoryBranchesCache = result;
+          return result;
         }
       }
       storage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_BRANCHES));
@@ -268,6 +279,7 @@ export const getStoredBranches = (): DetailedBranch[] => {
   } catch (e) {
     console.error('Failed to load branches from localStorage:', e);
   }
+  inMemoryBranchesCache = INITIAL_BRANCHES;
   return INITIAL_BRANCHES;
 };
 
@@ -313,14 +325,18 @@ export const fetchBranchesFromSupabase = async (): Promise<DetailedBranch[]> => 
             }
           }
 
-          try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(deduped));
-          } catch {}
-          const finalBranches = getStoredBranches();
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('glf-branches-updated', { detail: finalBranches }));
+          const currentCount = inMemoryBranchesCache ? inMemoryBranchesCache.length : 0;
+          if (deduped.length !== currentCount) {
+            inMemoryBranchesCache = null;
+            try {
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(deduped));
+            } catch {}
+            const finalBranches = getStoredBranches();
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('glf-branches-updated', { detail: finalBranches }));
+            }
+            return finalBranches;
           }
-          return finalBranches;
         }
       } else if (!error && Array.isArray(rows) && rows.length === 0) {
         // Seed initial branches to Supabase
@@ -339,14 +355,11 @@ export const fetchBranchesFromSupabase = async (): Promise<DetailedBranch[]> => 
       console.warn('[Supabase] Failed to fetch branches from cloud:', e);
     }
   }
-  const fallback = getStoredBranches();
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('glf-branches-updated', { detail: fallback }));
-  }
-  return fallback;
+  return getStoredBranches();
 };
 
 export const saveStoredBranches = (branches: DetailedBranch[]): void => {
+  inMemoryBranchesCache = branches;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(branches));
   } catch (e) {

@@ -83,15 +83,20 @@ export const InvestorListPage: React.FC = () => {
       if (e.detail && Array.isArray(e.detail)) setBranches(e.detail);
       else setBranches(getStoredBranches());
     };
+    const handleStorageEvent = (e: StorageEvent) => {
+      if (e.key && (e.key.includes('investor') || e.key.includes('fd'))) {
+        loadData(true);
+      }
+    };
     window.addEventListener('glf_fd_updated', handleSync);
     window.addEventListener('glf_investor_updated', handleSync);
     window.addEventListener('glf-branches-updated', handleBranches);
-    window.addEventListener('storage', handleSync);
+    window.addEventListener('storage', handleStorageEvent);
     return () => {
       window.removeEventListener('glf_fd_updated', handleSync);
       window.removeEventListener('glf_investor_updated', handleSync);
       window.removeEventListener('glf-branches-updated', handleBranches);
-      window.removeEventListener('storage', handleSync);
+      window.removeEventListener('storage', handleStorageEvent);
     };
   }, []);
 
