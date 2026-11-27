@@ -31,17 +31,22 @@ export const InstantCustomerSearch: React.FC<InstantCustomerSearchProps> = ({
   const branchId = role === 'branch_manager' ? user?.customClaims?.branchId : undefined;
   const isAdmin = role === 'admin' || role === 'area_manager';
 
-  // Instant sub-second search (debounced slightly to prevent render thrashing)
+  // Debounced search to prevent render thrashing & localStorage JSON parsing on every keystroke
   useEffect(() => {
     const q = query.trim();
-    if (q.length >= 2) {
+    if (q.length < 2) {
+      setResults([]);
+      setIsOpen(false);
+      return;
+    }
+
+    const timer = setTimeout(() => {
       const matches = searchInvestorsLocally(q, branchId);
       setResults(matches);
       setIsOpen(true);
-    } else {
-      setResults([]);
-      setIsOpen(false);
-    }
+    }, 180);
+
+    return () => clearTimeout(timer);
   }, [query, branchId]);
 
   // Click outside listener

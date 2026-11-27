@@ -107,8 +107,8 @@ export const AttendanceMonitoringPage: React.FC = () => {
     window.addEventListener('glf-attendance-checked-in', handleUpdate);
     window.addEventListener('storage', handleUpdate);
 
-    // Auto-poll every 15 seconds
-    const interval = setInterval(loadData, 15000);
+    // Auto-poll every 60 seconds (reduced from 15s to prevent CPU overload causing page unresponsiveness)
+    const interval = setInterval(loadData, 60000);
 
     return () => {
       window.removeEventListener('glf-attendance-updated', handleUpdate);

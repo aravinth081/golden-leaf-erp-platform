@@ -80,8 +80,9 @@ export function usePlatformSmoothScroll() {
       if (e.defaultPrevented) return;
 
       const key = e.key;
-      const smooth = !prefersReducedMotion();
-      const behavior: ScrollBehavior = smooth ? 'smooth' : 'auto';
+      // Use 'auto' instead of 'smooth' for keyboard scrolling to prevent animation frame queuing
+      // which causes Chrome main-thread lockups and "Page Unresponsive" freezing during fast interaction.
+      const behavior: ScrollBehavior = 'auto';
 
       // ── Vertical Navigation: ArrowDown, ArrowUp
       if (key === 'ArrowDown') {

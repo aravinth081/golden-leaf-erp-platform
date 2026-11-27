@@ -106,12 +106,13 @@ export default defineConfig({
         runtimeCaching: [
           {
             urlPattern: /\/assets\/.*\.js$/i,
-            handler: 'StaleWhileRevalidate',
+            handler: 'NetworkFirst',
             options: {
               cacheName: 'app-chunks-cache',
+              networkTimeoutSeconds: 3,
               expiration: {
                 maxEntries: 60,
-                maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+                maxAgeSeconds: 60 * 60 * 24 * 7,
               },
             },
           },
@@ -183,12 +184,6 @@ export default defineConfig({
   server: {
     port: 3000,
     host: true,
-    preTransformRequests: false,
-    watch: {
-      usePolling: true,
-      interval: 300,
-      ignored: ['**/.env*', '**/vite.config.*', '**/tsconfig*'],
-    },
   },
   optimizeDeps: {
     entries: ['src/main.tsx'],

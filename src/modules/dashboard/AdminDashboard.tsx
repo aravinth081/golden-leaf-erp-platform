@@ -53,14 +53,14 @@ function useAnimatedCounter(target: number): number {
   return target;
 }
 
-// ─── Live Dynamic Date & Time Component (Isolated 1s ticker prevents dashboard re-renders) ───
+// ─── Live Dynamic Date & Time Component (Isolated 30s ticker — HH:mm is enough for a dashboard) ───
 const LiveHeaderDateTime: React.FC = () => {
   const [currentDateTime, setCurrentDateTime] = useState<Date>(new Date());
 
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentDateTime(new Date());
-    }, 1000);
+    }, 30000); // Update every 30s — seconds display not needed on executive dashboard
     return () => clearInterval(timer);
   }, []);
 
@@ -90,8 +90,8 @@ const LiveHeaderDateTime: React.FC = () => {
 };
 
 // ─── Table Scroll Chaining Hook ───
-// Guarantees vertical mouse wheel deltas chain seamlessly to the page scroll container (<main>)
-// so the page never freezes or gets trapped when scrolling over either table.
+// Uses native CSS overscroll-behavior so the browser compositor handles scrolling natively
+// with zero JS main-thread overhead, completely preventing Page Unresponsive freezes.
 function useTableScrollChaining() {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -99,28 +99,8 @@ function useTableScrollChaining() {
     const el = ref.current;
     if (!el) return;
 
-    // Use passive listener and CSS overscroll-behavior to guarantee smooth compositor scrolling
-    // without blocking the main JavaScript UI thread or triggering Chrome Page Unresponsive warnings.
     el.style.overscrollBehaviorY = 'auto';
     el.style.overscrollBehaviorX = 'contain';
-
-    const handleWheel = (e: WheelEvent) => {
-      if (Math.abs(e.deltaY) === 0) return;
-      if (Math.abs(e.deltaY) >= Math.abs(e.deltaX)) {
-        const mainContainer = el.closest('main') || document.querySelector('main');
-        if (mainContainer) {
-          mainContainer.scrollBy({
-            top: e.deltaY,
-            behavior: 'auto',
-          });
-        }
-      }
-    };
-
-    el.addEventListener('wheel', handleWheel, { passive: true });
-    return () => {
-      el.removeEventListener('wheel', handleWheel);
-    };
   }, []);
 
   return ref;

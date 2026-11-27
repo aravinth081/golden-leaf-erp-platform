@@ -18,8 +18,8 @@ const PRESENCE_CACHE_KEY = 'glf_user_presence_cache_v1';
 const TAB_SESSION_KEY = 'glf_presence_tab_session_id';
 const PRESENCE_CHANNEL_NAME = 'glf-global-online-presence';
 
-export const HEARTBEAT_INTERVAL_MS = 25 * 1000; // 25s heartbeat while logged in
-export const PRESENCE_TTL_MS = 75 * 1000; // Consider offline if no heartbeat in 75s
+export const HEARTBEAT_INTERVAL_MS = 60 * 1000; // 60s heartbeat (TTL is 75s — 60s keeps user safely online)
+export const PRESENCE_TTL_MS = 90 * 1000; // Consider offline if no heartbeat in 90s
 
 export interface UserPresenceRecord {
   userId: string;
@@ -568,7 +568,7 @@ export function subscribeToPresenceUpdates(onChange: PresenceSubscriber): () => 
   emitLatest();
   syncNow();
 
-  const pollTimer = window.setInterval(syncNow, 10 * 1000);
+  const pollTimer = window.setInterval(syncNow, 60 * 1000); // Reduced from 10s → 60s to prevent CPU overload
   const handleLocalEvent = () => emitLatest();
   window.addEventListener('glf-presence-updated', handleLocalEvent);
 

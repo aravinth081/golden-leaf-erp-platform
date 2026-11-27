@@ -140,7 +140,13 @@ export const useAuthStore = create<AuthStore>()(
 
       setError: (error) => set({ error, isLoading: false }),
 
-      updateLastActivity: () => set({ lastActivity: Date.now() }),
+      updateLastActivity: () => {
+        const now = Date.now();
+        // Throttle state update to at most once per 15 seconds to prevent component re-render thrashing
+        if (now - get().lastActivity > 15000) {
+          set({ lastActivity: now });
+        }
+      },
 
       // Terminate active session and purge storage
       logout: () => {
@@ -183,7 +189,6 @@ export const useAuthStore = create<AuthStore>()(
         user: state.user,
         isAuthenticated: state.isAuthenticated,
         sessionTimeout: state.sessionTimeout,
-        lastActivity: state.lastActivity,
       }),
     }
   )

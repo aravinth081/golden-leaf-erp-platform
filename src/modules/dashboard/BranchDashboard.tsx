@@ -57,21 +57,21 @@ const formatFullINR = (val: number | null | undefined): string => {
   return `₹${Number(val).toLocaleString('en-IN')}`;
 };
 
-// Isolated self-updating live clock & date component to prevent whole-dashboard 1000ms re-renders
+// Isolated self-updating live clock & date component to prevent whole-dashboard re-renders
 const BranchLiveClockAndDate: React.FC = React.memo(() => {
   const [now, setNow] = useState<Date>(() => new Date());
 
   useEffect(() => {
+    // Update every 30 seconds — seconds display not needed on dashboard header
     const timer = setInterval(() => {
       setNow(new Date());
-    }, 1000);
+    }, 30000);
     return () => clearInterval(timer);
   }, []);
 
   const timeStr = now.toLocaleTimeString('en-US', {
     hour: '2-digit',
     minute: '2-digit',
-    second: '2-digit',
     hour12: true,
   });
 

@@ -3,7 +3,7 @@
 // 5 Daily Operational Tabs (Section 7 of Functional Spec)
 // ──────────────────────────────────────────────────
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Shield, Clock, CalendarCheck, AlertTriangle,
   Lock, Printer, Download, Plus, CheckCircle, RefreshCw,
@@ -69,7 +69,7 @@ export const FDListPage: React.FC = () => {
   const [lienFD, setLienFD] = useState<FixedDeposit | null>(null);
   const [drawerInvestor, setDrawerInvestor] = useState<Investor | null>(null);
 
-  const loadData = async (silent = true) => {
+  const loadData = useCallback(async (silent = true) => {
     try {
       if (!silent) setLoading(true);
       // Branch Manager sees only own branch records; Admin sees all
@@ -82,18 +82,18 @@ export const FDListPage: React.FC = () => {
     } finally {
       if (!silent) setLoading(false);
     }
-  };
+  }, [userBranchId]);
 
   useEffect(() => {
     loadData(true);
-  }, [userBranchId]);
+  }, [loadData]);
 
-  const metrics = getFDKPIMetrics(userBranchId);
+  const metrics = useMemo(() => getFDKPIMetrics(userBranchId), [userBranchId, fds]);
 
-  // Filter FDs for active tab
-  const getTabFDs = (tab: TabKey): FixedDeposit[] => {
+  // Memoized filter of FDs for active tab
+  const currentTabFDs = useMemo((): FixedDeposit[] => {
     let list: FixedDeposit[] = [];
-    switch (tab) {
+    switch (activeTab) {
       case 'active':
         list = fds.filter((f) => f.status === 'Active');
         break;
@@ -126,9 +126,7 @@ export const FDListPage: React.FC = () => {
     }
 
     return list;
-  };
-
-  const currentTabFDs = getTabFDs(activeTab);
+  }, [activeTab, fds, searchFilter]);
 
   // Checker Approval Action (Admin Only)
   const handleApproveFD = async (fd: FixedDeposit) => {

@@ -107,33 +107,47 @@ export function lazyWithRetry<T extends ComponentType<any>>(
   });
 }
 
+// Hover intent debounce timer registry to prevent multi-chunk download stampedes during fast mouse navigation
+const hoverPreloadTimers = new Map<string, number>();
+
 /**
- * Preload a route component on hover, focus, or idle.
- * Never resolves cached promises to null on transient failures.
+ * Preload a route component with hover-intent debouncing (150ms delay).
+ * Prevents rapid cursor sweeps from triggering dozens of simultaneous chunk downloads.
  */
-export function preloadRoute(routePathOrKey: string): void {
-  if (!routePathOrKey) return;
+export function preloadRoute(routePathOrKey: string, delayMs = 150): void {
+  if (!routePathOrKey || typeof window === 'undefined') return;
   const clean = routePathOrKey.replace(/^\//, '').split('?')[0];
 
-  const factory = routeLoaderRegistry.get(clean) || routeLoaderRegistry.get(routePathOrKey);
-  if (factory && !loadedModuleCache.has(clean)) {
-    const promise = factory().then((module) => {
-      if (!module || typeof module !== 'object' || !module.default) {
-        throw new Error(`Invalid module preload for "${routePathOrKey}"`);
-      }
-      return module;
-    });
+  if (loadedModuleCache.has(clean)) return;
 
-    // Prevent unhandled promise rejections in background while clearing stale cache on failure
-    promise.catch((err) => {
-      if (loadedModuleCache.get(clean) === promise) {
-        loadedModuleCache.delete(clean);
-      }
-      console.warn(`[Preload] Module preload deferred for "${routePathOrKey}":`, err);
-    });
-
-    loadedModuleCache.set(clean, promise);
+  if (hoverPreloadTimers.has(clean)) {
+    window.clearTimeout(hoverPreloadTimers.get(clean));
   }
+
+  const timer = window.setTimeout(() => {
+    hoverPreloadTimers.delete(clean);
+    const factory = routeLoaderRegistry.get(clean) || routeLoaderRegistry.get(routePathOrKey);
+    if (factory && !loadedModuleCache.has(clean)) {
+      const promise = factory().then((module) => {
+        if (!module || typeof module !== 'object' || !module.default) {
+          throw new Error(`Invalid module preload for "${routePathOrKey}"`);
+        }
+        return module;
+      });
+
+      // Prevent unhandled promise rejections in background while clearing stale cache on failure
+      promise.catch((err) => {
+        if (loadedModuleCache.get(clean) === promise) {
+          loadedModuleCache.delete(clean);
+        }
+        console.warn(`[Preload] Module preload deferred for "${routePathOrKey}":`, err);
+      });
+
+      loadedModuleCache.set(clean, promise);
+    }
+  }, delayMs);
+
+  hoverPreloadTimers.set(clean, timer);
 }
 
 /**

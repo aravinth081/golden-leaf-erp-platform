@@ -208,7 +208,7 @@ export const RolesPermissionsPage: React.FC = () => {
     });
     const ttlCheckTimer = window.setInterval(() => {
       setPresenceTick((t) => t + 1);
-    }, 15 * 1000);
+    }, 60 * 1000); // Reduced from 15s → 60s to match heartbeat interval
 
     return () => {
       unsubscribePresence();

@@ -84,7 +84,12 @@ export const SessionTimeoutManager: React.FC = () => {
       if (now - lastThrottleRef.current > ACTIVITY_THROTTLE_MS) {
         lastThrottleRef.current = now;
         lastActivityRef.current = now;
+        // Only call store update — do NOT trigger re-render of this component
         updateLastActivity();
+        // Dismiss the warning modal if it was showing but user became active again
+        if (isWarningModalOpenRef.current) {
+          setShowWarningModal(false);
+        }
       }
     };
 
@@ -111,34 +116,77 @@ export const SessionTimeoutManager: React.FC = () => {
     };
   }, [isAuthenticated, user, updateLastActivity]);
 
-  // Main 1-second interval clock to evaluate idle elapsed time
+  // Efficient timeout check: use a single scheduled timeout instead of a 1-second polling interval.
+  // This avoids blocking the main thread every second and is the main fix for page unresponsiveness.
   useEffect(() => {
     if (!isAuthenticated || !user) {
       setShowWarningModal(false);
       return;
     }
 
-    const interval = setInterval(() => {
-      const now = Date.now();
-      const elapsed = now - lastActivityRef.current;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let warningIntervalId: ReturnType<typeof setInterval> | null = null;
+
+    const scheduleCheck = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+
+      const elapsed = Date.now() - lastActivityRef.current;
+      const timeUntilWarning = WARNING_THRESHOLD_MS - elapsed;
+      const timeUntilTimeout = INACTIVITY_TIMEOUT_MS - elapsed;
 
       if (elapsed >= INACTIVITY_TIMEOUT_MS) {
+        // Already timed out
         handleTimeoutLogout();
-      } else if (elapsed >= WARNING_THRESHOLD_MS) {
+        return;
+      }
+
+      if (elapsed >= WARNING_THRESHOLD_MS) {
+        // Already in warning zone — show modal and start countdown ticker
         const remaining = Math.max(0, Math.ceil((INACTIVITY_TIMEOUT_MS - elapsed) / 1000));
         setSecondsRemaining(remaining);
-        if (!showWarningModal) {
-          setShowWarningModal(true);
-        }
-      } else {
-        if (showWarningModal) {
-          setShowWarningModal(false);
-        }
+        setShowWarningModal(true);
+        // Schedule timeout
+        timeoutId = setTimeout(() => {
+          if (Date.now() - lastActivityRef.current >= INACTIVITY_TIMEOUT_MS) {
+            handleTimeoutLogout();
+          }
+        }, Math.max(0, timeUntilTimeout));
+        return;
       }
-    }, 1000);
 
-    return () => clearInterval(interval);
-  }, [isAuthenticated, user, showWarningModal, handleTimeoutLogout]);
+      // Schedule when warning should appear
+      timeoutId = setTimeout(() => {
+        const nowElapsed = Date.now() - lastActivityRef.current;
+        if (nowElapsed >= INACTIVITY_TIMEOUT_MS) {
+          handleTimeoutLogout();
+        } else if (nowElapsed >= WARNING_THRESHOLD_MS) {
+          const remaining = Math.max(0, Math.ceil((INACTIVITY_TIMEOUT_MS - nowElapsed) / 1000));
+          setSecondsRemaining(remaining);
+          setShowWarningModal(true);
+          // Start a lightweight 5-second ticker only while warning modal is visible
+          if (warningIntervalId) clearInterval(warningIntervalId);
+          warningIntervalId = setInterval(() => {
+            const e = Date.now() - lastActivityRef.current;
+            if (e >= INACTIVITY_TIMEOUT_MS) {
+              if (warningIntervalId) clearInterval(warningIntervalId);
+              handleTimeoutLogout();
+            } else {
+              const rem = Math.max(0, Math.ceil((INACTIVITY_TIMEOUT_MS - e) / 1000));
+              setSecondsRemaining(rem);
+            }
+          }, 5000); // Update every 5s instead of every 1s — still accurate enough
+        }
+      }, Math.max(0, timeUntilWarning));
+    };
+
+    scheduleCheck();
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      if (warningIntervalId) clearInterval(warningIntervalId);
+      setShowWarningModal(false);
+    };
+  }, [isAuthenticated, user, handleTimeoutLogout]);
 
   // Visibility Change / Tab Switching Guard
   // When user returns after minimizing tab for > 15 mins, instantly terminate session
